@@ -57,8 +57,8 @@ export class TenantsController {
     @Req() req: RequestWithTenant,
   ) {
     const isSuperAdmin = user.isSuperAdmin === true || user.role === UserRole.SUPER_ADMIN;
-
-    if (!isSuperAdmin && !req.isImpersonating && user.tenantId !== id) {
+    const effectiveTenantId = req.isImpersonating ? req.tenantId : (isSuperAdmin ? null : user.tenantId);
+    if (effectiveTenantId && effectiveTenantId !== id) {
       throw new ForbiddenException('Cannot access other tenant details');
     }
 

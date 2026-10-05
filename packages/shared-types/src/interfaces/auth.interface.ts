@@ -14,6 +14,7 @@ export interface RegisterPartnerDto {
   contactName: string;
   contactPhone: string;
   contactEmail: string;
+  password?: string;
   city: string;
   services: string[];
   address?: string;

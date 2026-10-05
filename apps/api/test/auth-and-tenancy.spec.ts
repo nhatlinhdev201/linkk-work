@@ -1,6 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication, ValidationPipe } from '@nestjs/common';
 import * as request from 'supertest';
+import * as bcrypt from 'bcrypt';
 import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/common/prisma/prisma.service';
 import { RedisService } from '../src/common/redis/redis.service';
@@ -15,6 +16,7 @@ describe('Auth and Tenancy Module Integration Tests', () => {
   let partnerAdminToken: string;
   let partnerTenantId: string;
   let platformTenantId: string;
+  let suspendedTenantId: string;
 
   beforeAll(async () => {
     const moduleRef: TestingModule = await Test.createTestingModule({
@@ -49,9 +51,46 @@ describe('Auth and Tenancy Module Integration Tests', () => {
 
     platformTenantId = platformTenant!.id;
     partnerTenantId = partnerTenant!.id;
+
+    // Seed a suspended tenant and user for testing subscription suspension checks
+    const existingSuspendedTenant = await prisma.tenant.findUnique({
+      where: { code: 'TENANT_SUSPENDED_TEST' },
+    });
+    if (existingSuspendedTenant) {
+      await prisma.user.deleteMany({ where: { tenantId: existingSuspendedTenant.id } });
+      await prisma.tenant.delete({ where: { id: existingSuspendedTenant.id } });
+    }
+
+    const suspendedTenant = await prisma.tenant.create({
+      data: {
+        code: 'TENANT_SUSPENDED_TEST',
+        name: 'Suspended Test Partner',
+        phone: '0909999888',
+        email: 'suspended@tenant.vn',
+        city: 'Hà Nội',
+        status: 'SUSPENDED',
+      },
+    });
+    suspendedTenantId = suspendedTenant.id;
+
+    const testPasswordHash = await bcrypt.hash('Suspended@123', 10);
+    await prisma.user.create({
+      data: {
+        tenantId: suspendedTenant.id,
+        email: 'user@suspended-tenant.vn',
+        name: 'Suspended User',
+        passwordHash: testPasswordHash,
+        role: UserRole.TENANT_ADMIN,
+        status: 'ACTIVE',
+      },
+    });
   });
 
   afterAll(async () => {
+    if (prisma && suspendedTenantId) {
+      await prisma.user.deleteMany({ where: { tenantId: suspendedTenantId } });
+      await prisma.tenant.deleteMany({ where: { id: suspendedTenantId } });
+    }
     if (app) {
       await app.close();
     }
@@ -114,6 +153,18 @@ describe('Auth and Tenancy Module Integration Tests', () => {
       expect(response.body.message).toBeDefined();
     });
 
+    it('should reject login for users belonging to a SUSPENDED tenant with 401 Unauthorized', async () => {
+      const response = await request(app.getHttpServer())
+        .post('/api/v1/auth/login')
+        .send({
+          email: 'user@suspended-tenant.vn',
+          password: 'Suspended@123',
+        })
+        .expect(401);
+
+      expect(response.body.message).toContain('Tenant account is suspended');
+    });
+
     it('should return user profile on /api/v1/auth/me with Bearer token', async () => {
       const response = await request(app.getHttpServer())
         .get('/api/v1/auth/me')
@@ -127,7 +178,7 @@ describe('Auth and Tenancy Module Integration Tests', () => {
       expect(response.body.passwordHash).toBeUndefined();
     });
 
-    it('should refresh tokens and revoke the old refresh token', async () => {
+    it('should rotate tokens and invalidate token family upon replay attack detection', async () => {
       // 1. Login to get fresh tokens
       const loginRes = await request(app.getHttpServer())
         .post('/api/v1/auth/login')
@@ -137,33 +188,38 @@ describe('Auth and Tenancy Module Integration Tests', () => {
         })
         .expect(200);
 
-      const oldRefreshToken = loginRes.body.refreshToken;
+      const tokenA = loginRes.body.refreshToken;
 
-      // 2. Refresh token
-      const refreshRes = await request(app.getHttpServer())
+      // 2. Refresh token A -> yields token B
+      const refreshRes1 = await request(app.getHttpServer())
         .post('/api/v1/auth/refresh')
-        .send({ refreshToken: oldRefreshToken })
+        .send({ refreshToken: tokenA })
         .expect(200);
 
-      expect(refreshRes.body).toHaveProperty('accessToken');
-      expect(refreshRes.body).toHaveProperty('refreshToken');
-      expect(refreshRes.body.refreshToken).not.toBe(oldRefreshToken);
+      const tokenB = refreshRes1.body.refreshToken;
+      expect(tokenB).not.toBe(tokenA);
 
-      const newRefreshToken = refreshRes.body.refreshToken;
+      // 3. Refresh token B -> yields token C
+      const refreshRes2 = await request(app.getHttpServer())
+        .post('/api/v1/auth/refresh')
+        .send({ refreshToken: tokenB })
+        .expect(200);
 
-      // 3. Attempting to use the old refresh token again should be rejected with 401
+      const tokenC = refreshRes2.body.refreshToken;
+      expect(tokenC).not.toBe(tokenB);
+
+      // 4. Suspected Replay Attack: Replaying already-revoked token A
       await request(app.getHttpServer())
         .post('/api/v1/auth/refresh')
-        .send({ refreshToken: oldRefreshToken })
+        .send({ refreshToken: tokenA })
         .expect(401);
 
-      // 4. Using the new refresh token should succeed
-      const secondRefresh = await request(app.getHttpServer())
+      // 5. Family Revocation: Replay attack triggered revocation of all active tokens for this user
+      // Token C should now also be rejected with 401
+      await request(app.getHttpServer())
         .post('/api/v1/auth/refresh')
-        .send({ refreshToken: newRefreshToken })
-        .expect(200);
-
-      expect(secondRefresh.body).toHaveProperty('accessToken');
+        .send({ refreshToken: tokenC })
+        .expect(401);
     });
 
     it('should revoke token and clear Redis on logout', async () => {
@@ -212,6 +268,24 @@ describe('Auth and Tenancy Module Integration Tests', () => {
 
       expect(response.body.message).toContain('impersonate');
     });
+
+    it('should enforce cross-tenant boundary isolation during Super Admin impersonation', async () => {
+      // 1. When impersonating partnerTenantId, Super Admin can access partnerTenantId details
+      const response = await request(app.getHttpServer())
+        .get(`/api/v1/tenants/${partnerTenantId}`)
+        .set('Authorization', `Bearer ${superAdminToken}`)
+        .set('x-impersonate-tenant-id', partnerTenantId)
+        .expect(200);
+
+      expect(response.body.id).toBe(partnerTenantId);
+
+      // 2. When impersonating partnerTenantId, Super Admin is BLOCKED from accessing other tenants
+      await request(app.getHttpServer())
+        .get(`/api/v1/tenants/${platformTenantId}`)
+        .set('Authorization', `Bearer ${superAdminToken}`)
+        .set('x-impersonate-tenant-id', partnerTenantId)
+        .expect(403);
+    });
   });
 
   describe('Tenancy Module (/api/v1/tenants)', () => {
@@ -239,7 +313,38 @@ describe('Auth and Tenancy Module Integration Tests', () => {
         .expect(403);
     });
 
-    it('should register a new partner with status RESTRICTED', async () => {
+    it('should reject partner registration if password is missing or shorter than 8 characters', async () => {
+      // Missing password
+      await request(app.getHttpServer())
+        .post('/api/v1/tenants/register')
+        .send({
+          businessName: 'Công ty Dịch Vụ Hoàng Kim',
+          taxId: '0399887799',
+          contactName: 'Hoàng Kim Admin',
+          contactPhone: '0912345699',
+          contactEmail: 'admin@hoangkim-invalid.vn',
+          city: 'Hồ Chí Minh',
+          services: ['don-dep-nha-theo-gio'],
+        })
+        .expect(400);
+
+      // Password < 8 characters
+      await request(app.getHttpServer())
+        .post('/api/v1/tenants/register')
+        .send({
+          businessName: 'Công ty Dịch Vụ Hoàng Kim',
+          taxId: '0399887799',
+          contactName: 'Hoàng Kim Admin',
+          contactPhone: '0912345699',
+          contactEmail: 'admin@hoangkim-invalid.vn',
+          city: 'Hồ Chí Minh',
+          services: ['don-dep-nha-theo-gio'],
+          password: 'short',
+        })
+        .expect(400);
+    });
+
+    it('should register a new partner with required password (>=8 chars) and status RESTRICTED', async () => {
       // Clean up previous test run if exists
       await prisma.auditLog.deleteMany({
         where: { user: { email: 'admin@hoangkim.vn' } },
@@ -262,6 +367,7 @@ describe('Auth and Tenancy Module Integration Tests', () => {
           city: 'Hồ Chí Minh',
           services: ['don-dep-nha-theo-gio'],
           address: '456 Lê Lợi, Quận 1',
+          password: 'SecurePassword@123',
         })
         .expect(201);
 

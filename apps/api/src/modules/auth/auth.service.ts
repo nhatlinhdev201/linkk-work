@@ -65,6 +65,10 @@ export class AuthService {
       throw new UnauthorizedException('User account is not active');
     }
 
+    if (user.tenant && ['SUSPENDED', 'CANCELLED'].includes(user.tenant.status)) {
+      throw new UnauthorizedException(`Tenant account is ${user.tenant.status.toLowerCase()}`);
+    }
+
     const payload: JwtPayload = {
       sub: user.id,
       email: user.email,
@@ -138,16 +142,23 @@ export class AuthService {
       where: { tokenHash },
     });
 
-    if (!redisVal || !dbToken || dbToken.isRevoked || dbToken.expiresAt < new Date()) {
-      throw new UnauthorizedException('Refresh token is revoked or expired');
-    }
-
-    // Token Rotation: revoke previous token in DB and delete from Redis
-    await this.prisma.refreshToken.update({
-      where: { tokenHash },
+    // Atomic conditional invalidation
+    const updateResult = await this.prisma.refreshToken.updateMany({
+      where: { tokenHash, isRevoked: false },
       data: { isRevoked: true },
     });
     await this.redisService.del(redisKey);
+
+    if (updateResult.count === 0 || !redisVal || !dbToken || dbToken.expiresAt < new Date()) {
+      if (dbToken?.isRevoked) {
+        // Suspected replay attack: invalidate all active tokens for this user
+        await this.prisma.refreshToken.updateMany({
+          where: { userId },
+          data: { isRevoked: true },
+        });
+      }
+      throw new UnauthorizedException('Refresh token is revoked or expired');
+    }
 
     // Verify user exists and is active
     const user = await this.prisma.user.findUnique({
@@ -159,6 +170,10 @@ export class AuthService {
 
     if (!user || user.status !== 'ACTIVE') {
       throw new UnauthorizedException('User account is invalid or inactive');
+    }
+
+    if (user.tenant && ['SUSPENDED', 'CANCELLED'].includes(user.tenant.status)) {
+      throw new UnauthorizedException(`Tenant account is ${user.tenant.status.toLowerCase()}`);
     }
 
     // Generate new tokens
@@ -257,6 +272,10 @@ export class AuthService {
 
     if (user.status !== 'ACTIVE') {
       throw new UnauthorizedException('User account is inactive');
+    }
+
+    if (user.tenant && ['SUSPENDED', 'CANCELLED'].includes(user.tenant.status)) {
+      throw new UnauthorizedException(`Tenant account is ${user.tenant.status.toLowerCase()}`);
     }
 
     const { passwordHash: _, ...sanitizedUser } = user;

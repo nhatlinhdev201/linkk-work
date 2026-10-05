@@ -1,4 +1,4 @@
-import { IsArray, IsEmail, IsNotEmpty, IsOptional, IsString } from 'class-validator';
+import { IsArray, IsEmail, IsNotEmpty, IsOptional, IsString, MinLength } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { RegisterPartnerDto as IRegisterPartnerDto } from '@linkkwork/shared-types';
 
@@ -48,8 +48,9 @@ export class RegisterPartnerDto implements IRegisterPartnerDto {
   @IsString()
   businessLicenseUrl?: string;
 
-  @ApiPropertyOptional({ example: 'Partner@123456' })
-  @IsOptional()
+  @ApiProperty({ example: 'Partner@123456', description: 'Admin initial password (min 8 chars)' })
   @IsString()
-  password?: string;
+  @IsNotEmpty({ message: 'password is required' })
+  @MinLength(8, { message: 'password must be at least 8 characters long' })
+  password!: string;
 }

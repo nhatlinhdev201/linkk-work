@@ -92,7 +92,7 @@ export class TenantsService {
       code = `${code}_${crypto.randomBytes(3).toString('hex').toUpperCase()}`;
     }
 
-    const passwordHash = await bcrypt.hash(dto.password || 'Partner@123456', 10);
+    const passwordHash = await bcrypt.hash(dto.password, 10);
 
     return this.prisma.$transaction(async (tx) => {
       // 1. Create Tenant with RESTRICTED status
@@ -164,28 +164,30 @@ export class TenantsService {
       throw new NotFoundException(`Tenant with ID ${tenantId} not found`);
     }
 
-    const updatedTenant = await this.prisma.tenant.update({
-      where: { id: tenantId },
-      data: { status: 'ACTIVE' },
-    });
+    return this.prisma.$transaction(async (tx) => {
+      const updatedTenant = await tx.tenant.update({
+        where: { id: tenantId },
+        data: { status: 'ACTIVE' },
+      });
 
-    // Log approval to AuditLog
-    await this.prisma.auditLog.create({
-      data: {
-        tenantId: updatedTenant.id,
-        userId: reviewerId,
-        action: 'TENANT_APPROVED',
-        resource: 'Tenant',
-        resourceId: updatedTenant.id,
-        payload: {
-          reviewerId,
-          previousStatus: tenant.status,
-          newStatus: 'ACTIVE',
-          approvedAt: new Date().toISOString(),
+      // Log approval to AuditLog
+      await tx.auditLog.create({
+        data: {
+          tenantId: updatedTenant.id,
+          userId: reviewerId,
+          action: 'TENANT_APPROVED',
+          resource: 'Tenant',
+          resourceId: updatedTenant.id,
+          payload: {
+            reviewerId,
+            previousStatus: tenant.status,
+            newStatus: 'ACTIVE',
+            approvedAt: new Date().toISOString(),
+          },
         },
-      },
-    });
+      });
 
-    return updatedTenant;
+      return updatedTenant;
+    });
   }
 }
