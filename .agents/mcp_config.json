@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json.schemastore.org/mcp-config.json",
+  "mcpServers": {
+    "linkkwork-postgres": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-postgres",
+        "postgresql://linkkwork_admin:${POSTGRES_PASSWORD}@localhost:5432/linkkwork_db"
+      ],
+      "env": {
+        "POSTGRES_PASSWORD": "linkkwork_secure_password",
+        "PGTZ": "Asia/Ho_Chi_Minh"
+      },
+      "description": "Máy chủ MCP PostgreSQL kết nối trực tiếp CSDL LinkkWork để kiểm tra schema, thẩm định các chính sách Row-Level Security (RLS) của Multi-tenancy và kiểm tra số dư sổ cái kép (double-entry ledger)."
+    },
+    "linkkwork-filesystem": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-filesystem",
+        "/Users/admin/Desktop/gb/docs",
+        "/Users/admin/Desktop/gb/apps",
+        "/Users/admin/Desktop/gb/packages",
+        "/Users/admin/Desktop/gb/tools"
+      ],
+      "description": "Máy chủ MCP Filesystem được giới hạn bảo mật nghiêm ngặt (Sandboxed) trong các thư mục mã nguồn và tài liệu của dự án LinkkWork, ngăn chặn rò rỉ dữ liệu ngoài workspace."
+    },
+    "linkkwork-api-fetch": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-fetch"
+      ],
+      "env": {
+        "API_BASE_URL": "http://localhost:3000/api/v1",
+        "DEFAULT_TENANT_HEADER": "x-tenant-id"
+      },
+      "description": "Máy chủ MCP Fetch / REST API hỗ trợ gửi request kiểm thử trực tiếp tới NestJS Modular Monolith Gateway, kiểm tra phân quyền RBAC/ABAC Guard và Swagger OpenAPI specification."
+    }
+  }
+}
