@@ -90,6 +90,98 @@ export interface AuthResponse {
   user: BackendUserResponse;
 }
 
+export interface BackendCategoryResponse {
+  id: string;
+  name: string;
+  slug: string;
+  icon?: string | null;
+  isActive: boolean;
+  displayOrder: number;
+  createdAt?: string;
+}
+
+export interface BackendServiceResponse {
+  id: string;
+  tenantId?: string | null;
+  categoryId: string;
+  name: string;
+  slug: string;
+  pricingType: 'HOURLY' | 'PER_UNIT' | 'BIDDING';
+  baseUnitPrice: number;
+  durationHours?: number | null;
+  description?: string | null;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt?: string;
+  category?: {
+    id: string;
+    name: string;
+    slug: string;
+  };
+  addons?: Array<{
+    id: string;
+    name: string;
+    price: number;
+    isActive: boolean;
+  }>;
+}
+
+export interface PricingCalculationInput {
+  pricingType: 'HOURLY' | 'PER_UNIT' | 'BIDDING';
+  durationHours?: number;
+  unitCount?: number;
+  baseUnitPrice: number;
+  areaSurcharge?: number;
+  addonsPrice?: number;
+  surgeMultiplier?: number;
+  discountAmount?: number;
+}
+
+export interface PricingCalculationResult {
+  baseTotal: number;
+  subtotal: number;
+  surgeMultiplier: number;
+  surgeAmount: number;
+  discountAmount: number;
+  finalTotal: number;
+}
+
+function mapBackendCategoryToServiceCategory(c: BackendCategoryResponse): ServiceCategory {
+  return {
+    id: c.id,
+    name: c.name,
+    slug: c.slug,
+    description: c.name,
+    iconName: c.icon || 'Sparkles',
+    displayOrder: c.displayOrder ?? 0,
+  };
+}
+
+function mapBackendServiceToServiceItem(s: BackendServiceResponse): ServiceItem {
+  return {
+    id: s.id,
+    categoryId: s.categoryId,
+    categoryName: s.category?.name || 'Dịch vụ',
+    name: s.name,
+    slug: s.slug,
+    description: s.description || s.name,
+    pricingModel: s.pricingType,
+    basePrice: s.baseUnitPrice,
+    unitLabel:
+      s.pricingType === 'HOURLY' ? 'giờ' : s.pricingType === 'PER_UNIT' ? 'thiết bị' : 'báo giá',
+    minHours: s.durationHours ?? undefined,
+    isActive: s.isActive,
+    tenantId: s.tenantId || undefined,
+    addons: (s.addons || []).map((a) => ({
+      id: a.id,
+      name: a.name,
+      price: a.price,
+      description: a.name,
+    })),
+    createdAt: s.createdAt,
+  };
+}
+
 type GlobalWithStorageAndProcess = {
   localStorage?: Storage;
   process?: { env?: Record<string, string | undefined> };
@@ -866,7 +958,23 @@ export class ApiClient {
 
   // --- DỊCH VỤ & BẢNG GIÁ (SERVICE CATALOG) ---
   async getServiceCategories(): Promise<ServiceCategory[]> {
-    await sleep(100);
+    try {
+      const items = await this.fetchWithAuth<BackendCategoryResponse[]>(
+        '/catalog/categories',
+        { method: 'GET' },
+        false
+      );
+      if (Array.isArray(items)) {
+        const categories = items.map(mapBackendCategoryToServiceCategory);
+        saveData(STORAGE_KEYS.CATEGORIES, categories);
+        return categories;
+      }
+    } catch (err: unknown) {
+      console.warn(
+        'Network error fetching service categories, fallback to cache:',
+        err instanceof Error ? err.message : String(err)
+      );
+    }
     return loadData<ServiceCategory[]>(
       STORAGE_KEYS.CATEGORIES,
       INITIAL_SERVICE_CATEGORIES
@@ -874,17 +982,82 @@ export class ApiClient {
   }
 
   async getServices(tenantId?: string | null): Promise<ServiceItem[]> {
-    await sleep(150);
+    const storage = getStorage();
+    const token = storage.getItem(STORAGE_KEYS.ACCESS_TOKEN);
+
+    if (token) {
+      try {
+        const items = await this.fetchWithAuth<BackendServiceResponse[]>(
+          '/catalog/services',
+          { method: 'GET' },
+          true
+        );
+        if (Array.isArray(items)) {
+          const mappedServices = items.map(mapBackendServiceToServiceItem);
+          saveData(STORAGE_KEYS.SERVICES, mappedServices);
+
+          if (!tenantId || tenantId === 'tenant-linkkwork') {
+            return mappedServices;
+          }
+          return mappedServices.filter((s) => !s.tenantId || s.tenantId === tenantId);
+        }
+      } catch (err: unknown) {
+        console.warn(
+          'Network error fetching services, fallback to cache:',
+          err instanceof Error ? err.message : String(err)
+        );
+      }
+    }
+
     const services = loadData<ServiceItem[]>(
       STORAGE_KEYS.SERVICES,
       INITIAL_SERVICES
     );
     if (!tenantId || tenantId === 'tenant-linkkwork') return services;
-    // Return platform services plus tenant specific services
     return services.filter((s) => !s.tenantId || s.tenantId === tenantId);
   }
 
   async toggleServiceActive(serviceId: string, isActive: boolean): Promise<ServiceItem> {
+    const storage = getStorage();
+    const token = storage.getItem(STORAGE_KEYS.ACCESS_TOKEN);
+
+    if (token) {
+      try {
+        const item = await this.fetchWithAuth<BackendServiceResponse>(
+          `/catalog/services/${serviceId}/toggle`,
+          {
+            method: 'PATCH',
+            body: JSON.stringify({ isActive }),
+          },
+          true
+        );
+
+        const mapped = mapBackendServiceToServiceItem(item);
+        const cachedServices = loadData<ServiceItem[]>(
+          STORAGE_KEYS.SERVICES,
+          INITIAL_SERVICES
+        );
+        const idx = cachedServices.findIndex((s) => s.id === serviceId);
+        if (idx >= 0) {
+          cachedServices[idx] = mapped;
+        } else {
+          cachedServices.unshift(mapped);
+        }
+        saveData(STORAGE_KEYS.SERVICES, cachedServices);
+        return mapped;
+      } catch (err: unknown) {
+        if (
+          err instanceof TypeError &&
+          (err.message.toLowerCase().includes('fetch') ||
+            err.message.toLowerCase().includes('failed to fetch'))
+        ) {
+          // offline fallback
+        } else {
+          throw err;
+        }
+      }
+    }
+
     await sleep(150);
     const services = await this.getServices();
     const service = services.find((s) => s.id === serviceId);
@@ -898,6 +1071,51 @@ export class ApiClient {
   async createService(
     newServiceData: Omit<ServiceItem, 'id' | 'createdAt'>
   ): Promise<ServiceItem> {
+    const storage = getStorage();
+    const token = storage.getItem(STORAGE_KEYS.ACCESS_TOKEN);
+
+    if (token) {
+      const payload = {
+        name: newServiceData.name,
+        slug: newServiceData.slug || undefined,
+        categoryId: newServiceData.categoryId,
+        pricingType: newServiceData.pricingModel,
+        baseUnitPrice: newServiceData.basePrice,
+        durationHours: newServiceData.minHours || undefined,
+        description: newServiceData.description || undefined,
+      };
+
+      try {
+        const item = await this.fetchWithAuth<BackendServiceResponse>(
+          '/catalog/services',
+          {
+            method: 'POST',
+            body: JSON.stringify(payload),
+          },
+          true
+        );
+
+        const mapped = mapBackendServiceToServiceItem(item);
+        const cachedServices = loadData<ServiceItem[]>(
+          STORAGE_KEYS.SERVICES,
+          INITIAL_SERVICES
+        );
+        cachedServices.unshift(mapped);
+        saveData(STORAGE_KEYS.SERVICES, cachedServices);
+        return mapped;
+      } catch (err: unknown) {
+        if (
+          err instanceof TypeError &&
+          (err.message.toLowerCase().includes('fetch') ||
+            err.message.toLowerCase().includes('failed to fetch'))
+        ) {
+          // offline fallback
+        } else {
+          throw err;
+        }
+      }
+    }
+
     await sleep(250);
     const services = await this.getServices();
     const service: ServiceItem = {
@@ -908,6 +1126,17 @@ export class ApiClient {
     services.unshift(service);
     saveData(STORAGE_KEYS.SERVICES, services);
     return service;
+  }
+
+  async calculatePrice(input: PricingCalculationInput): Promise<PricingCalculationResult> {
+    return this.fetchWithAuth<PricingCalculationResult>(
+      '/catalog/calculate-price',
+      {
+        method: 'POST',
+        body: JSON.stringify(input),
+      },
+      false
+    );
   }
 
   // --- TÀI CHÍNH & VÍ KÝ QUỸ (FINANCIAL & WALLET) ---
