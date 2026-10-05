@@ -1098,3 +1098,246 @@ git add apps/api/src/modules/system-cron
 git commit -m "feat(system-cron): implement dynamic cron job control service with toggle, run-now and live config"
 ```
 
+---
+
+### Task 8: Tenant Partner Onboarding & Admin Manual Booking Creation (`apps/api/src/modules/tenancy` & `apps/api/src/modules/booking`)
+
+**Files:**
+- Create: `apps/api/src/modules/tenancy/partner-registration.service.ts`
+- Create: `apps/api/src/modules/booking/admin-booking.service.ts`
+- Test: `apps/api/src/modules/tenancy/partner-registration.service.spec.ts`
+- Test: `apps/api/src/modules/booking/admin-booking.service.spec.ts`
+
+**Interfaces:**
+- Produces: `PartnerRegistrationService.register()`, `PartnerRegistrationService.approve()`, `AdminBookingService.createManualBooking()`, `AdminBookingService.directAssign()`
+
+- [ ] **Step 1: Write the failing tests**
+
+```typescript
+// apps/api/src/modules/tenancy/partner-registration.service.spec.ts
+import { PartnerRegistrationService } from './partner-registration.service';
+
+describe('PartnerRegistrationService', () => {
+  let service: PartnerRegistrationService;
+  let mockDb: any;
+
+  beforeEach(() => {
+    mockDb = {
+      tenantApplications: new Map(),
+      tenants: new Map(),
+    };
+    service = new PartnerRegistrationService(mockDb);
+  });
+
+  it('should submit partner application with SUBMITTED status', async () => {
+    const result = await service.register({
+      businessName: 'Vệ Sinh Ánh Dương',
+      taxId: '0101234567',
+      contactPhone: '0987654321',
+      contactEmail: 'contact@anhduong.vn',
+      city: 'Hà Nội',
+    });
+
+    expect(result.status).toBe('SUBMITTED');
+    expect(result.businessName).toBe('Vệ Sinh Ánh Dương');
+  });
+
+  it('should approve application and create a new Tenant record', async () => {
+    const app = await service.register({
+      businessName: 'Điện Lạnh Sài Gòn',
+      taxId: '0309998888',
+      contactPhone: '0912345678',
+      contactEmail: 'admin@dienlanhsg.com',
+      city: 'TP.HCM',
+    });
+
+    const approved = await service.approve(app.id, 'admin-super-id');
+    expect(approved.status).toBe('APPROVED');
+    expect(approved.createdTenantId).toBeDefined();
+  });
+});
+```
+
+```typescript
+// apps/api/src/modules/booking/admin-booking.service.spec.ts
+import { AdminBookingService } from './admin-booking.service';
+import { BookingStatus } from '@linkkwork/shared-types';
+
+describe('AdminBookingService (Tenant-Scoped Booking & Dispatch)', () => {
+  let service: AdminBookingService;
+
+  beforeEach(() => {
+    service = new AdminBookingService();
+  });
+
+  it('should create manual booking with origin_tenant_id and servicing_tenant_id set to admin context', async () => {
+    const tenantId = 'tenant-anh-duong-id';
+    const booking = await service.createManualBooking(tenantId, {
+      customerName: 'Nguyễn Văn A',
+      customerPhone: '0901234567',
+      addressText: '123 Cầu Giấy, Hà Nội',
+      serviceId: 'srv-hourly-cleaning',
+      scheduledAt: new Date(),
+      totalAmount: 250000,
+    });
+
+    expect(booking.originTenantId).toBe(tenantId);
+    expect(booking.servicingTenantId).toBe(tenantId);
+    expect(booking.status).toBe(BookingStatus.PENDING_DISPATCH);
+  });
+
+  it('should allow direct assignment only to taskers belonging to current tenant', async () => {
+    const currentTenantId = 'tenant-anh-duong-id';
+    const booking = {
+      id: 'bk-999',
+      servicingTenantId: currentTenantId,
+      status: BookingStatus.PENDING_DISPATCH,
+      assignedTaskerId: null as string | null,
+    };
+
+    const taskerInTenant = { id: 'tsk-01', tenantId: currentTenantId };
+    const taskerOtherTenant = { id: 'tsk-02', tenantId: 'other-tenant-id' };
+
+    const success = await service.directAssign(currentTenantId, booking, taskerInTenant);
+    expect(success).toBe(true);
+    expect(booking.assignedTaskerId).toBe('tsk-01');
+    expect(booking.status).toBe(BookingStatus.ASSIGNED);
+
+    await expect(
+      service.directAssign(currentTenantId, booking, taskerOtherTenant)
+    ).rejects.toThrow(/Tasker does not belong to your tenant/);
+  });
+});
+```
+
+- [ ] **Step 2: Run tests to verify they fail**
+
+Run: `npx jest apps/api/src/modules/tenancy/partner-registration.service.spec.ts apps/api/src/modules/booking/admin-booking.service.spec.ts`
+Expected: FAIL with "Cannot find module"
+
+- [ ] **Step 3: Write minimal implementation**
+
+Tạo `apps/api/src/modules/tenancy/partner-registration.service.ts`:
+```typescript
+import { Injectable, NotFoundException } from '@nestjs/common';
+
+export interface PartnerRegistrationInput {
+  businessName: string;
+  taxId: string;
+  contactPhone: string;
+  contactEmail: string;
+  city: string;
+}
+
+export interface PartnerApplicationRecord extends PartnerRegistrationInput {
+  id: string;
+  status: 'SUBMITTED' | 'UNDER_REVIEW' | 'APPROVED' | 'REJECTED';
+  createdTenantId?: string;
+  reviewedBy?: string;
+  createdAt: Date;
+}
+
+@Injectable()
+export class PartnerRegistrationService {
+  private applications: Map<string, PartnerApplicationRecord> = new Map();
+
+  constructor(private readonly db?: any) {}
+
+  async register(input: PartnerRegistrationInput): Promise<PartnerApplicationRecord> {
+    const id = `app-${Date.now()}`;
+    const record: PartnerApplicationRecord = {
+      ...input,
+      id,
+      status: 'SUBMITTED',
+      createdAt: new Date(),
+    };
+    this.applications.set(id, record);
+    return record;
+  }
+
+  async approve(applicationId: string, reviewerId: string): Promise<PartnerApplicationRecord> {
+    const app = this.applications.get(applicationId);
+    if (!app) throw new NotFoundException('Application not found');
+
+    const createdTenantId = `tenant-${Date.now()}`;
+    app.status = 'APPROVED';
+    app.reviewedBy = reviewerId;
+    app.createdTenantId = createdTenantId;
+    return app;
+  }
+}
+```
+
+Tạo `apps/api/src/modules/booking/admin-booking.service.ts`:
+```typescript
+import { Injectable, ForbiddenException } from '@nestjs/common';
+import { BookingStatus } from '@linkkwork/shared-types';
+
+export interface ManualBookingInput {
+  customerName: string;
+  customerPhone: string;
+  addressText: string;
+  serviceId: string;
+  scheduledAt: Date;
+  totalAmount: number;
+}
+
+export interface AdminBookingRecord extends ManualBookingInput {
+  id: string;
+  originTenantId: string;
+  servicingTenantId: string;
+  status: BookingStatus;
+  assignedTaskerId: string | null;
+  createdAt: Date;
+}
+
+@Injectable()
+export class AdminBookingService {
+  async createManualBooking(
+    currentTenantId: string,
+    input: ManualBookingInput
+  ): Promise<AdminBookingRecord> {
+    return {
+      ...input,
+      id: `bk-${Date.now()}`,
+      originTenantId: currentTenantId,
+      servicingTenantId: currentTenantId,
+      status: BookingStatus.PENDING_DISPATCH,
+      assignedTaskerId: null,
+      createdAt: new Date(),
+    };
+  }
+
+  async directAssign(
+    currentTenantId: string,
+    booking: { id: string; servicingTenantId: string; status: BookingStatus; assignedTaskerId: string | null },
+    tasker: { id: string; tenantId: string }
+  ): Promise<boolean> {
+    if (booking.servicingTenantId !== currentTenantId) {
+      throw new ForbiddenException('Cannot dispatch bookings belonging to other tenants');
+    }
+
+    if (tasker.tenantId !== currentTenantId) {
+      throw new ForbiddenException('Tasker does not belong to your tenant organization');
+    }
+
+    booking.assignedTaskerId = tasker.id;
+    booking.status = BookingStatus.ASSIGNED;
+    return true;
+  }
+}
+```
+
+- [ ] **Step 4: Run tests to verify they pass**
+
+Run: `npx jest apps/api/src/modules/tenancy/partner-registration.service.spec.ts apps/api/src/modules/booking/admin-booking.service.spec.ts`
+Expected: PASS
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add apps/api/src/modules/tenancy apps/api/src/modules/booking
+git commit -m "feat(tenancy&booking): implement partner onboarding registration and tenant-scoped admin manual booking dispatch"
+```
+
+

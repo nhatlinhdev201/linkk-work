@@ -88,11 +88,34 @@ graph TD
     );
   ```
 
-#### B. Phân quyền và Chế độ Impersonation
-* **Super Admin:** Có toàn quyền kiểm soát sàn, tạo Tenant, cấu hình phí. Có thanh **Impersonation Bar** cho phép "đăng nhập vào phiên làm việc" của bất kỳ Tenant nào để hỗ trợ kỹ thuật mà không cần mật khẩu. Mọi hành động đều ghi nhận log kiểm toán `audit_logs` có đính kèm `impersonated_by: super_admin_id`.
-* **Tasker Pool (Mô hình Hybrid):**
-  * `Tasker tự do (Freelance)`: `tenant_id = PLATFORM_TENANT`, nạp ví cọc để nhận đơn broadcast toàn sàn.
-  * `Tasker doanh nghiệp (Affiliated)`: `tenant_id = Tenant X`, ưu tiên nhận đơn do Tenant X gán hoặc broadcast nội bộ trong nhóm nhân sự của Tenant X.
+#### B. Phân quyền, Default Tenant LinkkWork & Chế độ Impersonation
+* **Default Tenant của Super Admin (Tenant LinkkWork):**
+  * Super Admin sở hữu một Tenant mặc định mang tên **Tenant LinkkWork** (`code: 'LINKKWORK'`, `name: 'Nền tảng LinkkWork'`).
+  * Khi Super Admin đăng nhập, ngữ cảnh hoạt động mặc định là Tenant LinkkWork. Mọi đơn hàng do tổng đài LinkkWork tiếp nhận hoặc khách vãng lai đặt trên app sàn đều có `origin_tenant_id = LINKKWORK_TENANT_ID`.
+  * Super Admin quản lý đội ngũ Tasker tự do của sàn trong phạm vi Tenant LinkkWork này.
+  * **Thanh Impersonation Bar:** Cho phép Super Admin chuyển đổi phiên làm việc sang bất kỳ Tenant nào khác để hỗ trợ kỹ thuật hoặc kiểm toán với đầy đủ audit trail.
+
+#### C. Cổng Đăng ký Đối tác Doanh nghiệp (Tenant Partner Onboarding Portal)
+* **Form Đăng ký Công khai (`/partner/register`):**
+  * Dành cho các công ty, doanh nghiệp dịch vụ địa phương muốn gia nhập sàn.
+  * Thông tin thu thập: Tên doanh nghiệp, Mã số thuế, Người đại diện, Số điện thoại hotline, Email, Địa chỉ trụ sở, Tỉnh/Thành phố hoạt động, Các nhóm dịch vụ cung ứng, Ảnh chụp Giấy phép Đăng ký Kinh doanh (ĐKKD).
+* **Quy trình Phê duyệt Hồ sơ (Approval Lifecycle):**
+  * `SUBMITTED`: Hồ sơ mới gửi, chuyển vào hàng đợi thẩm định của Super Admin.
+  * `UNDER_REVIEW`: Super Admin đang liên hệ xác minh thông tin.
+  * `APPROVED`: Super Admin phê duyệt -> Hệ thống tự động tạo bản ghi `tenants`, cấp tài khoản `Tenant Admin` đầu tiên và gửi email kích hoạt mật khẩu cho đối tác.
+  * `REJECTED`: Từ chối hồ sơ kèm lý do phản hồi để đối tác chỉnh sửa nộp lại.
+
+#### D. Quyền Tạo Đơn & Điều phối Đơn hàng Của Tất Cả Admin (Scoped by Tenant)
+* **Tất cả các Admin (Super Admin và mọi Admin Tenant)** đều được trang bị trọn vẹn 2 công cụ nghiệp vụ:
+  1. **Công cụ Tạo Đơn Thủ công (Manual Booking Creation):**
+     * Dành cho tình huống khách gọi điện thoại trực tiếp qua tổng đài hoặc khách quen của Tenant.
+     * Admin nhập: Tên khách, SĐT, Địa chỉ GPS, Chọn dịch vụ, Chọn Add-ons, Chọn thời gian ca làm, Chọn phương thức thanh toán (Tiền mặt / Chuyển khoản).
+     * Đơn hàng tự động mang `origin_tenant_id = current_tenant_id` và `servicing_tenant_id = current_tenant_id`.
+  2. **Bàn Điều phối Đơn hàng (Tenant Dispatch Console):**
+     * Giới hạn phạm vi nghiêm ngặt: Chỉ xem và điều phối các đơn có `servicing_tenant_id = current_tenant_id`.
+     * Admin có thể:
+       * **Chỉ định trực tiếp (Direct Assignment):** Gán thẳng ca làm cho 1 Tasker nội bộ cụ thể.
+       * **Mở nhận việc nội bộ (Internal Broadcast):** Đẩy thông báo cho toàn bộ thợ trực thuộc Tenant của mình vào bấm nhận việc.
 
 ---
 
