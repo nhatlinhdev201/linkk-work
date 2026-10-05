@@ -1,8 +1,8 @@
-import React, { useState, useEffect } from 'react';
-import { api } from '../../api/client';
+import React, { useState } from 'react';
 import { Booking, PricingModel } from '../../types';
 import { useAuth } from '../../auth/AuthContext';
 import { useToast } from '../../components/feedback/ToastContext';
+import { useBookingsQuery, useCreateBookingMutation } from '../../api/queries';
 import { Button } from '../../components/common/Button';
 import { Badge } from '../../components/common/Badge';
 import { Modal } from '../../components/common/Modal';
@@ -38,8 +38,9 @@ export const BookingsPage: React.FC = () => {
   const { currentTenantId, currentTenantName } = useAuth();
   const { toast } = useToast();
 
-  const [bookings, setBookings] = useState<Booking[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { data: bookings = [], isLoading } = useBookingsQuery(currentTenantId);
+  const createBookingMutation = useCreateBookingMutation(currentTenantId);
+
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
   const [currentPage, setCurrentPage] = useState(1);
@@ -47,7 +48,6 @@ export const BookingsPage: React.FC = () => {
 
   // Modal manual booking state
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [isSubmitting, setIsSubmitting] = useState(false);
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
   const [form, setForm] = useState({
     customerName: '',
@@ -59,27 +59,6 @@ export const BookingsPage: React.FC = () => {
     durationHours: 3,
     totalAmount: 240000,
   });
-
-  const loadBookings = async () => {
-    setLoading(true);
-    try {
-      const data = await api.getBookings(currentTenantId);
-      setBookings(data);
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'Lỗi tải danh sách đơn';
-      toast({
-        type: 'error',
-        title: 'Lỗi tải dữ liệu',
-        message,
-      });
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    loadBookings();
-  }, [currentTenantId]);
 
   const validateForm = (): boolean => {
     const errors: Record<string, string> = {};
@@ -113,26 +92,17 @@ export const BookingsPage: React.FC = () => {
     }
 
     try {
-      setIsSubmitting(true);
-      const created = await api.createManualBooking(
-        currentTenantId,
-        currentTenantName,
-        {
-          customerName: form.customerName,
-          customerPhone: form.customerPhone,
-          addressText: form.addressText,
-          serviceName: form.serviceName,
-          pricingType: form.pricingType,
-          scheduledAt: form.scheduledAt,
-          durationHours: Number(form.durationHours),
-          totalAmount: Number(form.totalAmount),
-        }
-      );
-
-      toast({
-        type: 'success',
-        title: 'Tạo đơn thành công!',
-        message: `Đơn hàng [${created.code}] đã được khởi tạo trong phạm vi ${currentTenantName}.`,
+      await createBookingMutation.mutateAsync({
+        tenantId: currentTenantId,
+        tenantName: currentTenantName,
+        customerName: form.customerName,
+        customerPhone: form.customerPhone,
+        addressText: form.addressText,
+        serviceName: form.serviceName,
+        pricingType: form.pricingType,
+        scheduledAt: form.scheduledAt,
+        durationHours: Number(form.durationHours),
+        totalAmount: Number(form.totalAmount),
       });
 
       setIsModalOpen(false);
@@ -146,17 +116,8 @@ export const BookingsPage: React.FC = () => {
         durationHours: 3,
         totalAmount: 240000,
       });
-
-      await loadBookings();
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'Tạo đơn thất bại';
-      toast({
-        type: 'error',
-        title: 'Tạo đơn thất bại',
-        message,
-      });
-    } finally {
-      setIsSubmitting(false);
+    } catch {
+      // Error toast already handled by mutation hook
     }
   };
 
@@ -269,7 +230,7 @@ export const BookingsPage: React.FC = () => {
       </div>
 
       {/* Bookings Table / Empty State */}
-      {loading ? (
+      {isLoading && bookings.length === 0 ? (
         <SkeletonTable rows={6} cols={7} />
       ) : filteredBookings.length === 0 ? (
         <EmptyState
@@ -497,17 +458,17 @@ export const BookingsPage: React.FC = () => {
                 setIsModalOpen(false);
                 setFormErrors({});
               }}
-              disabled={isSubmitting}
+              disabled={createBookingMutation.isPending}
             >
               Hủy
             </Button>
             <Button
               variant="primary"
               onClick={handleCreateBooking}
-              disabled={isSubmitting}
+              disabled={createBookingMutation.isPending}
               leftIcon={<Sparkles className="w-4 h-4" />}
             >
-              {isSubmitting ? 'Đang khởi tạo...' : 'Xác nhận & Tạo đơn'}
+              {createBookingMutation.isPending ? 'Đang khởi tạo...' : 'Xác nhận & Tạo đơn'}
             </Button>
           </div>
         }

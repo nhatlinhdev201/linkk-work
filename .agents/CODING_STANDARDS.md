@@ -54,6 +54,23 @@ Tài liệu quy định toàn bộ tiêu chuẩn viết mã, phong cách kiến 
    - Thông báo phản hồi qua `ToastContext` (`toast.success`, `toast.error`, `toast.warning`, `toast.info`).
    - Màn hình trắng hoặc crash phải được chặn bởi `ErrorBoundary`.
 
+9. **State Management, Cache & Zero-Flicker Architecture (TanStack Query v5 + Zustand):**
+   - **Phân định ranh giới rành mạch giữa Server State và Client UI State:**
+     - **Server State (TanStack Query v5):** Dữ liệu nghiệp vụ từ Backend/API (Bookings, Tenants, Taskers, Services, Cron Jobs, Finance, Settings). Cấu hình chuẩn: `staleTime: 120_000` (2 phút), `gcTime: 600_000` (10 phút), `refetchOnWindowFocus: false`.
+     - **Client UI State (Zustand Store):** Trạng thái giao diện người dùng (Sidebar collapsed, Mobile Drawer open/close, Modals, Local filter preferences).
+   - **Tuyệt đối cấm kích hoạt lại Skeleton toàn trang sau Mutation (Anti-Flicker):**
+     - Tuyệt đối không gọi các hàm `loadData()` gây `setLoading(true)` sau khi hoàn thành mutation (Gán việc, Tạo đơn, Duyệt đối tác, Toggle switch dịch vụ/cron). Hành vi này làm unmount toàn bộ view và hiển thị lại Skeleton gây nháy giật giao diện ("flict UI").
+   - **Optimistic UI Updates (Phản hồi 0ms trên Cache):**
+     - Mọi Mutation thao tác dữ liệu phải triển khai Optimistic Update:
+       1. Cancel refetch đang chạy (`queryClient.cancelQueries`).
+       2. Lưu snapshot cache hiện tại (`previousData`).
+       3. Cập nhật trực tiếp `queryClient.setQueryData` với dữ liệu mới ngay lập tức.
+       4. Rollback hoàn tác tại `onError` nếu API trả lỗi.
+       5. Đồng bộ ngầm tại `onSettled` (`queryClient.invalidateQueries`) mà không làm xáo trộn hiển thị.
+   - **Skeleton chỉ áp dụng cho Initial Cold Load:**
+     - Chỉ kích hoạt Skeleton Loading khi `isLoading && !data` (lần đầu vào trang chưa có cache).
+     - Khi người dùng bấm action hoặc đang revalidate ở background (`isFetching`), chỉ hiển thị trạng thái xử lý cục bộ trên nút (`isPending`), giữ nguyên bảng/thẻ dữ liệu.
+
 ---
 
 ## 2. Quy Chuẩn Đặt Tên & Cấu Trúc File (Naming & Structure)
@@ -72,7 +89,8 @@ Tài liệu quy định toàn bộ tiêu chuẩn viết mã, phong cách kiến 
 ## 3. Checklist Trước Khi Hoàn Tất Bất Kỳ Tính Năng Nào
 
 - [ ] Toàn bộ Types được khai báo chính xác trong `types/index.ts`, không còn `any`.
-- [ ] Bắt buộc có Skeleton Loading đúng layout khi `loading === true`.
+- [ ] Bắt buộc có Skeleton Loading đúng layout khi `isLoading && !data` (chỉ ở initial cold load).
+- [ ] Áp dụng TanStack Query v5 & Zustand; mọi Mutation phải Optimistic Update (0ms flicker-free).
 - [ ] Bảng danh sách có Phân trang (Pagination) và hiển thị thân thiện trên mobile.
 - [ ] Form có validation logic rõ ràng, hiển thị lỗi màu đỏ dưới input.
 - [ ] Sidebar đóng mở có animation mượt mà, không bị duplicate DOM node.

@@ -1,5 +1,7 @@
 import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { QueryClientProvider } from '@tanstack/react-query';
+import { queryClient } from './lib/queryClient';
 import { AuthProvider } from './auth/AuthContext';
 import { ToastProvider } from './components/feedback/ToastContext';
 import { ErrorBoundary } from './components/feedback/ErrorBoundary';
@@ -24,9 +26,10 @@ import { UnauthorizedPage } from './pages/error/UnauthorizedPage';
 export const App: React.FC = () => {
   return (
     <ErrorBoundary>
-      <ToastProvider>
-        <AuthProvider>
-          <BrowserRouter>
+      <QueryClientProvider client={queryClient}>
+        <ToastProvider>
+          <AuthProvider>
+            <BrowserRouter>
             <Routes>
               {/* Public Routes */}
               <Route path="/login" element={<LoginPage />} />
@@ -75,8 +78,9 @@ export const App: React.FC = () => {
           </BrowserRouter>
         </AuthProvider>
       </ToastProvider>
-    </ErrorBoundary>
-  );
+    </QueryClientProvider>
+  </ErrorBoundary>
+);
 };
 
 export default App;

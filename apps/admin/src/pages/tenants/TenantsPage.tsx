@@ -1,8 +1,12 @@
-import React, { useState, useEffect } from 'react';
-import { api } from '../../api/client';
-import { Tenant, PartnerApplication } from '../../types';
+import React, { useState } from 'react';
 import { useAuth } from '../../auth/AuthContext';
 import { useToast } from '../../components/feedback/ToastContext';
+import {
+  useTenantsQuery,
+  usePartnerApplicationsQuery,
+  useApprovePartnerMutation,
+  useRejectPartnerMutation,
+} from '../../api/queries';
 import { Card, CardHeader, CardTitle, CardContent } from '../../components/common/Card';
 import { Button } from '../../components/common/Button';
 import { Badge } from '../../components/common/Badge';
@@ -39,9 +43,13 @@ export const TenantsPage: React.FC = () => {
   const navigate = useNavigate();
 
   const [activeTab, setActiveTab] = useState<string>('tenants');
-  const [tenants, setTenants] = useState<Tenant[]>([]);
-  const [applications, setApplications] = useState<PartnerApplication[]>([]);
-  const [loading, setLoading] = useState(true);
+
+  const { data: tenants = [], isLoading: isLoadingTenants } = useTenantsQuery();
+  const { data: applications = [], isLoading: isLoadingApps } = usePartnerApplicationsQuery();
+
+  const approveMutation = useApprovePartnerMutation();
+  const rejectMutation = useRejectPartnerMutation();
+
   const [searchQuery, setSearchQuery] = useState('');
 
   // Pagination states
@@ -54,53 +62,12 @@ export const TenantsPage: React.FC = () => {
   const [rejectingAppId, setRejectingAppId] = useState<string | null>(null);
   const [rejectionReason, setRejectionReason] = useState('');
   const [rejectionError, setRejectionError] = useState<string | null>(null);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-
-
-  const loadData = async () => {
-    setLoading(true);
-    try {
-      const [tList, aList] = await Promise.all([
-        api.getTenants(),
-        api.getPartnerApplications(),
-      ]);
-      setTenants(tList);
-      setApplications(aList);
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'Không thể tải danh sách đối tác';
-      toast({
-        type: 'error',
-        title: 'Lỗi tải dữ liệu',
-        message,
-      });
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    loadData();
-  }, []);
 
   const handleApprove = async (appId: string) => {
     try {
-      setIsSubmitting(true);
-      const newTenant = await api.approvePartnerApplication(appId);
-      toast({
-        type: 'success',
-        title: 'Đã phê duyệt thành công!',
-        message: `Đã cấp Tenant [${newTenant.code}] cho doanh nghiệp "${newTenant.name}".`,
-      });
-      await loadData();
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'Phê duyệt thất bại';
-      toast({
-        type: 'error',
-        title: 'Phê duyệt thất bại',
-        message,
-      });
-    } finally {
-      setIsSubmitting(false);
+      await approveMutation.mutateAsync(appId);
+    } catch {
+      // Handled in mutation onError
     }
   };
 
@@ -112,26 +79,12 @@ export const TenantsPage: React.FC = () => {
     }
 
     try {
-      setIsSubmitting(true);
-      await api.rejectPartnerApplication(rejectingAppId, rejectionReason);
-      toast({
-        type: 'info',
-        title: 'Đã từ chối hồ sơ',
-        message: 'Hồ sơ đã được đánh dấu từ chối.',
-      });
+      await rejectMutation.mutateAsync({ appId: rejectingAppId, reason: rejectionReason });
       setRejectingAppId(null);
       setRejectionReason('');
       setRejectionError(null);
-      await loadData();
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'Thao tác thất bại';
-      toast({
-        type: 'error',
-        title: 'Thao tác thất bại',
-        message,
-      });
-    } finally {
-      setIsSubmitting(false);
+    } catch {
+      // Handled in mutation onError
     }
   };
 
@@ -200,14 +153,11 @@ export const TenantsPage: React.FC = () => {
       </div>
 
       {/* Main Content */}
-      {loading ? (
-        activeTab === 'tenants' ? (
+      {activeTab === 'tenants' ? (
+        isLoadingTenants && tenants.length === 0 ? (
           <SkeletonTable rows={6} cols={6} />
         ) : (
-          <SkeletonCardGrid count={4} columns={2} />
-        )
-      ) : activeTab === 'tenants' ? (
-        <div className="space-y-4">
+          <div className="space-y-4">
           {/* Search bar */}
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div className="relative w-full sm:max-w-md">
@@ -444,6 +394,9 @@ export const TenantsPage: React.FC = () => {
             </div>
           )}
         </div>
+        )
+      ) : isLoadingApps && applications.length === 0 ? (
+        <SkeletonCardGrid count={4} columns={2} />
       ) : (
         /* Applications Tab */
         <div className="space-y-4">
@@ -574,7 +527,7 @@ export const TenantsPage: React.FC = () => {
                               setRejectionError(null);
                             }}
                             leftIcon={<XCircle className="w-3.5 h-3.5 text-rose-500" />}
-                            disabled={isSubmitting}
+                            disabled={approveMutation.isPending || rejectMutation.isPending}
                           >
                             Từ chối
                           </Button>
@@ -583,9 +536,11 @@ export const TenantsPage: React.FC = () => {
                             variant="primary"
                             onClick={() => handleApprove(app.id)}
                             leftIcon={<CheckCircle2 className="w-3.5 h-3.5" />}
-                            disabled={isSubmitting}
+                            disabled={approveMutation.isPending && approveMutation.variables === app.id}
                           >
-                            Phê duyệt &amp; Cấp Tenant
+                            {approveMutation.isPending && approveMutation.variables === app.id
+                              ? 'Đang duyệt...'
+                              : 'Phê duyệt & Cấp Tenant'}
                           </Button>
                         </div>
                       )}
@@ -624,16 +579,16 @@ export const TenantsPage: React.FC = () => {
                 setRejectingAppId(null);
                 setRejectionError(null);
               }}
-              disabled={isSubmitting}
+              disabled={rejectMutation.isPending}
             >
               Hủy
             </Button>
             <Button
               variant="danger"
               onClick={handleConfirmReject}
-              disabled={isSubmitting}
+              disabled={rejectMutation.isPending}
             >
-              Xác nhận từ chối
+              {rejectMutation.isPending ? 'Đang từ chối...' : 'Xác nhận từ chối'}
             </Button>
           </div>
         }

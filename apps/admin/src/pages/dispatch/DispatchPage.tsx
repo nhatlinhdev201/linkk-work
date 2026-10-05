@@ -1,9 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { api } from '../../api/client';
-import { Booking, Tasker } from '../../types';
 import { useAuth } from '../../auth/AuthContext';
-import { useToast } from '../../components/feedback/ToastContext';
+import {
+  useBookingsQuery,
+  useTaskersQuery,
+  useAssignBookingMutation,
+  useBroadcastBookingMutation,
+} from '../../api/queries';
 import { Card, CardHeader, CardTitle, CardContent } from '../../components/common/Card';
 import { Button } from '../../components/common/Button';
 import { Badge } from '../../components/common/Badge';
@@ -29,72 +32,46 @@ export const DispatchPage: React.FC = () => {
   const urlBookingId = searchParams.get('bookingId');
 
   const { currentTenantId, currentTenantName } = useAuth();
-  const { toast } = useToast();
 
-  const [bookings, setBookings] = useState<Booking[]>([]);
-  const [taskers, setTaskers] = useState<Tasker[]>([]);
+  const { data: bookings = [], isLoading: isLoadingBookings } = useBookingsQuery(currentTenantId);
+  const { data: taskers = [], isLoading: isLoadingTaskers } = useTaskersQuery(currentTenantId);
+
+  const assignMutation = useAssignBookingMutation(currentTenantId);
+  const broadcastMutation = useBroadcastBookingMutation(currentTenantId);
+
   const [selectedBookingId, setSelectedBookingId] = useState<string | null>(urlBookingId);
-  const [loading, setLoading] = useState(true);
   const [assigningTaskId, setAssigningTaskId] = useState<string | null>(null);
 
-  const loadData = async () => {
-    setLoading(true);
-    try {
-      const [bList, tList] = await Promise.all([
-        api.getBookings(currentTenantId),
-        api.getTaskers(currentTenantId),
-      ]);
-      setBookings(bList);
-      setTaskers(tList);
-
-      // Auto select first pending booking if none selected or not valid
-      const pendingList = bList.filter(
-        (b) =>
-          b.status === 'PENDING_DISPATCH' ||
-          b.status === 'BROADCASTING' ||
-          b.status === 'MATCHING'
-      );
-      if (urlBookingId && bList.find((b) => b.id === urlBookingId)) {
-        setSelectedBookingId(urlBookingId);
-      } else if (pendingList.length > 0 && !selectedBookingId) {
-        setSelectedBookingId(pendingList[0].id);
-      }
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'Lỗi tải dữ liệu điều phối';
-      toast({
-        type: 'error',
-        title: 'Lỗi tải dữ liệu điều phối',
-        message,
-      });
-    } finally {
-      setLoading(false);
-    }
-  };
-
+  // Auto select first pending booking if none selected or not valid
   useEffect(() => {
-    loadData();
-  }, [currentTenantId]);
+    const pendingList = bookings.filter(
+      (b) =>
+        b.status === 'PENDING_DISPATCH' ||
+        b.status === 'BROADCASTING' ||
+        b.status === 'MATCHING'
+    );
+    if (urlBookingId && bookings.find((b) => b.id === urlBookingId)) {
+      setSelectedBookingId(urlBookingId);
+    } else if (pendingList.length > 0 && (!selectedBookingId || !bookings.find((b) => b.id === selectedBookingId))) {
+      setSelectedBookingId(pendingList[0].id);
+    }
+  }, [bookings, urlBookingId, selectedBookingId]);
 
   const selectedBooking = bookings.find((b) => b.id === selectedBookingId);
 
-  const handleDirectAssign = async (taskerId: string, taskerName: string) => {
+  const handleDirectAssign = async (taskerId: string, taskerName: string, taskerPhone: string) => {
     if (!selectedBooking) return;
     try {
       setAssigningTaskId(taskerId);
-      await api.directAssignBooking(selectedBooking.id, taskerId, currentTenantId);
-      toast({
-        type: 'success',
-        title: 'Chỉ định thành công!',
-        message: `Đơn [${selectedBooking.code}] đã được giao cho đối tác ${taskerName}.`,
+      await assignMutation.mutateAsync({
+        bookingId: selectedBooking.id,
+        taskerId,
+        taskerName,
+        taskerPhone,
+        adminTenantId: currentTenantId,
       });
-      await loadData();
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'Chỉ định thất bại';
-      toast({
-        type: 'error',
-        title: 'Chỉ định thất bại',
-        message,
-      });
+    } catch {
+      // Handled in mutation onError
     } finally {
       setAssigningTaskId(null);
     }
@@ -103,20 +80,9 @@ export const DispatchPage: React.FC = () => {
   const handleBroadcast = async () => {
     if (!selectedBooking) return;
     try {
-      await api.broadcastInternalBooking(selectedBooking.id);
-      toast({
-        type: 'info',
-        title: 'Đã phát sóng đơn nội bộ',
-        message: `Hệ thống đã bắn thông báo đơn [${selectedBooking.code}] tới ứng dụng của toàn bộ thợ thuộc ${currentTenantName}.`,
-      });
-      await loadData();
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'Bắn đơn thất bại';
-      toast({
-        type: 'error',
-        title: 'Bắn đơn thất bại',
-        message,
-      });
+      await broadcastMutation.mutateAsync(selectedBooking.id);
+    } catch {
+      // Handled in mutation onError
     }
   };
 
@@ -152,7 +118,7 @@ export const DispatchPage: React.FC = () => {
         </div>
       </div>
 
-      {loading ? (
+      {(isLoadingBookings || isLoadingTaskers) && bookings.length === 0 ? (
         <SkeletonDispatch />
       ) : (
 
@@ -305,9 +271,14 @@ export const DispatchPage: React.FC = () => {
                       size="sm"
                       variant="primary"
                       onClick={handleBroadcast}
+                      disabled={broadcastMutation.isPending || selectedBooking.status === 'BROADCASTING'}
                       leftIcon={<Send className="w-3.5 h-3.5" />}
                     >
-                      Bắn đơn nội bộ ngay
+                      {broadcastMutation.isPending
+                        ? 'Đang bắn đơn...'
+                        : selectedBooking.status === 'BROADCASTING'
+                        ? 'Đang phát sóng'
+                        : 'Bắn đơn nội bộ ngay'}
                     </Button>
                   </div>
                 </Card>
@@ -395,8 +366,8 @@ export const DispatchPage: React.FC = () => {
                             <Button
                               size="sm"
                               variant={isAssignedToThis ? 'secondary' : 'primary'}
-                              disabled={assigningTaskId === t.id || isAssignedToThis}
-                              onClick={() => handleDirectAssign(t.id, t.name)}
+                              disabled={(assignMutation.isPending && assigningTaskId === t.id) || isAssignedToThis}
+                              onClick={() => handleDirectAssign(t.id, t.name, t.phone)}
                               leftIcon={
                                 isAssignedToThis ? (
                                   <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
@@ -405,7 +376,7 @@ export const DispatchPage: React.FC = () => {
                             >
                               {isAssignedToThis
                                 ? 'Đang phụ trách'
-                                : assigningTaskId === t.id
+                                : assigningTaskId === t.id && assignMutation.isPending
                                 ? 'Đang gán...'
                                 : 'Chỉ định đơn này'}
                             </Button>

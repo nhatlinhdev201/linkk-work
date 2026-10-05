@@ -1,8 +1,6 @@
-import React, { useState, useEffect } from 'react';
-import { api } from '../../api/client';
-import { Tasker } from '../../types';
+import React, { useState } from 'react';
 import { useAuth } from '../../auth/AuthContext';
-import { useToast } from '../../components/feedback/ToastContext';
+import { useTaskersQuery } from '../../api/queries';
 import { Card, CardContent } from '../../components/common/Card';
 import { Badge } from '../../components/common/Badge';
 import { Tabs } from '../../components/common/Tabs';
@@ -19,36 +17,12 @@ import {
 
 export const TaskersPage: React.FC = () => {
   const { currentTenantId, currentTenantName } = useAuth();
-  const { toast } = useToast();
 
-  const [taskers, setTaskers] = useState<Tasker[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { data: taskers = [], isLoading } = useTaskersQuery(currentTenantId);
   const [searchQuery, setSearchQuery] = useState('');
   const [onlineFilter, setOnlineFilter] = useState<string>('ALL');
   const [currentPage, setCurrentPage] = useState(1);
   const pageSize = 6;
-
-
-  const loadTaskers = async () => {
-    setLoading(true);
-    try {
-      const data = await api.getTaskers(currentTenantId);
-      setTaskers(data);
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'Lỗi tải danh sách thợ';
-      toast({
-        type: 'error',
-        title: 'Lỗi tải dữ liệu',
-        message,
-      });
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    loadTaskers();
-  }, [currentTenantId]);
 
   const filteredTaskers = taskers.filter((t) => {
     const matchSearch =
@@ -118,7 +92,7 @@ export const TaskersPage: React.FC = () => {
       </div>
 
       {/* Taskers Grid */}
-      {loading ? (
+      {isLoading && taskers.length === 0 ? (
         <SkeletonCardGrid count={6} columns={3} />
       ) : filteredTaskers.length === 0 ? (
         <EmptyState

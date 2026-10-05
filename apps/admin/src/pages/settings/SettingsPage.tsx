@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { api } from '../../api/client';
 import { TenantSettings } from '../../types';
 import { useAuth } from '../../auth/AuthContext';
 import { useToast } from '../../components/feedback/ToastContext';
+import { useTenantSettingsQuery, useUpdateTenantSettingsMutation } from '../../api/queries';
 import { Card, CardHeader, CardTitle, CardContent } from '../../components/common/Card';
 import { Button } from '../../components/common/Button';
 import { Input } from '../../components/common/Input';
@@ -24,8 +24,9 @@ export const SettingsPage: React.FC = () => {
   const { currentTenantId, currentTenantName, isSuperAdmin } = useAuth();
   const { toast } = useToast();
 
-  const [loading, setLoading] = useState(true);
-  const [isSaving, setIsSaving] = useState(false);
+  const { data: initialSettings, isLoading } = useTenantSettingsQuery(currentTenantId);
+  const updateSettingsMutation = useUpdateTenantSettingsMutation(currentTenantId);
+
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
   const [form, setForm] = useState<TenantSettings>({
     tenantId: currentTenantId,
@@ -38,26 +39,11 @@ export const SettingsPage: React.FC = () => {
     workingHours: { start: '07:00', end: '21:00' },
   });
 
-  const loadSettings = async () => {
-    setLoading(true);
-    try {
-      const data = await api.getTenantSettings(currentTenantId);
-      setForm(data);
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'Lỗi tải thông tin cài đặt';
-      toast({
-        type: 'error',
-        title: 'Lỗi tải dữ liệu',
-        message,
-      });
-    } finally {
-      setLoading(false);
-    }
-  };
-
   useEffect(() => {
-    loadSettings();
-  }, [currentTenantId]);
+    if (initialSettings) {
+      setForm(initialSettings);
+    }
+  }, [initialSettings]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -93,24 +79,11 @@ export const SettingsPage: React.FC = () => {
       return;
     }
 
-    setIsSaving(true);
     try {
-      await api.updateTenantSettings(currentTenantId, form);
-      toast({
-        type: 'success',
-        title: 'Lưu cài đặt thành công!',
-        message: `Đã cập nhật thông số vận hành cho ${currentTenantName}.`,
-      });
+      await updateSettingsMutation.mutateAsync(form);
       setFormErrors({});
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'Không thể lưu cài đặt';
-      toast({
-        type: 'error',
-        title: 'Lưu thất bại',
-        message,
-      });
-    } finally {
-      setIsSaving(false);
+    } catch {
+      // Handled in mutation onError
     }
   };
 
@@ -128,7 +101,7 @@ export const SettingsPage: React.FC = () => {
         </p>
       </div>
 
-      {loading ? (
+      {isLoading && !initialSettings ? (
         <SkeletonForm fields={6} />
       ) : (
         <form onSubmit={handleSubmit} className="space-y-6">
@@ -287,7 +260,7 @@ export const SettingsPage: React.FC = () => {
             <Button
               type="submit"
               variant="primary"
-              isLoading={isSaving}
+              isLoading={updateSettingsMutation.isPending}
               leftIcon={<Save className="w-4 h-4" />}
             >
               Lưu thay đổi cấu hình

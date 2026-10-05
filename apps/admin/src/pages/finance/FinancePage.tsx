@@ -1,8 +1,8 @@
-import React, { useState, useEffect } from 'react';
-import { api } from '../../api/client';
-import { WalletTransaction, FinancialSummary } from '../../types';
+import React, { useState } from 'react';
+import { WalletTransaction } from '../../types';
 import { useAuth } from '../../auth/AuthContext';
 import { useToast } from '../../components/feedback/ToastContext';
+import { useFinancialSummaryQuery, useWalletTransactionsQuery } from '../../api/queries';
 import { StatCard } from '../../components/common/StatCard';
 import {
   Table,
@@ -35,37 +35,14 @@ export const FinancePage: React.FC = () => {
   const { currentTenantId, currentTenantName, isSuperAdmin } = useAuth();
   const { toast } = useToast();
 
-  const [summary, setSummary] = useState<FinancialSummary | null>(null);
-  const [transactions, setTransactions] = useState<WalletTransaction[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { data: summary, isLoading: isLoadingSummary } = useFinancialSummaryQuery(currentTenantId);
+  const { data: transactions = [], isLoading: isLoadingTx } = useWalletTransactionsQuery(currentTenantId);
+
+  const isInitialLoading = (isLoadingSummary || isLoadingTx) && !summary;
+
   const [activeFilter, setActiveFilter] = useState<string>('ALL');
   const [currentPage, setCurrentPage] = useState(1);
   const pageSize = 6;
-
-  const loadFinanceData = async () => {
-    setLoading(true);
-    try {
-      const [sumData, txList] = await Promise.all([
-        api.getFinancialSummary(currentTenantId),
-        api.getWalletTransactions(currentTenantId),
-      ]);
-      setSummary(sumData);
-      setTransactions(txList);
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'Không thể tải dữ liệu tài chính';
-      toast({
-        type: 'error',
-        title: 'Lỗi tải dữ liệu',
-        message,
-      });
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    loadFinanceData();
-  }, [currentTenantId]);
 
   const filteredTx = transactions.filter((t) => {
     if (activeFilter === 'ALL') return true;
@@ -130,7 +107,7 @@ export const FinancePage: React.FC = () => {
       </div>
 
       {/* KPI Stat Cards */}
-      {loading ? (
+      {isInitialLoading ? (
         <SkeletonStatCards count={4} />
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -188,7 +165,7 @@ export const FinancePage: React.FC = () => {
           </span>
         </div>
 
-        {loading ? (
+        {isInitialLoading ? (
           <SkeletonTable rows={6} cols={7} />
         ) : filteredTx.length === 0 ? (
           <EmptyState

@@ -1,8 +1,13 @@
-import React, { useState, useEffect } from 'react';
-import { api } from '../../api/client';
-import { ServiceItem, ServiceCategory, PricingModel } from '../../types';
+import React, { useState } from 'react';
+import { ServiceItem, PricingModel } from '../../types';
 import { useAuth } from '../../auth/AuthContext';
 import { useToast } from '../../components/feedback/ToastContext';
+import {
+  useServicesQuery,
+  useServiceCategoriesQuery,
+  useToggleServiceMutation,
+  useCreateServiceMutation,
+} from '../../api/queries';
 import { Card, CardHeader, CardTitle, CardContent } from '../../components/common/Card';
 import { Button } from '../../components/common/Button';
 import { Badge } from '../../components/common/Badge';
@@ -29,9 +34,12 @@ export const ServicesPage: React.FC = () => {
   const { currentTenantId, currentTenantName, isSuperAdmin } = useAuth();
   const { toast } = useToast();
 
-  const [categories, setCategories] = useState<ServiceCategory[]>([]);
-  const [services, setServices] = useState<ServiceItem[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { data: categories = [], isLoading: isLoadingCategories } = useServiceCategoriesQuery();
+  const { data: services = [], isLoading: isLoadingServices } = useServicesQuery(currentTenantId);
+
+  const toggleServiceMutation = useToggleServiceMutation(currentTenantId);
+  const createServiceMutation = useCreateServiceMutation(currentTenantId);
+
   const [selectedCategory, setSelectedCategory] = useState<string>('ALL');
   const [searchQuery, setSearchQuery] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
@@ -39,7 +47,6 @@ export const ServicesPage: React.FC = () => {
 
   // Create Service Modal
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [isSubmitting, setIsSubmitting] = useState(false);
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
   const [form, setForm] = useState({
     name: '',
@@ -53,47 +60,14 @@ export const ServicesPage: React.FC = () => {
     addonPrice: 30000,
   });
 
-  const loadData = async () => {
-    setLoading(true);
-    try {
-      const [catList, srvList] = await Promise.all([
-        api.getServiceCategories(),
-        api.getServices(currentTenantId),
-      ]);
-      setCategories(catList);
-      setServices(srvList);
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'Không thể tải danh mục dịch vụ';
-      toast({
-        type: 'error',
-        title: 'Lỗi nạp dữ liệu',
-        message,
-      });
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    loadData();
-  }, [currentTenantId]);
-
   const handleToggleActive = async (service: ServiceItem) => {
     try {
-      const updated = await api.toggleServiceActive(service.id, !service.isActive);
-      toast({
-        type: updated.isActive ? 'success' : 'warning',
-        title: updated.isActive ? 'Đã kích hoạt dịch vụ' : 'Đã tạm dừng dịch vụ',
-        message: `Dịch vụ "${updated.name}" đã ${updated.isActive ? 'mở nhận đơn' : 'tạm ngưng'}.`,
+      await toggleServiceMutation.mutateAsync({
+        serviceId: service.id,
+        isActive: !service.isActive,
       });
-      await loadData();
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'Lỗi cập nhật dịch vụ';
-      toast({
-        type: 'error',
-        title: 'Thao tác thất bại',
-        message,
-      });
+    } catch {
+      // Handled in mutation onError
     }
   };
 
@@ -121,7 +95,6 @@ export const ServicesPage: React.FC = () => {
     }
 
     try {
-      setIsSubmitting(true);
       const cat = categories.find((c) => c.id === form.categoryId);
       const categoryName = cat ? cat.name : 'Dịch vụ chung';
 
@@ -135,7 +108,7 @@ export const ServicesPage: React.FC = () => {
           ]
         : [];
 
-      await api.createService({
+      await createServiceMutation.mutateAsync({
         name: form.name.trim(),
         slug: form.name
           .toLowerCase()
@@ -153,12 +126,6 @@ export const ServicesPage: React.FC = () => {
         addons,
       });
 
-      toast({
-        type: 'success',
-        title: 'Khởi tạo thành công!',
-        message: `Dịch vụ "${form.name}" đã được đưa vào danh mục sẵn sàng cung cấp.`,
-      });
-
       setIsModalOpen(false);
       setForm({
         name: '',
@@ -171,17 +138,8 @@ export const ServicesPage: React.FC = () => {
         addonName: '',
         addonPrice: 30000,
       });
-
-      await loadData();
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'Không thể tạo dịch vụ';
-      toast({
-        type: 'error',
-        title: 'Khởi tạo thất bại',
-        message,
-      });
-    } finally {
-      setIsSubmitting(false);
+    } catch {
+      // Handled in mutation onError
     }
   };
 
@@ -252,7 +210,7 @@ export const ServicesPage: React.FC = () => {
       </div>
 
       {/* Services Grid */}
-      {loading ? (
+      {(isLoadingCategories || isLoadingServices) && services.length === 0 ? (
         <SkeletonCardGrid count={6} />
       ) : filteredServices.length === 0 ? (
         <EmptyState
@@ -409,16 +367,16 @@ export const ServicesPage: React.FC = () => {
                 setIsModalOpen(false);
                 setFormErrors({});
               }}
-              disabled={isSubmitting}
+              disabled={createServiceMutation.isPending}
             >
               Hủy
             </Button>
             <Button
               variant="primary"
               onClick={handleCreateService}
-              disabled={isSubmitting}
+              disabled={createServiceMutation.isPending}
             >
-              {isSubmitting ? 'Đang khởi tạo...' : 'Lưu & Bật Cung Cấp'}
+              {createServiceMutation.isPending ? 'Đang khởi tạo...' : 'Lưu & Bật Cung Cấp'}
             </Button>
           </div>
         }

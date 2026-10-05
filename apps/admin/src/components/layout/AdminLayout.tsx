@@ -1,11 +1,12 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { Outlet } from 'react-router-dom';
 import { Sidebar } from './Sidebar';
 import { Header } from './Header';
 import { ImpersonationBar } from './ImpersonationBar';
+import { useUIStore } from '../../stores/uiStore';
 
 export const AdminLayout: React.FC = () => {
-  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const { isMobileDrawerOpen, setMobileDrawerOpen, toggleMobileDrawer } = useUIStore();
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col antialiased">
@@ -15,13 +16,13 @@ export const AdminLayout: React.FC = () => {
       <div className="flex-1 flex overflow-hidden">
         {/* 2. Responsive Sidebar (Desktop Fixed & Mobile Drawer) */}
         <Sidebar
-          isMobileOpen={isMobileMenuOpen}
-          onMobileClose={() => setIsMobileMenuOpen(false)}
+          isMobileOpen={isMobileDrawerOpen}
+          onMobileClose={() => setMobileDrawerOpen(false)}
         />
 
         {/* 3. Main Content Area */}
         <div className="flex-1 flex flex-col min-w-0 overflow-y-auto">
-          <Header onToggleMobileMenu={() => setIsMobileMenuOpen((prev) => !prev)} />
+          <Header onToggleMobileMenu={toggleMobileDrawer} />
           <main className="flex-1 p-4 sm:p-6 md:p-8 max-w-7xl w-full mx-auto">
             <Outlet />
           </main>

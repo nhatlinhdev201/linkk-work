@@ -1,8 +1,15 @@
-import React, { useState, useEffect } from 'react';
-import { api } from '../../api/client';
+import React, { useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
+import { QUERY_KEYS } from '../../lib/queryClient';
 import { CronJobItem } from '../../types';
 import { useAuth } from '../../auth/AuthContext';
 import { useToast } from '../../components/feedback/ToastContext';
+import {
+  useCronJobsQuery,
+  useToggleCronMutation,
+  useTriggerCronMutation,
+  useUpdateCronParamsMutation,
+} from '../../api/queries';
 import { Card, CardHeader, CardTitle, CardContent } from '../../components/common/Card';
 import { Button } from '../../components/common/Button';
 import { Badge } from '../../components/common/Badge';
@@ -27,77 +34,37 @@ import {
 export const CronPage: React.FC = () => {
   const { user } = useAuth();
   const { toast } = useToast();
+  const queryClient = useQueryClient();
 
-  const [cronJobs, setCronJobs] = useState<CronJobItem[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { data: cronJobs = [], isLoading } = useCronJobsQuery();
+  const toggleCronMutation = useToggleCronMutation();
+  const triggerCronMutation = useTriggerCronMutation();
+  const updateParamsMutation = useUpdateCronParamsMutation();
+
   const [runningJobName, setRunningJobName] = useState<string | null>(null);
 
   // Settings modal
   const [editingJob, setEditingJob] = useState<CronJobItem | null>(null);
   const [paramState, setParamState] = useState<Record<string, string | number | boolean>>({});
   const [paramErrors, setParamErrors] = useState<Record<string, string>>({});
-  const [isSaving, setIsSaving] = useState(false);
-
-
-  const loadJobs = async () => {
-    setLoading(true);
-    try {
-      const jobs = await api.getCronJobs();
-      setCronJobs(jobs);
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'Lỗi tải tiến trình ngầm';
-      toast({
-        type: 'error',
-        title: 'Lỗi tải dữ liệu',
-        message,
-      });
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    loadJobs();
-  }, []);
 
   const handleToggle = async (jobName: string, currentEnabled: boolean) => {
     try {
-      const updated = await api.toggleCronJob(jobName, !currentEnabled);
-      toast({
-        type: updated.isEnabled ? 'success' : 'warning',
-        title: updated.isEnabled ? 'Đã bật tiến trình' : 'Đã tạm dừng tiến trình',
-        message: `Tiến trình [${jobName}] hiện đang ở trạng thái ${
-          updated.isEnabled ? 'KÍCH HOẠT' : 'TẠM NGỪNG'
-        }.`,
+      await toggleCronMutation.mutateAsync({
+        jobName,
+        enabled: !currentEnabled,
       });
-      await loadJobs();
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'Lỗi chuyển trạng thái';
-      toast({
-        type: 'error',
-        title: 'Thao tác thất bại',
-        message,
-      });
+    } catch {
+      // Handled in mutation onError
     }
   };
 
   const handleRunNow = async (jobName: string) => {
     try {
       setRunningJobName(jobName);
-      const res = await api.triggerCronJobNow(jobName);
-      toast({
-        type: 'success',
-        title: 'Kích hoạt thành công!',
-        message: res.message,
-      });
-      await loadJobs();
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'Thực thi thất bại';
-      toast({
-        type: 'error',
-        title: 'Thực thi thất bại',
-        message,
-      });
+      await triggerCronMutation.mutateAsync(jobName);
+    } catch {
+      // Handled in mutation onError
     } finally {
       setRunningJobName(null);
     }
@@ -132,25 +99,14 @@ export const CronPage: React.FC = () => {
     }
 
     try {
-      setIsSaving(true);
-      await api.updateCronJobParams(editingJob.jobName, paramState);
-      toast({
-        type: 'success',
-        title: 'Lưu tham số thành công!',
-        message: `Đã cập nhật cấu hình cho tiến trình [${editingJob.jobName}].`,
+      await updateParamsMutation.mutateAsync({
+        jobName: editingJob.jobName,
+        params: paramState,
       });
       setEditingJob(null);
       setParamErrors({});
-      await loadJobs();
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'Lưu cấu hình thất bại';
-      toast({
-        type: 'error',
-        title: 'Lưu cấu hình thất bại',
-        message,
-      });
-    } finally {
-      setIsSaving(false);
+    } catch {
+      // Handled in mutation onError
     }
   };
 
@@ -185,16 +141,16 @@ export const CronPage: React.FC = () => {
 
         <Button
           variant="outline"
-          onClick={loadJobs}
+          onClick={() => queryClient.invalidateQueries({ queryKey: QUERY_KEYS.cronJobs })}
           leftIcon={<RotateCw className="w-4 h-4" />}
-          disabled={loading}
+          disabled={isLoading}
         >
           Làm mới trạng thái
         </Button>
       </div>
 
       {/* Overview StatCards */}
-      {loading ? (
+      {isLoading && cronJobs.length === 0 ? (
         <SkeletonStatCards count={3} />
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -225,7 +181,7 @@ export const CronPage: React.FC = () => {
       )}
 
       {/* Cron Jobs Grid */}
-      {loading ? (
+      {isLoading && cronJobs.length === 0 ? (
         <SkeletonCardGrid count={4} columns={2} />
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
@@ -357,16 +313,16 @@ export const CronPage: React.FC = () => {
             <Button
               variant="outline"
               onClick={() => setEditingJob(null)}
-              disabled={isSaving}
+              disabled={updateParamsMutation.isPending}
             >
               Hủy
             </Button>
             <Button
               variant="primary"
               onClick={handleSaveParams}
-              disabled={isSaving}
+              disabled={updateParamsMutation.isPending}
             >
-              {isSaving ? 'Đang lưu...' : 'Lưu cấu hình'}
+              {updateParamsMutation.isPending ? 'Đang lưu...' : 'Lưu cấu hình'}
             </Button>
           </div>
         }

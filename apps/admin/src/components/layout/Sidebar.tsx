@@ -17,6 +17,7 @@ import {
   ChevronRight,
 } from 'lucide-react';
 import { useAuth } from '../../auth/AuthContext';
+import { useUIStore } from '../../stores/uiStore';
 
 export interface SidebarProps {
   isMobileOpen?: boolean;
@@ -25,7 +26,8 @@ export interface SidebarProps {
 
 export const Sidebar: React.FC<SidebarProps> = ({ isMobileOpen = false, onMobileClose }) => {
   const { user, isSuperAdmin, activeTenantName, isImpersonating } = useAuth();
-  const [isCollapsed, setIsCollapsed] = useState(false);
+  const { isSidebarCollapsed, toggleSidebar } = useUIStore();
+  const isCollapsed = isSidebarCollapsed;
 
   const navItems = [
     {
@@ -214,7 +216,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isMobileOpen = false, onMobile
 
           {/* Desktop Collapse Toggle Button */}
           <button
-            onClick={() => setIsCollapsed((prev) => !prev)}
+            onClick={toggleSidebar}
             className="hidden md:flex p-1.5 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition"
             title={isCollapsed ? 'Mở rộng sidebar' : 'Thu gọn sidebar'}
             aria-label="Thu gọn/mở rộng sidebar"

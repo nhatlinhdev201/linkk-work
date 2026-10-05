@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import {
   TrendingUp,
   ShoppingBag,
@@ -12,8 +12,8 @@ import {
   Compass,
 } from 'lucide-react';
 import { useAuth } from '../../auth/AuthContext';
-import { api } from '../../api/client';
-import { Booking, Tasker } from '../../types';
+import { useBookingsQuery, useTaskersQuery } from '../../api/queries';
+import { Booking } from '../../types';
 import { StatCard } from '../../components/common/StatCard';
 import { SkeletonStatCards, SkeletonTable } from '../../components/common/Skeleton';
 import {
@@ -32,26 +32,12 @@ import { Link } from 'react-router-dom';
 
 export const DashboardPage: React.FC = () => {
   const { user, isSuperAdmin, activeTenantId, activeTenantName, isImpersonating } = useAuth();
-  const [bookings, setBookings] = useState<Booking[]>([]);
-  const [taskers, setTaskers] = useState<Tasker[]>([]);
-  const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    const fetchData = async () => {
-      setLoading(true);
-      try {
-        const [bList, tList] = await Promise.all([
-          api.getBookings(isSuperAdmin && !isImpersonating ? null : activeTenantId),
-          api.getTaskers(isSuperAdmin && !isImpersonating ? null : activeTenantId),
-        ]);
-        setBookings(bList);
-        setTaskers(tList);
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchData();
-  }, [activeTenantId, isSuperAdmin, isImpersonating]);
+  const targetTenantId = isSuperAdmin && !isImpersonating ? null : activeTenantId;
+  const { data: bookings = [], isLoading: isLoadingBookings } = useBookingsQuery(targetTenantId);
+  const { data: taskers = [], isLoading: isLoadingTaskers } = useTaskersQuery(targetTenantId);
+
+  const isInitialLoading = (isLoadingBookings || isLoadingTaskers) && bookings.length === 0;
 
   // Compute metrics
   const totalRevenue = bookings.reduce(
@@ -139,7 +125,7 @@ export const DashboardPage: React.FC = () => {
       </div>
 
       {/* KPI Stats Grid */}
-      {loading ? (
+      {isInitialLoading ? (
         <SkeletonStatCards count={4} />
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -192,7 +178,7 @@ export const DashboardPage: React.FC = () => {
           </Link>
         </div>
 
-        {loading ? (
+        {isInitialLoading ? (
           <SkeletonTable rows={5} cols={7} />
         ) : bookings.length === 0 ? (
           <EmptyState
