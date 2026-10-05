@@ -1,0 +1,19 @@
+{
+  "name": "@linkkwork/shared-types",
+  "version": "1.0.0",
+  "description": "Shared domain types, enums, interfaces, and state machines for LinkkWork platform",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "test": "jest"
+  },
+  "devDependencies": {
+    "@types/jest": "^29.5.12",
+    "@types/node": "^20.11.24",
+    "jest": "^29.7.0",
+    "ts-jest": "^29.1.2",
+    "typescript": "^5.4.2"
+  },
+  "license": "UNLICENSED"
+}
