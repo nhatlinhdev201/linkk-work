@@ -228,11 +228,17 @@ redis.call('SET', KEYS[2], ARGV[1], 'PX', ARGV[2])
 return 1 -- Thành công giật đơn tuyệt đối!
 ```
 
-#### C. Tách tầng Lưu trữ Tọa độ GPS (Hot/Cold GPS Ingestion):
+#### C. Bộ lọc Ký quỹ Trước khi Bắn đơn (Wallet Pre-filtering) & Khóa Lịch Bận (Slot Mutex)
+* **Pre-filtering tại tầng Radar / Dispatch:** Trước khi bắn thông báo WebSocket/FCM, hệ thống chỉ gửi đơn cho những Tasker có `wallet_balance >= estimated_commission`. Thợ không đủ cọc sẽ không thấy đơn và không bấm giật được, loại bỏ hoàn toàn tình trạng giật đơn xong bị hủy vì thiếu cọc.
+* **Phân tách 2 cấp độ Khóa (Dual-tier Mutex):**
+  * *Cấp 1 - Claim Mutex (TTL 10 giây):* Chống race condition trong lúc Worker ghi DB.
+  * *Cấp 2 - Schedule Slot Lock (`tasker:slot:{taskerId}:{timeSlot}`):* Khóa lịch bận của thợ trong suốt thời lượng ca làm việc (`durationHours`) cho đến khi hoàn thành đơn.
+
+#### D. Tách tầng Lưu trữ Tọa độ GPS (Hot/Cold GPS Ingestion):
 * **Hot Storage (Realtime Ingestion):** Tọa độ GPS của 10,000 Tasker gửi lên mỗi 10 giây được nạp trực tiếp vào **Redis Geospatial (`GEOADD taskers:geo:locations lng lat taskerId`)**. Truy vấn thợ trong bán kính $R$ bằng lệnh **`GEOSEARCH`** với độ trễ < 1ms.
 * **Cold Storage (Audit / Lộ trình):** Đẩy qua Message Queue để ghi batch vào database phục vụ kiểm toán hoặc giải quyết khiếu nại.
 
-#### D. Kênh Đấu thầu Dịch vụ (Bidding Engine):
+#### E. Kênh Đấu thầu Dịch vụ (Bidding Engine):
 * Khách đăng bài thầu (RFQ) -> Hệ thống thông báo tới các Tenant/Tasker trong khu vực.
 * Tenant gửi Báo giá (Bids/Quotes) kèm chi tiết vật tư, bảo hành và đơn giá.
 * Khi khách hàng bấm "Chấp thuận báo giá", BDM tự động chuyển đổi thành 1 `Booking` chính thức để vận hành quy trình check-in/out, thanh toán và đánh giá chuẩn.
