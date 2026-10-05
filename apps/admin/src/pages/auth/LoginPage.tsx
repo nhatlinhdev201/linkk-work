@@ -7,8 +7,8 @@ import { Input } from '../../components/common/Input';
 import { Card } from '../../components/common/Card';
 
 export const LoginPage: React.FC = () => {
-  const [email, setEmail] = useState('superadmin@linkkwork.vn');
-  const [password, setPassword] = useState('••••••••');
+  const [email, setEmail] = useState('admin@linkkwork.vn');
+  const [password, setPassword] = useState('Admin@123456');
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
   const { loginAs } = useAuth();
@@ -19,7 +19,7 @@ export const LoginPage: React.FC = () => {
     setLoading(true);
     setErrorMsg('');
     try {
-      await loginAs(email);
+      await loginAs(email, password);
       navigate('/dashboard');
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Đăng nhập không thành công';
@@ -29,11 +29,11 @@ export const LoginPage: React.FC = () => {
     }
   };
 
-  const handleQuickLogin = async (demoEmail: string) => {
+  const handleQuickLogin = async (demoEmail: string, demoPassword?: string) => {
     setLoading(true);
     setErrorMsg('');
     try {
-      await loginAs(demoEmail);
+      await loginAs(demoEmail, demoPassword);
       navigate('/dashboard');
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Đăng nhập không thành công';
@@ -68,7 +68,8 @@ export const LoginPage: React.FC = () => {
           </div>
           <div className="grid grid-cols-1 gap-2">
             <button
-              onClick={() => handleQuickLogin('superadmin@linkkwork.vn')}
+              type="button"
+              onClick={() => handleQuickLogin('admin@linkkwork.vn', 'Admin@123456')}
               disabled={loading}
               className="flex items-center justify-between p-3 rounded-xl border border-slate-200 bg-white hover:border-brand-500 hover:bg-brand-50/50 transition text-left group"
             >
@@ -80,14 +81,17 @@ export const LoginPage: React.FC = () => {
                   <p className="text-xs font-bold text-slate-900 group-hover:text-brand-600">
                     Super Admin (Nền tảng LinkkWork)
                   </p>
-                  <p className="text-[11px] text-slate-500">Full quyền toàn sàn, quản lý Tenant, Cron</p>
+                  <p className="text-[11px] text-slate-500">
+                    admin@linkkwork.vn / Admin@123456 • Full quyền toàn sàn, quản lý Tenant, Cron
+                  </p>
                 </div>
               </div>
               <ArrowRight className="w-4 h-4 text-slate-400 group-hover:text-brand-500 transform group-hover:translate-x-0.5 transition" />
             </button>
 
             <button
-              onClick={() => handleQuickLogin('admin@anhduong.vn')}
+              type="button"
+              onClick={() => handleQuickLogin('admin@anhduong.vn', 'Partner@123456')}
               disabled={loading}
               className="flex items-center justify-between p-3 rounded-xl border border-slate-200 bg-white hover:border-brand-500 hover:bg-brand-50/50 transition text-left group"
             >
@@ -99,7 +103,9 @@ export const LoginPage: React.FC = () => {
                   <p className="text-xs font-bold text-slate-900 group-hover:text-brand-600">
                     Tenant Admin: Vệ Sinh Ánh Dương
                   </p>
-                  <p className="text-[11px] text-slate-500">Tạo đơn thủ công, điều phối thợ nội bộ</p>
+                  <p className="text-[11px] text-slate-500">
+                    admin@anhduong.vn / Partner@123456 • Tạo đơn thủ công, điều phối thợ nội bộ
+                  </p>
                 </div>
               </div>
               <ArrowRight className="w-4 h-4 text-slate-400 group-hover:text-brand-500 transform group-hover:translate-x-0.5 transition" />

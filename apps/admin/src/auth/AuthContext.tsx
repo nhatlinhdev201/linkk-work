@@ -13,7 +13,7 @@ export interface AuthContextType {
   impersonatedTenant: Tenant | null;
   impersonatedTenantId: string | null;
   isLoading: boolean;
-  loginAs: (email: string) => Promise<void>;
+  loginAs: (email: string, password?: string) => Promise<void>;
   logout: () => Promise<void>;
   startImpersonation: (tenant: Tenant) => Promise<void>;
   stopImpersonation: () => Promise<void>;
@@ -36,7 +36,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setUser(u);
 
         const impId = api.getImpersonatedTenantId();
-        if (impId && u?.role === 'SUPER_ADMIN') {
+        if (impId && (u?.role === 'SUPER_ADMIN' || u?.isSuperAdmin)) {
           const t = await api.getTenantById(impId);
           if (t) setImpersonatedTenantState(t);
         }
@@ -49,10 +49,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     initAuth();
   }, []);
 
-  const loginAs = async (email: string) => {
+  const loginAs = async (email: string, password?: string) => {
     setIsLoading(true);
     try {
-      const u = await api.login(email);
+      const u = await api.login(email, password);
       setUser(u);
       setImpersonatedTenantState(null);
       success(
@@ -71,10 +71,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     info('Đã đăng xuất', 'Hẹn gặp lại bạn.');
   };
 
+  const isSuperAdmin = user?.role === 'SUPER_ADMIN' || !!user?.isSuperAdmin;
+
   const startImpersonation = async (tenant: Tenant) => {
-    if (user?.role !== 'SUPER_ADMIN') return;
+    if (!isSuperAdmin) return;
     await api.setImpersonation(tenant.id);
     setImpersonatedTenantState(tenant);
+    try {
+      const u = await api.getCurrentUser();
+      if (u) setUser(u);
+    } catch (e) {
+      console.warn('Failed to refresh user after impersonation:', e);
+    }
     success(
       'Kích hoạt Chế độ Đại diện',
       `Đang xem dưới danh nghĩa: ${tenant.name}. Mọi quyền hạn trong Tenant đã được mở.`
@@ -84,6 +92,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const stopImpersonation = async () => {
     await api.setImpersonation(null);
     setImpersonatedTenantState(null);
+    try {
+      const u = await api.getCurrentUser();
+      if (u) setUser(u);
+    } catch (e) {
+      console.warn('Failed to refresh user after stopping impersonation:', e);
+    }
     info('Đã thoát Chế độ Đại diện', 'Bạn đã quay trở lại Tenant LinkkWork mặc định.');
   };
 
@@ -97,8 +111,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       await startImpersonation(target);
     }
   };
-
-  const isSuperAdmin = user?.role === 'SUPER_ADMIN';
 
   // Determine active tenant scope
   const activeTenantId = impersonatedTenant

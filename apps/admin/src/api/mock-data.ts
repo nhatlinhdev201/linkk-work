@@ -1,4 +1,4 @@
-import {
+import type {
   Tenant,
   User,
   Tasker,
@@ -10,7 +10,7 @@ import {
   WalletTransaction,
   FinancialSummary,
   TenantSettings,
-} from '../types';
+} from '../types/index.ts';
 
 export const INITIAL_TENANTS: Tenant[] = [
   {

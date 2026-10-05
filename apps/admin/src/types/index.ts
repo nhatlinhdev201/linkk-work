@@ -7,6 +7,8 @@ export interface User {
   role: UserRole;
   tenantId: string;
   tenantName: string;
+  isSuperAdmin?: boolean;
+  status?: string;
   avatarUrl?: string;
 }
 
