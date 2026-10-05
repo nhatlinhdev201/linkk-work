@@ -900,3 +900,201 @@ Expected: PASS
 git add apps/admin
 git commit -m "feat(admin): implement multi-tenant impersonation warning bar and exit control"
 ```
+
+---
+
+### Task 7: Dynamic Cron & Worker Control Engine (`apps/api/src/modules/system-cron`)
+
+**Files:**
+- Create: `apps/api/src/modules/system-cron/cron-manager.service.ts`
+- Create: `apps/api/src/modules/system-cron/dto/cron-job.dto.ts`
+- Create: `apps/api/src/modules/system-cron/system-cron.module.ts`
+- Test: `apps/api/src/modules/system-cron/cron-manager.service.spec.ts`
+
+**Interfaces:**
+- Consumes: BullMQ Queue Registry
+- Produces: `CronManagerService.toggleJob()`, `CronManagerService.triggerJobNow()`, `CronManagerService.updateJobSchedule()`, `CronManagerService.getAllJobsStatus()`
+
+- [ ] **Step 1: Write the failing test**
+
+```typescript
+// apps/api/src/modules/system-cron/cron-manager.service.spec.ts
+import { CronManagerService, CronJobConfig } from './cron-manager.service';
+
+describe('CronManagerService (Super Admin Worker Control)', () => {
+  let service: CronManagerService;
+  let mockQueue: any;
+
+  beforeEach(() => {
+    mockQueue = {
+      add: jest.fn().mockResolvedValue({ id: 'immediate-job-1' }),
+      removeRepeatableByKey: jest.fn().mockResolvedValue(true),
+      getRepeatableJobs: jest.fn().mockResolvedValue([]),
+    };
+    service = new CronManagerService(mockQueue);
+  });
+
+  it('should toggle job enabled status and update schedule in queue', async () => {
+    const jobName = 'recurring-booking-generator';
+    const updated = await service.toggleJob(jobName, false);
+
+    expect(updated).toBe(true);
+    const status = await service.getJobStatus(jobName);
+    expect(status?.isEnabled).toBe(false);
+  });
+
+  it('should trigger immediate job run on demand', async () => {
+    const jobName = 'emergency-redispatch-watchdog';
+    const result = await service.triggerJobNow(jobName);
+
+    expect(result.success).toBe(true);
+    expect(mockQueue.add).toHaveBeenCalledWith(
+      `manual-trigger:${jobName}`,
+      expect.objectContaining({ triggeredBy: 'SUPER_ADMIN' })
+    );
+  });
+
+  it('should update cron expression and runtime parameters dynamically', async () => {
+    const jobName = 'auto-complete-booking';
+    const success = await service.updateJobSchedule(jobName, '0 */2 * * *', {
+      autoCompleteHours: 2,
+    });
+
+    expect(success).toBe(true);
+    const status = await service.getJobStatus(jobName);
+    expect(status?.cronExpression).toBe('0 */2 * * *');
+    expect(status?.params?.autoCompleteHours).toBe(2);
+  });
+});
+```
+
+- [ ] **Step 2: Run test to verify it fails**
+
+Run: `npx jest apps/api/src/modules/system-cron/cron-manager.service.spec.ts`
+Expected: FAIL with "Cannot find module './cron-manager.service'"
+
+- [ ] **Step 3: Write minimal implementation**
+
+Tạo `apps/api/src/modules/system-cron/cron-manager.service.ts`:
+```typescript
+import { Injectable, NotFoundException } from '@nestjs/common';
+
+export interface CronJobConfig {
+  jobName: string;
+  description: string;
+  cronExpression: string;
+  isEnabled: boolean;
+  params: Record<string, any>;
+  lastRunAt?: Date;
+  lastStatus?: 'IDLE' | 'RUNNING' | 'SUCCESS' | 'FAILED' | 'PAUSED';
+}
+
+@Injectable()
+export class CronManagerService {
+  private jobRegistry: Map<string, CronJobConfig> = new Map();
+
+  constructor(private readonly queue: any) {
+    this.seedDefaultJobs();
+  }
+
+  private seedDefaultJobs(): void {
+    const defaults: CronJobConfig[] = [
+      {
+        jobName: 'recurring-booking-generator',
+        description: 'Tự động quét và sinh các ca làm việc định kỳ trước 48 giờ',
+        cronExpression: '0 0 * * *',
+        isEnabled: true,
+        params: { advanceHours: 48, favoriteLockHours: 6 },
+        lastStatus: 'IDLE',
+      },
+      {
+        jobName: 'emergency-redispatch-watchdog',
+        description: 'Quét và kích hoạt thưởng nóng cứu đơn khi thợ no-show hoặc sắp đến giờ làm',
+        cronExpression: '*/5 * * * *',
+        isEnabled: true,
+        params: { urgentThresholdMinutes: 60, bonusAmount: 50000 },
+        lastStatus: 'IDLE',
+      },
+      {
+        jobName: 'auto-complete-booking',
+        description: 'Tự động nghiệm thu và cấn trừ hoa hồng sau 4 giờ hoàn tất',
+        cronExpression: '*/15 * * * *',
+        isEnabled: true,
+        params: { autoCompleteHours: 4 },
+        lastStatus: 'IDLE',
+      },
+      {
+        jobName: 'tenant-subscription-guard',
+        description: 'Kiểm tra hạn gói cước của Tenant và kích hoạt ân hạn Grace Period',
+        cronExpression: '0 6 * * *',
+        isEnabled: true,
+        params: { gracePeriodDays: 5 },
+        lastStatus: 'IDLE',
+      },
+    ];
+
+    defaults.forEach((job) => this.jobRegistry.set(job.jobName, job));
+  }
+
+  async toggleJob(jobName: string, enabled: boolean): Promise<boolean> {
+    const job = this.jobRegistry.get(jobName);
+    if (!job) throw new NotFoundException(`Job ${jobName} not found`);
+
+    job.isEnabled = enabled;
+    job.lastStatus = enabled ? 'IDLE' : 'PAUSED';
+    return true;
+  }
+
+  async triggerJobNow(jobName: string): Promise<{ success: boolean; jobId?: string }> {
+    const job = this.jobRegistry.get(jobName);
+    if (!job) throw new NotFoundException(`Job ${jobName} not found`);
+
+    const result = await this.queue.add(`manual-trigger:${jobName}`, {
+      jobName,
+      triggeredBy: 'SUPER_ADMIN',
+      triggeredAt: new Date(),
+      params: job.params,
+    });
+
+    job.lastRunAt = new Date();
+    job.lastStatus = 'RUNNING';
+    return { success: true, jobId: result.id };
+  }
+
+  async updateJobSchedule(
+    jobName: string,
+    cronExpression: string,
+    params?: Record<string, any>
+  ): Promise<boolean> {
+    const job = this.jobRegistry.get(jobName);
+    if (!job) throw new NotFoundException(`Job ${jobName} not found`);
+
+    job.cronExpression = cronExpression;
+    if (params) {
+      job.params = { ...job.params, ...params };
+    }
+    return true;
+  }
+
+  async getJobStatus(jobName: string): Promise<CronJobConfig | undefined> {
+    return this.jobRegistry.get(jobName);
+  }
+
+  async getAllJobs(): Promise<CronJobConfig[]> {
+    return Array.from(this.jobRegistry.values());
+  }
+}
+```
+
+- [ ] **Step 4: Run test to verify it passes**
+
+Run: `npx jest apps/api/src/modules/system-cron/cron-manager.service.spec.ts`
+Expected: PASS
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add apps/api/src/modules/system-cron
+git commit -m "feat(system-cron): implement dynamic cron job control service with toggle, run-now and live config"
+```
+

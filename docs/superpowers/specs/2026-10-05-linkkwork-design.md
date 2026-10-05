@@ -277,6 +277,46 @@ stateDiagram-v2
 
 ---
 
+### 3.8. Trung tâm Điều khiển & Giám sát Cron Jobs (Cron & Worker Control Center)
+
+Dành riêng cho Super Admin trên Web Admin để điều phối các tiến trình nền tự động:
+
+```mermaid
+graph TD
+    subgraph SuperAdminUI ["Web Admin Portal"]
+        UI["Bảng Điều Khiển Cron Jobs<br/>(Live Status, Toggle On/Off, Run Now, Params Config)"]
+    end
+    subgraph BackendCore ["NestJS Backend"]
+        API["Cron Management Controller & Service"]
+        BMQ["BullMQ Dynamic Job Scheduler & Bull Board"]
+    end
+    subgraph Jobs ["Workers Ngầm"]
+        J1["recurring-booking-generator"]
+        J2["favorite-tasker-lock-expiry"]
+        J3["emergency-redispatch-watchdog"]
+        J4["auto-complete-booking"]
+        J5["tenant-subscription-guard"]
+    end
+    UI <--> API
+    API <--> BMQ
+    BMQ --> J1 & J2 & J3 & J4 & J5
+```
+
+#### A. Các Tính năng Điều khiển của Super Admin:
+1. **Bật / Tắt tức thì (Toggle Enable / Disable):** Cho phép tạm dừng một worker cụ thể ngay lập tức mà không cần khởi động lại Backend server.
+2. **Kích hoạt Chạy Ngay (Run Now / Trigger Immediately):** Ép chạy ngay 1 chu kỳ worker (ví dụ sinh đơn bù hoặc đối soát bù dữ liệu).
+3. **Cấu hình Tham số Động (Dynamic Runtime Parameters):**
+   * Chỉnh sửa biểu thức Cron (`cron_expression`).
+   * Thay đổi số giờ sinh đơn định kỳ trước ca làm việc (`advance_hours`, mặc định 48h).
+   * Thay đổi thời gian giữ chỗ thợ quen (`favorite_lock_hours`, mặc định 6h trong khung giờ 07:00 - 19:00).
+   * Thay đổi thời gian tự động hoàn tất đơn (`auto_complete_hours`, mặc định 4h).
+4. **Nhật ký Thực thi & Cảnh báo Sức khỏe (Execution Logs & Live Health):**
+   * Theo dõi trạng thái `IDLE`, `RUNNING`, `FAILED`, `PAUSED`.
+   * Ghi nhận số lượng bản ghi thành công/thất bại, thời gian chạy và stack trace chi tiết.
+   * Tích hợp bảng điều khiển **Bull Board** trực tiếp vào Web Admin.
+
+---
+
 ## 4. KIẾN TRÚC MÃ NGUỒN (SOURCE CODE ARCHITECTURE)
 
 ### 4.1. Mobile Flutter Monorepo Packages (Melos Workspace Architecture)
