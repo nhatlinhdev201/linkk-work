@@ -7,7 +7,16 @@ import { Card, CardHeader, CardTitle, CardContent } from '../../components/commo
 import { Button } from '../../components/common/Button';
 import { Badge } from '../../components/common/Badge';
 import { Modal } from '../../components/common/Modal';
-import { Input } from '../../components/common/Input';
+import { Tabs } from '../../components/common/Tabs';
+import { EmptyState } from '../../components/common/EmptyState';
+import {
+  Table,
+  TableHeader,
+  TableBody,
+  TableRow,
+  TableHead,
+  TableCell,
+} from '../../components/common/Table';
 import {
   Building2,
   FileCheck,
@@ -19,7 +28,6 @@ import {
   Briefcase,
   AlertCircle,
   ExternalLink,
-  ShieldAlert,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
@@ -28,7 +36,7 @@ export const TenantsPage: React.FC = () => {
   const { toast } = useToast();
   const navigate = useNavigate();
 
-  const [activeTab, setActiveTab] = useState<'tenants' | 'applications'>('tenants');
+  const [activeTab, setActiveTab] = useState<string>('tenants');
   const [tenants, setTenants] = useState<Tenant[]>([]);
   const [applications, setApplications] = useState<PartnerApplication[]>([]);
   const [loading, setLoading] = useState(true);
@@ -48,11 +56,12 @@ export const TenantsPage: React.FC = () => {
       ]);
       setTenants(tList);
       setApplications(aList);
-    } catch (err: any) {
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Không thể tải danh sách đối tác';
       toast({
         type: 'error',
         title: 'Lỗi tải dữ liệu',
-        message: err.message || 'Không thể tải danh sách đối tác',
+        message,
       });
     } finally {
       setLoading(false);
@@ -73,11 +82,12 @@ export const TenantsPage: React.FC = () => {
         message: `Đã cấp Tenant [${newTenant.code}] cho doanh nghiệp "${newTenant.name}".`,
       });
       await loadData();
-    } catch (err: any) {
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Phê duyệt thất bại';
       toast({
         type: 'error',
         title: 'Phê duyệt thất bại',
-        message: err.message,
+        message,
       });
     } finally {
       setIsSubmitting(false);
@@ -106,11 +116,12 @@ export const TenantsPage: React.FC = () => {
       setRejectingAppId(null);
       setRejectionReason('');
       await loadData();
-    } catch (err: any) {
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Thao tác thất bại';
       toast({
         type: 'error',
         title: 'Thao tác thất bại',
-        message: err.message,
+        message,
       });
     } finally {
       setIsSubmitting(false);
@@ -126,11 +137,12 @@ export const TenantsPage: React.FC = () => {
         message: `Bạn đang đại diện cho Tenant "${tenantName}". Dữ liệu hiển thị sẽ được giới hạn trong Tenant này.`,
       });
       navigate('/dashboard');
-    } catch (err: any) {
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Lỗi ủy quyền';
       toast({
         type: 'error',
         title: 'Lỗi ủy quyền',
-        message: err.message,
+        message,
       });
     }
   };
@@ -152,63 +164,52 @@ export const TenantsPage: React.FC = () => {
         <div>
           <h1 className="text-2xl font-bold text-slate-900 tracking-tight flex items-center gap-2.5">
             <Building2 className="w-7 h-7 text-brand-500" />
-            Quản trị Doanh nghiệp & Đối tác
+            Quản trị Doanh nghiệp &amp; Đối tác
           </h1>
           <p className="text-sm text-slate-500 mt-1">
             Duyệt hồ sơ đăng ký doanh nghiệp mới và quản lý phân quyền đa Tenant của nền tảng.
           </p>
         </div>
 
-        {/* Tab switch buttons */}
-        <div className="inline-flex items-center p-1 bg-slate-100 rounded-xl border border-slate-200">
-          <button
-            onClick={() => setActiveTab('tenants')}
-            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-              activeTab === 'tenants'
-                ? 'bg-white text-brand-600 shadow-sm'
-                : 'text-slate-600 hover:text-slate-900'
-            }`}
-          >
-            <Building2 className="w-4 h-4" />
-            Doanh nghiệp hoạt động ({tenants.length})
-          </button>
-          <button
-            onClick={() => setActiveTab('applications')}
-            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all relative ${
-              activeTab === 'applications'
-                ? 'bg-white text-brand-600 shadow-sm'
-                : 'text-slate-600 hover:text-slate-900'
-            }`}
-          >
-            <FileCheck className="w-4 h-4" />
-            Hồ sơ chờ duyệt
-            {pendingApps.length > 0 && (
-              <span className="ml-1.5 px-2 py-0.5 text-xs font-bold bg-amber-500 text-white rounded-full">
-                {pendingApps.length}
-              </span>
-            )}
-          </button>
-        </div>
+        {/* Tab switcher */}
+        <Tabs
+          tabs={[
+            {
+              id: 'tenants',
+              label: 'Doanh nghiệp hoạt động',
+              icon: <Building2 className="w-4 h-4" />,
+              count: tenants.length,
+            },
+            {
+              id: 'applications',
+              label: 'Hồ sơ chờ duyệt',
+              icon: <FileCheck className="w-4 h-4" />,
+              count: pendingApps.length,
+            },
+          ]}
+          activeTab={activeTab}
+          onChange={setActiveTab}
+        />
       </div>
 
       {/* Main Content */}
       {loading ? (
-        <div className="py-20 flex flex-col items-center justify-center text-slate-400 gap-3">
+        <div className="py-20 flex flex-col items-center justify-center text-slate-400 gap-3 bg-white rounded-xl border border-slate-200">
           <div className="w-8 h-8 border-4 border-brand-500 border-t-transparent rounded-full animate-spin" />
           <p className="text-sm font-medium">Đang tải dữ liệu đối tác...</p>
         </div>
       ) : activeTab === 'tenants' ? (
         <div className="space-y-4">
           {/* Search bar */}
-          <div className="flex items-center justify-between gap-4">
-            <div className="relative flex-1 max-w-md">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="relative w-full sm:max-w-md">
               <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
               <input
                 type="text"
                 placeholder="Tìm theo tên công ty, mã tenant, tỉnh thành..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-10 pr-4 py-2 text-sm bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500"
+                className="w-full pl-10 pr-4 py-2 text-xs bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500"
               />
             </div>
             <span className="text-xs text-slate-500">
@@ -217,119 +218,128 @@ export const TenantsPage: React.FC = () => {
           </div>
 
           {/* Tenants Table */}
-          <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm">
-            <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse text-sm">
-                <thead>
-                  <tr className="bg-slate-50 border-b border-slate-200 text-xs font-semibold text-slate-500 uppercase tracking-wider">
-                    <th className="py-3.5 px-4">Mã & Doanh nghiệp</th>
-                    <th className="py-3.5 px-4">Địa bàn & Thuế</th>
-                    <th className="py-3.5 px-4">Gói cước / Phí sàn</th>
-                    <th className="py-3.5 px-4">Quy mô thợ & Đơn</th>
-                    <th className="py-3.5 px-4">Trạng thái</th>
-                    <th className="py-3.5 px-4 text-right">Thao tác</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {filteredTenants.map((t) => {
-                    const isImpersonatingThis = impersonatedTenantId === t.id;
-                    return (
-                      <tr
-                        key={t.id}
-                        className={`hover:bg-slate-50/80 transition-colors ${
-                          t.isDefault ? 'bg-brand-50/30' : ''
-                        } ${isImpersonatingThis ? 'bg-amber-50/50' : ''}`}
-                      >
-                        <td className="py-3.5 px-4">
-                          <div className="flex items-center gap-3">
-                            <div className="w-9 h-9 rounded-lg bg-brand-100 text-brand-700 flex items-center justify-center font-bold text-xs uppercase shrink-0">
-                              {t.code.slice(0, 3)}
+          {filteredTenants.length === 0 ? (
+            <EmptyState
+              icon={<Building2 className="w-8 h-8 text-brand-400" />}
+              title="Không tìm thấy doanh nghiệp đối tác nào"
+              description="Hãy thử nhập từ khóa tìm kiếm khác."
+            />
+          ) : (
+            <Table>
+              <TableHeader>
+                <tr>
+                  <TableHead>Mã &amp; Doanh nghiệp</TableHead>
+                  <TableHead>Địa bàn &amp; Thuế</TableHead>
+                  <TableHead>Gói cước / Phí sàn</TableHead>
+                  <TableHead>Quy mô thợ &amp; Đơn</TableHead>
+                  <TableHead>Trạng thái</TableHead>
+                  <TableHead align="right">Thao tác</TableHead>
+                </tr>
+              </TableHeader>
+              <TableBody>
+                {filteredTenants.map((t) => {
+                  const isImpersonatingThis = impersonatedTenantId === t.id;
+                  return (
+                    <TableRow
+                      key={t.id}
+                      className={`${t.isDefault ? 'bg-brand-50/20' : ''} ${
+                        isImpersonatingThis ? 'bg-amber-50/40' : ''
+                      }`}
+                    >
+                      <TableCell>
+                        <div className="flex items-center gap-3">
+                          <div className="w-9 h-9 rounded-lg bg-brand-100 text-brand-700 flex items-center justify-center font-bold text-xs uppercase shrink-0">
+                            {t.code.slice(0, 3)}
+                          </div>
+                          <div>
+                            <div className="font-semibold text-slate-900 text-xs flex items-center gap-1.5">
+                              {t.name}
+                              {t.isDefault && (
+                                <Badge variant="warning" size="sm">
+                                  Mặc định Sàn
+                                </Badge>
+                              )}
                             </div>
-                            <div>
-                              <div className="font-semibold text-slate-900 flex items-center gap-1.5">
-                                {t.name}
-                                {t.isDefault && (
-                                  <Badge variant="warning" size="sm">
-                                    Mặc định Sàn
-                                  </Badge>
-                                )}
-                              </div>
-                              <div className="text-xs text-slate-400 font-mono">
-                                CODE: {t.code} • {t.email}
-                              </div>
+                            <div className="text-[11px] text-slate-400 font-mono">
+                              CODE: {t.code} • {t.email}
                             </div>
                           </div>
-                        </td>
+                        </div>
+                      </TableCell>
 
-                        <td className="py-3.5 px-4">
-                          <div className="text-slate-800 font-medium">{t.city}</div>
-                          <div className="text-xs text-slate-400">MST: {t.taxId || 'N/A'}</div>
-                        </td>
+                      <TableCell>
+                        <div className="text-slate-800 font-medium text-xs">{t.city}</div>
+                        <div className="text-[11px] text-slate-400">MST: {t.taxId || 'N/A'}</div>
+                      </TableCell>
 
-                        <td className="py-3.5 px-4">
-                          <div className="flex items-center gap-2">
-                            <Badge variant={t.plan === 'ENTERPRISE' ? 'primary' : 'neutral'} size="sm">
-                              {t.plan}
-                            </Badge>
-                            <span className="text-xs font-semibold text-slate-600">
-                              {t.commissionRate}% hoa hồng
-                            </span>
-                          </div>
-                        </td>
-
-                        <td className="py-3.5 px-4">
-                          <div className="flex items-center gap-4 text-xs">
-                            <span className="flex items-center gap-1 text-slate-600 font-medium">
-                              <Users className="w-3.5 h-3.5 text-slate-400" />
-                              {t.taskerCount} thợ
-                            </span>
-                            <span className="flex items-center gap-1 text-slate-600 font-medium">
-                              <Briefcase className="w-3.5 h-3.5 text-slate-400" />
-                              {t.activeOrderCount} đơn chạy
-                            </span>
-                          </div>
-                        </td>
-
-                        <td className="py-3.5 px-4">
+                      <TableCell>
+                        <div className="flex items-center gap-2">
                           <Badge
-                            variant={t.status === 'ACTIVE' ? 'success' : 'danger'}
+                            variant={t.plan === 'ENTERPRISE' ? 'brand' : 'neutral'}
                             size="sm"
                           >
-                            {t.status === 'ACTIVE' ? 'Hoạt động' : 'Tạm khóa'}
+                            {t.plan}
                           </Badge>
-                        </td>
+                          <span className="text-xs font-semibold text-slate-600">
+                            {t.commissionRate}% hoa hồng
+                          </span>
+                        </div>
+                      </TableCell>
 
-                        <td className="py-3.5 px-4 text-right">
-                          <div className="flex items-center justify-end gap-2">
-                            {user?.role === 'SUPER_ADMIN' && !t.isDefault && (
-                              <Button
-                                size="sm"
-                                variant={isImpersonatingThis ? 'secondary' : 'outline'}
-                                onClick={() => handleImpersonate(t.id, t.name)}
-                                leftIcon={<LogIn className="w-3.5 h-3.5 text-amber-600" />}
-                                className={isImpersonatingThis ? 'border-amber-400 bg-amber-100 text-amber-800' : ''}
-                              >
-                                {isImpersonatingThis ? 'Đang đại diện' : 'Đại diện'}
-                              </Button>
-                            )}
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          </div>
+                      <TableCell>
+                        <div className="flex items-center gap-4 text-xs">
+                          <span className="flex items-center gap-1 text-slate-600 font-medium">
+                            <Users className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                            {t.taskerCount} thợ
+                          </span>
+                          <span className="flex items-center gap-1 text-slate-600 font-medium">
+                            <Briefcase className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                            {t.activeOrderCount} đơn chạy
+                          </span>
+                        </div>
+                      </TableCell>
+
+                      <TableCell>
+                        <Badge
+                          variant={t.status === 'ACTIVE' ? 'success' : 'danger'}
+                          size="sm"
+                        >
+                          {t.status === 'ACTIVE' ? 'Hoạt động' : 'Tạm khóa'}
+                        </Badge>
+                      </TableCell>
+
+                      <TableCell align="right">
+                        {user?.role === 'SUPER_ADMIN' && !t.isDefault && (
+                          <Button
+                            size="sm"
+                            variant={isImpersonatingThis ? 'secondary' : 'outline'}
+                            onClick={() => handleImpersonate(t.id, t.name)}
+                            leftIcon={<LogIn className="w-3.5 h-3.5 text-amber-600" />}
+                            className={
+                              isImpersonatingThis
+                                ? 'border-amber-400 bg-amber-100 text-amber-800'
+                                : ''
+                            }
+                          >
+                            {isImpersonatingThis ? 'Đang đại diện' : 'Đại diện'}
+                          </Button>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          )}
         </div>
       ) : (
         /* Applications Tab */
         <div className="space-y-4">
           <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 flex items-start gap-3">
             <AlertCircle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
-            <div className="text-sm text-amber-800">
-              <p className="font-semibold">Quy trình thẩm định đối tác doanh nghiệp:</p>
-              <p className="text-amber-700 mt-0.5">
+            <div className="text-xs text-amber-800">
+              <p className="font-semibold text-sm">Quy trình thẩm định đối tác doanh nghiệp:</p>
+              <p className="text-amber-700 mt-0.5 leading-relaxed">
                 Kiểm tra kỹ mã số thuế, tính hợp lệ của giấy phép đăng ký kinh doanh và thông tin người đại diện theo pháp luật trước khi bấm duyệt. Khi phê duyệt, hệ thống sẽ tự động khởi tạo Tenant độc lập và tài khoản Tenant Admin.
               </p>
             </div>
@@ -337,8 +347,12 @@ export const TenantsPage: React.FC = () => {
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {applications.length === 0 ? (
-              <div className="col-span-2 py-16 text-center text-slate-400 bg-white rounded-xl border border-slate-200">
-                Không có đơn đăng ký đối tác nào.
+              <div className="col-span-2">
+                <EmptyState
+                  icon={<FileCheck className="w-8 h-8 text-brand-400" />}
+                  title="Không có hồ sơ đăng ký nào"
+                  description="Khi có doanh nghiệp đăng ký đối tác qua cổng công khai (/partner/register), hồ sơ sẽ hiển thị tại đây."
+                />
               </div>
             ) : (
               applications.map((app) => (
@@ -415,14 +429,18 @@ export const TenantsPage: React.FC = () => {
 
                     <div className="flex items-center justify-between text-xs pt-1">
                       <span className="text-slate-500">Giấy phép ĐKKD:</span>
-                      <a
-                        href={app.licenseDocUrl}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="text-brand-600 hover:text-brand-700 flex items-center gap-1 font-medium underline"
-                      >
-                        Xem tài liệu xác minh <ExternalLink className="w-3 h-3" />
-                      </a>
+                      {app.licenseDocUrl ? (
+                        <a
+                          href={app.licenseDocUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-brand-600 hover:text-brand-700 flex items-center gap-1 font-medium underline"
+                        >
+                          Xem tài liệu xác minh <ExternalLink className="w-3 h-3" />
+                        </a>
+                      ) : (
+                        <span className="text-slate-400 italic">Chưa đính kèm tài liệu</span>
+                      )}
                     </div>
 
                     {app.rejectionReason && (
@@ -452,7 +470,7 @@ export const TenantsPage: React.FC = () => {
                           leftIcon={<CheckCircle2 className="w-3.5 h-3.5" />}
                           disabled={isSubmitting}
                         >
-                          Phê duyệt & Cấp Tenant
+                          Phê duyệt &amp; Cấp Tenant
                         </Button>
                       </div>
                     )}

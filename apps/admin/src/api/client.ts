@@ -4,6 +4,11 @@ import {
   INITIAL_TASKERS,
   INITIAL_PARTNER_APPLICATIONS,
   INITIAL_CRON_JOBS,
+  INITIAL_SERVICE_CATEGORIES,
+  INITIAL_SERVICES,
+  INITIAL_FINANCIAL_TRANSACTIONS,
+  INITIAL_FINANCIAL_SUMMARY,
+  INITIAL_TENANT_SETTINGS,
   MOCK_USERS,
 } from './mock-data';
 import {
@@ -13,6 +18,11 @@ import {
   Tasker,
   PartnerApplication,
   CronJobItem,
+  ServiceCategory,
+  ServiceItem,
+  WalletTransaction,
+  FinancialSummary,
+  TenantSettings,
 } from '../types';
 
 const STORAGE_KEYS = {
@@ -23,6 +33,11 @@ const STORAGE_KEYS = {
   CRON_JOBS: 'linkkwork_admin_cron_jobs',
   CURRENT_USER: 'linkkwork_admin_current_user',
   IMPERSONATED_TENANT_ID: 'linkkwork_admin_impersonated_tenant_id',
+  SERVICES: 'linkkwork_admin_services',
+  CATEGORIES: 'linkkwork_admin_categories',
+  FINANCIAL_TX: 'linkkwork_admin_financial_tx',
+  FINANCIAL_SUMMARY: 'linkkwork_admin_financial_summary',
+  SETTINGS: 'linkkwork_admin_tenant_settings',
 };
 
 // Helper: load from localStorage with fallback
@@ -65,6 +80,18 @@ export class ApiClient {
     }
     if (!localStorage.getItem(STORAGE_KEYS.CRON_JOBS)) {
       saveData(STORAGE_KEYS.CRON_JOBS, INITIAL_CRON_JOBS);
+    }
+    if (!localStorage.getItem(STORAGE_KEYS.SERVICES)) {
+      saveData(STORAGE_KEYS.SERVICES, INITIAL_SERVICES);
+    }
+    if (!localStorage.getItem(STORAGE_KEYS.CATEGORIES)) {
+      saveData(STORAGE_KEYS.CATEGORIES, INITIAL_SERVICE_CATEGORIES);
+    }
+    if (!localStorage.getItem(STORAGE_KEYS.FINANCIAL_TX)) {
+      saveData(STORAGE_KEYS.FINANCIAL_TX, INITIAL_FINANCIAL_TRANSACTIONS);
+    }
+    if (!localStorage.getItem(STORAGE_KEYS.SETTINGS)) {
+      saveData(STORAGE_KEYS.SETTINGS, INITIAL_TENANT_SETTINGS);
     }
   }
 
@@ -316,7 +343,10 @@ export class ApiClient {
     };
   }
 
-  async updateCronJobParams(jobName: string, params: Record<string, any>): Promise<CronJobItem> {
+  async updateCronJobParams(
+    jobName: string,
+    params: Record<string, string | number | boolean>
+  ): Promise<CronJobItem> {
     await sleep(200);
     const jobs = await this.getCronJobs();
     const job = jobs.find((j) => j.jobName === jobName);
@@ -325,6 +355,118 @@ export class ApiClient {
     job.params = { ...job.params, ...params };
     saveData(STORAGE_KEYS.CRON_JOBS, jobs);
     return job;
+  }
+
+  // --- DỊCH VỤ & BẢNG GIÁ (SERVICE CATALOG) ---
+  async getServiceCategories(): Promise<ServiceCategory[]> {
+    await sleep(100);
+    return loadData<ServiceCategory[]>(
+      STORAGE_KEYS.CATEGORIES,
+      INITIAL_SERVICE_CATEGORIES
+    );
+  }
+
+  async getServices(tenantId?: string | null): Promise<ServiceItem[]> {
+    await sleep(150);
+    const services = loadData<ServiceItem[]>(
+      STORAGE_KEYS.SERVICES,
+      INITIAL_SERVICES
+    );
+    if (!tenantId || tenantId === 'tenant-linkkwork') return services;
+    // Return platform services plus tenant specific services
+    return services.filter((s) => !s.tenantId || s.tenantId === tenantId);
+  }
+
+  async toggleServiceActive(serviceId: string, isActive: boolean): Promise<ServiceItem> {
+    await sleep(150);
+    const services = await this.getServices();
+    const service = services.find((s) => s.id === serviceId);
+    if (!service) throw new Error('Không tìm thấy dịch vụ');
+
+    service.isActive = isActive;
+    saveData(STORAGE_KEYS.SERVICES, services);
+    return service;
+  }
+
+  async createService(
+    newServiceData: Omit<ServiceItem, 'id' | 'createdAt'>
+  ): Promise<ServiceItem> {
+    await sleep(250);
+    const services = await this.getServices();
+    const service: ServiceItem = {
+      ...newServiceData,
+      id: `srv-${Date.now()}`,
+      createdAt: new Date().toISOString(),
+    };
+    services.unshift(service);
+    saveData(STORAGE_KEYS.SERVICES, services);
+    return service;
+  }
+
+  // --- TÀI CHÍNH & VÍ KÝ QUỸ (FINANCIAL & WALLET) ---
+  async getFinancialSummary(tenantId?: string | null): Promise<FinancialSummary> {
+    await sleep(150);
+    const summary = loadData<FinancialSummary>(
+      STORAGE_KEYS.FINANCIAL_SUMMARY,
+      INITIAL_FINANCIAL_SUMMARY
+    );
+    if (!tenantId || tenantId === 'tenant-linkkwork') return summary;
+
+    // Scale summary for tenant
+    return {
+      grossServiceVolume: Math.round(summary.grossServiceVolume * 0.42),
+      platformCommissionEarned: Math.round(summary.platformCommissionEarned * 0.42),
+      tenantNetRevenue: Math.round(summary.tenantNetRevenue * 0.42),
+      totalDepositHeld: Math.round(summary.totalDepositHeld * 0.35),
+      pendingSettlementsCount: Math.max(1, Math.round(summary.pendingSettlementsCount * 0.4)),
+    };
+  }
+
+  async getWalletTransactions(tenantId?: string | null): Promise<WalletTransaction[]> {
+    await sleep(150);
+    const list = loadData<WalletTransaction[]>(
+      STORAGE_KEYS.FINANCIAL_TX,
+      INITIAL_FINANCIAL_TRANSACTIONS
+    );
+    if (!tenantId || tenantId === 'tenant-linkkwork') return list;
+    return list.filter((t) => t.tenantId === tenantId);
+  }
+
+  // --- CÀI ĐẶT HỆ THỐNG & TENANT (SETTINGS) ---
+  async getTenantSettings(tenantId: string): Promise<TenantSettings> {
+    await sleep(100);
+    const allSettings = loadData<Record<string, TenantSettings>>(
+      STORAGE_KEYS.SETTINGS,
+      INITIAL_TENANT_SETTINGS
+    );
+    return (
+      allSettings[tenantId] || {
+        tenantId,
+        hotline: '1900 6868',
+        supportEmail: 'cskh@linkkwork.vn',
+        businessAddress: 'Đang cập nhật địa chỉ trụ sở',
+        autoDispatchEnabled: true,
+        maxRadiusKm: 15,
+        defaultCommissionRate: 15,
+        workingHours: { start: '07:00', end: '21:00' },
+      }
+    );
+  }
+
+  async updateTenantSettings(
+    tenantId: string,
+    updates: Partial<TenantSettings>
+  ): Promise<TenantSettings> {
+    await sleep(200);
+    const allSettings = loadData<Record<string, TenantSettings>>(
+      STORAGE_KEYS.SETTINGS,
+      INITIAL_TENANT_SETTINGS
+    );
+    const current = await this.getTenantSettings(tenantId);
+    const updated = { ...current, ...updates };
+    allSettings[tenantId] = updated;
+    saveData(STORAGE_KEYS.SETTINGS, allSettings);
+    return updated;
   }
 }
 

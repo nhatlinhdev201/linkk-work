@@ -9,6 +9,7 @@ import { Badge } from '../../components/common/Badge';
 import { Switch } from '../../components/common/Switch';
 import { Modal } from '../../components/common/Modal';
 import { Input } from '../../components/common/Input';
+import { StatCard } from '../../components/common/StatCard';
 import {
   Cpu,
   Play,
@@ -32,7 +33,7 @@ export const CronPage: React.FC = () => {
 
   // Settings modal
   const [editingJob, setEditingJob] = useState<CronJobItem | null>(null);
-  const [paramState, setParamState] = useState<Record<string, any>>({});
+  const [paramState, setParamState] = useState<Record<string, string | number | boolean>>({});
   const [isSaving, setIsSaving] = useState(false);
 
   const loadJobs = async () => {
@@ -40,11 +41,12 @@ export const CronPage: React.FC = () => {
     try {
       const jobs = await api.getCronJobs();
       setCronJobs(jobs);
-    } catch (err: any) {
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Lỗi tải tiến trình ngầm';
       toast({
         type: 'error',
-        title: 'Lỗi tải tiến trình ngầm',
-        message: err.message,
+        title: 'Lỗi tải dữ liệu',
+        message,
       });
     } finally {
       setLoading(false);
@@ -66,11 +68,12 @@ export const CronPage: React.FC = () => {
         }.`,
       });
       await loadJobs();
-    } catch (err: any) {
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Lỗi chuyển trạng thái';
       toast({
         type: 'error',
-        title: 'Lỗi chuyển trạng thái',
-        message: err.message,
+        title: 'Thao tác thất bại',
+        message,
       });
     }
   };
@@ -85,11 +88,12 @@ export const CronPage: React.FC = () => {
         message: res.message,
       });
       await loadJobs();
-    } catch (err: any) {
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Thực thi thất bại';
       toast({
         type: 'error',
         title: 'Thực thi thất bại',
-        message: err.message,
+        message,
       });
     } finally {
       setRunningJobName(null);
@@ -113,11 +117,12 @@ export const CronPage: React.FC = () => {
       });
       setEditingJob(null);
       await loadJobs();
-    } catch (err: any) {
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Lưu cấu hình thất bại';
       toast({
         type: 'error',
         title: 'Lưu cấu hình thất bại',
-        message: err.message,
+        message,
       });
     } finally {
       setIsSaving(false);
@@ -136,6 +141,9 @@ export const CronPage: React.FC = () => {
     );
   }
 
+  const activeCount = cronJobs.filter((j) => j.isEnabled).length;
+  const pausedCount = cronJobs.filter((j) => !j.isEnabled).length;
+
   return (
     <div className="space-y-6">
       {/* Top Header */}
@@ -143,7 +151,7 @@ export const CronPage: React.FC = () => {
         <div>
           <h1 className="text-2xl font-bold text-slate-900 tracking-tight flex items-center gap-2.5">
             <Cpu className="w-7 h-7 text-brand-500" />
-            Trung tâm Giám sát & Điều khiển Cron Jobs
+            Trung tâm Giám sát &amp; Điều khiển Cron Jobs
           </h1>
           <p className="text-sm text-slate-500 mt-1">
             Dành riêng cho Super Admin: Bật/tắt tiến trình nền, cấu hình chu kỳ và kích hoạt tức thì các Worker tự động.
@@ -160,47 +168,36 @@ export const CronPage: React.FC = () => {
         </Button>
       </div>
 
-      {/* Overview Metric Banners */}
+      {/* Overview StatCards */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <Card className="p-4 border-slate-200 bg-white">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-slate-500 uppercase">
-              Tổng số tiến trình
-            </span>
-            <Server className="w-4 h-4 text-slate-400" />
-          </div>
-          <div className="text-2xl font-bold text-slate-900 mt-2">{cronJobs.length}</div>
-          <div className="text-xs text-slate-400 mt-1">Hệ thống Worker ngầm</div>
-        </Card>
+        <StatCard
+          title="Tổng số tiến trình"
+          value={cronJobs.length}
+          icon={<Server className="w-5 h-5 text-slate-600" />}
+          iconBgColor="bg-slate-100 text-slate-700 border border-slate-200"
+          description="Workers nền tảng"
+        />
 
-        <Card className="p-4 border-emerald-100 bg-emerald-50/40">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-emerald-700 uppercase">
-              Đang hoạt động
-            </span>
-            <Activity className="w-4 h-4 text-emerald-600 animate-pulse" />
-          </div>
-          <div className="text-2xl font-bold text-emerald-800 mt-2">
-            {cronJobs.filter((j) => j.isEnabled).length}
-          </div>
-          <div className="text-xs text-emerald-600 mt-1">Sẵn sàng kích hoạt theo lịch</div>
-        </Card>
+        <StatCard
+          title="Đang hoạt động"
+          value={activeCount}
+          icon={<Activity className="w-5 h-5 text-emerald-600 animate-pulse" />}
+          iconBgColor="bg-emerald-50 text-emerald-600 border border-emerald-100"
+          description="Sẵn sàng kích hoạt theo lịch"
+        />
 
-        <Card className="p-4 border-amber-100 bg-amber-50/40">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-amber-700 uppercase">Đang tạm dừng</span>
-            <AlertTriangle className="w-4 h-4 text-amber-600" />
-          </div>
-          <div className="text-2xl font-bold text-amber-800 mt-2">
-            {cronJobs.filter((j) => !j.isEnabled).length}
-          </div>
-          <div className="text-xs text-amber-600 mt-1">Đã tắt thủ công bởi Admin</div>
-        </Card>
+        <StatCard
+          title="Đang tạm dừng"
+          value={pausedCount}
+          icon={<AlertTriangle className="w-5 h-5 text-amber-600" />}
+          iconBgColor="bg-amber-50 text-amber-600 border border-amber-100"
+          description="Đã tắt thủ công bởi Admin"
+        />
       </div>
 
       {/* Cron Jobs Grid */}
       {loading ? (
-        <div className="py-20 flex flex-col items-center justify-center text-slate-400 gap-3">
+        <div className="py-20 flex flex-col items-center justify-center text-slate-400 gap-3 bg-white rounded-xl border border-slate-200">
           <div className="w-8 h-8 border-4 border-brand-500 border-t-transparent rounded-full animate-spin" />
           <p className="text-sm font-medium">Đang tải trạng thái tiến trình...</p>
         </div>
@@ -359,7 +356,7 @@ export const CronPage: React.FC = () => {
                 key={paramKey}
                 label={paramKey}
                 type={typeof editingJob.params[paramKey] === 'number' ? 'number' : 'text'}
-                value={paramState[paramKey] ?? ''}
+                value={String(paramState[paramKey] ?? '')}
                 onChange={(e) => {
                   const val =
                     typeof editingJob.params[paramKey] === 'number'

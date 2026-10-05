@@ -1,19 +1,27 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../../api/client';
-import { Booking } from '../../types';
+import { Booking, PricingModel } from '../../types';
 import { useAuth } from '../../auth/AuthContext';
 import { useToast } from '../../components/feedback/ToastContext';
-import { Card, CardHeader, CardTitle, CardContent } from '../../components/common/Card';
 import { Button } from '../../components/common/Button';
 import { Badge } from '../../components/common/Badge';
 import { Modal } from '../../components/common/Modal';
 import { Input } from '../../components/common/Input';
 import { Select } from '../../components/common/Select';
+import { Tabs } from '../../components/common/Tabs';
+import { EmptyState } from '../../components/common/EmptyState';
+import {
+  Table,
+  TableHeader,
+  TableBody,
+  TableRow,
+  TableHead,
+  TableCell,
+} from '../../components/common/Table';
 import {
   CalendarDays,
   PlusCircle,
   Search,
-  Filter,
   Clock,
   MapPin,
   User,
@@ -22,12 +30,11 @@ import {
   Sparkles,
   CheckCircle,
 } from 'lucide-react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 
 export const BookingsPage: React.FC = () => {
   const { currentTenantId, currentTenantName } = useAuth();
   const { toast } = useToast();
-  const navigate = useNavigate();
 
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [loading, setLoading] = useState(true);
@@ -42,7 +49,7 @@ export const BookingsPage: React.FC = () => {
     customerPhone: '',
     addressText: '',
     serviceName: 'Dọn dẹp nhà theo giờ',
-    pricingType: 'HOURLY' as 'HOURLY' | 'PER_UNIT' | 'BIDDING',
+    pricingType: 'HOURLY' as PricingModel,
     scheduledAt: new Date(Date.now() + 3600 * 2000).toISOString().slice(0, 16),
     durationHours: 3,
     totalAmount: 240000,
@@ -53,11 +60,12 @@ export const BookingsPage: React.FC = () => {
     try {
       const data = await api.getBookings(currentTenantId);
       setBookings(data);
-    } catch (err: any) {
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Lỗi tải danh sách đơn';
       toast({
         type: 'error',
-        title: 'Lỗi tải danh sách đơn',
-        message: err.message,
+        title: 'Lỗi tải dữ liệu',
+        message,
       });
     } finally {
       setLoading(false);
@@ -103,7 +111,6 @@ export const BookingsPage: React.FC = () => {
       });
 
       setIsModalOpen(false);
-      // Reset form
       setForm({
         customerName: '',
         customerPhone: '',
@@ -116,11 +123,12 @@ export const BookingsPage: React.FC = () => {
       });
 
       await loadBookings();
-    } catch (err: any) {
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Tạo đơn thất bại';
       toast({
         type: 'error',
         title: 'Tạo đơn thất bại',
-        message: err.message,
+        message,
       });
     } finally {
       setIsSubmitting(false);
@@ -148,7 +156,7 @@ export const BookingsPage: React.FC = () => {
         return <Badge variant="info">Đang bắn đơn nội bộ</Badge>;
       case 'ASSIGNED':
       case 'ON_THE_WAY':
-        return <Badge variant="primary">Đã nhận việc</Badge>;
+        return <Badge variant="brand">Đã nhận việc</Badge>;
       case 'IN_PROGRESS':
         return <Badge variant="warning">Đang làm việc</Badge>;
       case 'COMPLETED':
@@ -159,6 +167,35 @@ export const BookingsPage: React.FC = () => {
         return <Badge variant="neutral">{status}</Badge>;
     }
   };
+
+  const filterTabs = [
+    { id: 'ALL', label: 'Tất cả', count: bookings.length },
+    {
+      id: 'PENDING_DISPATCH',
+      label: 'Chờ điều phối',
+      count: bookings.filter((b) => b.status === 'PENDING_DISPATCH').length,
+    },
+    {
+      id: 'BROADCASTING',
+      label: 'Đang bắn đơn',
+      count: bookings.filter((b) => b.status === 'BROADCASTING').length,
+    },
+    {
+      id: 'ASSIGNED',
+      label: 'Đã nhận việc',
+      count: bookings.filter((b) => b.status === 'ASSIGNED' || b.status === 'ON_THE_WAY').length,
+    },
+    {
+      id: 'IN_PROGRESS',
+      label: 'Đang làm',
+      count: bookings.filter((b) => b.status === 'IN_PROGRESS').length,
+    },
+    {
+      id: 'COMPLETED',
+      label: 'Hoàn thành',
+      count: bookings.filter((b) => b.status === 'COMPLETED').length,
+    },
+  ];
 
   return (
     <div className="space-y-6">
@@ -176,174 +213,167 @@ export const BookingsPage: React.FC = () => {
           </p>
         </div>
 
-        <div className="flex items-center gap-3">
-          <Button
-            variant="primary"
-            onClick={() => setIsModalOpen(true)}
-            leftIcon={<PlusCircle className="w-4 h-4" />}
-          >
-            Tạo đơn thủ công
-          </Button>
-        </div>
+        <Button
+          variant="primary"
+          onClick={() => setIsModalOpen(true)}
+          leftIcon={<PlusCircle className="w-4 h-4" />}
+        >
+          Tạo đơn thủ công
+        </Button>
       </div>
 
       {/* Filter and Search Bar */}
-      <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-3">
-        <div className="relative flex-1 max-w-md">
-          <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+        <Tabs
+          tabs={filterTabs}
+          activeTab={statusFilter}
+          onChange={setStatusFilter}
+          size="sm"
+        />
+
+        <div className="relative w-full md:w-80">
+          <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
           <input
             type="text"
-            placeholder="Tìm theo mã đơn, tên khách, SĐT, địa chỉ..."
+            placeholder="Tìm theo mã đơn, khách hàng, SĐT..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-10 pr-4 py-2 text-sm bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500"
+            className="w-full pl-9 pr-3.5 py-1.5 text-xs bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500"
           />
-        </div>
-
-        <div className="flex items-center gap-2 overflow-x-auto pb-1 md:pb-0">
-          <Filter className="w-4 h-4 text-slate-400 shrink-0" />
-          {[
-            { id: 'ALL', label: 'Tất cả' },
-            { id: 'PENDING_DISPATCH', label: 'Chờ điều phối' },
-            { id: 'BROADCASTING', label: 'Đang bắn đơn' },
-            { id: 'ASSIGNED', label: 'Đã nhận việc' },
-            { id: 'IN_PROGRESS', label: 'Đang làm' },
-            { id: 'COMPLETED', label: 'Hoàn thành' },
-          ].map((tab) => (
-            <button
-              key={tab.id}
-              onClick={() => setStatusFilter(tab.id)}
-              className={`px-3 py-1.5 text-xs font-medium rounded-lg shrink-0 transition-all ${
-                statusFilter === tab.id
-                  ? 'bg-brand-500 text-white shadow-sm'
-                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-              }`}
-            >
-              {tab.label}
-            </button>
-          ))}
         </div>
       </div>
 
-      {/* Bookings List */}
+      {/* Bookings Table / Empty State */}
       {loading ? (
-        <div className="py-20 flex flex-col items-center justify-center text-slate-400 gap-3">
+        <div className="py-20 flex flex-col items-center justify-center text-slate-400 gap-3 bg-white rounded-xl border border-slate-200">
           <div className="w-8 h-8 border-4 border-brand-500 border-t-transparent rounded-full animate-spin" />
           <p className="text-sm font-medium">Đang tải danh sách đơn hàng...</p>
         </div>
       ) : filteredBookings.length === 0 ? (
-        <div className="py-16 text-center text-slate-400 bg-white rounded-xl border border-slate-200">
-          <p className="text-base font-semibold text-slate-600">Không tìm thấy đơn hàng nào</p>
-          <p className="text-xs mt-1">Hãy thử thay đổi từ khóa hoặc bộ lọc trạng thái</p>
-        </div>
+        <EmptyState
+          icon={<CalendarDays className="w-8 h-8 text-brand-400" />}
+          title="Không tìm thấy đơn hàng nào"
+          description="Hãy thử thay đổi từ khóa tìm kiếm hoặc chọn bộ lọc trạng thái khác."
+          action={
+            <Button
+              variant="secondary"
+              onClick={() => {
+                setStatusFilter('ALL');
+                setSearchQuery('');
+              }}
+            >
+              Xóa bộ lọc
+            </Button>
+          }
+        />
       ) : (
-        <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm">
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse text-sm">
-              <thead>
-                <tr className="bg-slate-50 border-b border-slate-200 text-xs font-semibold text-slate-500 uppercase tracking-wider">
-                  <th className="py-3.5 px-4">Mã đơn & Dịch vụ</th>
-                  <th className="py-3.5 px-4">Khách hàng & Địa chỉ</th>
-                  <th className="py-3.5 px-4">Lịch hẹn & Thời lượng</th>
-                  <th className="py-3.5 px-4">Thợ phụ trách</th>
-                  <th className="py-3.5 px-4">Tổng tiền & Trạng thái</th>
-                  <th className="py-3.5 px-4 text-right">Điều phối</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {filteredBookings.map((b) => (
-                  <tr key={b.id} className="hover:bg-slate-50/80 transition-colors">
-                    <td className="py-3.5 px-4">
-                      <div className="font-mono font-bold text-brand-600">{b.code}</div>
-                      <div className="font-semibold text-slate-800 text-xs mt-0.5">
-                        {b.serviceName}
-                      </div>
-                      <span className="text-[10px] text-slate-400 uppercase font-semibold">
-                        {b.pricingType === 'HOURLY'
-                          ? 'Tính theo giờ'
-                          : b.pricingType === 'PER_UNIT'
-                          ? 'Theo đơn vị'
-                          : 'Đấu thầu RFQ'}
-                      </span>
-                    </td>
+        <Table>
+          <TableHeader>
+            <tr>
+              <TableHead>Mã đơn &amp; Dịch vụ</TableHead>
+              <TableHead>Khách hàng &amp; Địa chỉ</TableHead>
+              <TableHead>Lịch hẹn &amp; Thời lượng</TableHead>
+              <TableHead>Thợ phụ trách</TableHead>
+              <TableHead align="right">Tổng cước</TableHead>
+              <TableHead align="center">Trạng thái</TableHead>
+              <TableHead align="right">Điều phối</TableHead>
+            </tr>
+          </TableHeader>
+          <TableBody>
+            {filteredBookings.map((b) => (
+              <TableRow key={b.id}>
+                <TableCell>
+                  <span className="font-mono font-bold text-brand-600 text-xs block">
+                    {b.code}
+                  </span>
+                  <span className="font-semibold text-slate-800 text-xs mt-0.5 block">
+                    {b.serviceName}
+                  </span>
+                  <span className="text-[10px] text-slate-400 uppercase font-semibold">
+                    {b.pricingType === 'HOURLY'
+                      ? 'Theo giờ'
+                      : b.pricingType === 'PER_UNIT'
+                      ? 'Đơn vị cố định'
+                      : 'Đấu thầu RFQ'}
+                  </span>
+                </TableCell>
 
-                    <td className="py-3.5 px-4">
-                      <div className="flex items-center gap-1.5 font-medium text-slate-900">
-                        <User className="w-3.5 h-3.5 text-slate-400" />
-                        {b.customerName}
-                      </div>
-                      <div className="text-xs text-slate-400 flex items-center gap-1 mt-0.5">
-                        <Phone className="w-3 h-3" />
-                        {b.customerPhone}
-                      </div>
-                      <div className="text-xs text-slate-600 flex items-center gap-1 mt-1 truncate max-w-xs">
-                        <MapPin className="w-3 h-3 text-slate-400 shrink-0" />
-                        {b.addressText}
-                      </div>
-                    </td>
+                <TableCell>
+                  <div className="flex items-center gap-1.5 font-medium text-slate-900 text-xs">
+                    <User className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                    {b.customerName}
+                  </div>
+                  <div className="text-[11px] text-slate-400 flex items-center gap-1 mt-0.5">
+                    <Phone className="w-3 h-3 shrink-0" />
+                    {b.customerPhone}
+                  </div>
+                  <div className="text-[11px] text-slate-600 flex items-center gap-1 mt-0.5 truncate max-w-xs">
+                    <MapPin className="w-3 h-3 text-slate-400 shrink-0" />
+                    {b.addressText}
+                  </div>
+                </TableCell>
 
-                    <td className="py-3.5 px-4">
-                      <div className="text-slate-800 font-medium flex items-center gap-1.5 text-xs">
-                        <Clock className="w-3.5 h-3.5 text-brand-500" />
-                        {new Date(b.scheduledAt).toLocaleString('vi-VN', {
-                          hour: '2-digit',
-                          minute: '2-digit',
-                          day: '2-digit',
-                          month: '2-digit',
-                        })}
-                      </div>
-                      <div className="text-xs text-slate-400 mt-0.5">
-                        {b.durationHours ? `${b.durationHours} giờ làm việc` : 'Theo khối lượng'}
-                      </div>
-                    </td>
+                <TableCell>
+                  <div className="text-slate-800 font-medium flex items-center gap-1.5 text-xs">
+                    <Clock className="w-3.5 h-3.5 text-brand-500 shrink-0" />
+                    {new Date(b.scheduledAt).toLocaleString('vi-VN', {
+                      hour: '2-digit',
+                      minute: '2-digit',
+                      day: '2-digit',
+                      month: '2-digit',
+                    })}
+                  </div>
+                  <div className="text-[11px] text-slate-400 mt-0.5">
+                    {b.durationHours ? `${b.durationHours} giờ làm việc` : 'Theo khối lượng'}
+                  </div>
+                </TableCell>
 
-                    <td className="py-3.5 px-4">
-                      {b.assignedTaskerName ? (
-                        <div>
-                          <div className="font-medium text-slate-900 flex items-center gap-1 text-xs">
-                            <CheckCircle className="w-3.5 h-3.5 text-emerald-500" />
-                            {b.assignedTaskerName}
-                          </div>
-                          <div className="text-xs text-slate-400">{b.assignedTaskerPhone}</div>
-                        </div>
-                      ) : (
-                        <span className="text-xs text-amber-600 font-medium italic">
-                          Chưa phân công thợ
-                        </span>
-                      )}
-                    </td>
-
-                    <td className="py-3.5 px-4">
-                      <div className="font-bold text-slate-900">
-                        {b.totalAmount.toLocaleString('vi-VN')} đ
+                <TableCell>
+                  {b.assignedTaskerName ? (
+                    <div>
+                      <div className="font-medium text-slate-900 flex items-center gap-1 text-xs">
+                        <CheckCircle className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+                        {b.assignedTaskerName}
                       </div>
-                      <div className="mt-1">{getStatusBadge(b.status)}</div>
-                    </td>
+                      <div className="text-[11px] text-slate-400">{b.assignedTaskerPhone}</div>
+                    </div>
+                  ) : (
+                    <span className="text-xs text-amber-600 font-medium italic">
+                      Chưa phân công thợ
+                    </span>
+                  )}
+                </TableCell>
 
-                    <td className="py-3.5 px-4 text-right">
-                      {b.status === 'PENDING_DISPATCH' || b.status === 'BROADCASTING' ? (
-                        <Link
-                          to={`/dispatch?bookingId=${b.id}`}
-                          className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-semibold bg-brand-50 text-brand-600 hover:bg-brand-100 transition-colors"
-                        >
-                          Điều phối ngay
-                          <ArrowRight className="w-3 h-3" />
-                        </Link>
-                      ) : (
-                        <Link
-                          to={`/dispatch?bookingId=${b.id}`}
-                          className="text-xs text-slate-400 hover:text-slate-700 font-medium"
-                        >
-                          Xem chi tiết
-                        </Link>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
+                <TableCell align="right">
+                  <span className="font-bold text-slate-900 text-xs">
+                    {b.totalAmount.toLocaleString('vi-VN')} đ
+                  </span>
+                </TableCell>
+
+                <TableCell align="center">{getStatusBadge(b.status)}</TableCell>
+
+                <TableCell align="right">
+                  {b.status === 'PENDING_DISPATCH' || b.status === 'BROADCASTING' ? (
+                    <Link
+                      to={`/dispatch?bookingId=${b.id}`}
+                      className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-brand-50 text-brand-600 hover:bg-brand-100 transition-colors"
+                    >
+                      Điều phối
+                      <ArrowRight className="w-3 h-3" />
+                    </Link>
+                  ) : (
+                    <Link
+                      to={`/dispatch?bookingId=${b.id}`}
+                      className="text-xs text-slate-400 hover:text-slate-700 font-medium"
+                    >
+                      Chi tiết
+                    </Link>
+                  )}
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
       )}
 
       {/* Manual Booking Modal */}
@@ -424,7 +454,7 @@ export const BookingsPage: React.FC = () => {
               onChange={(e) =>
                 setForm({
                   ...form,
-                  pricingType: e.target.value as any,
+                  pricingType: e.target.value as PricingModel,
                 })
               }
               options={[

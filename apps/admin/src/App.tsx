@@ -13,6 +13,9 @@ import { DashboardPage } from './pages/dashboard/DashboardPage';
 import { BookingsPage } from './pages/bookings/BookingsPage';
 import { DispatchPage } from './pages/dispatch/DispatchPage';
 import { TaskersPage } from './pages/taskers/TaskersPage';
+import { ServicesPage } from './pages/services/ServicesPage';
+import { FinancePage } from './pages/finance/FinancePage';
+import { SettingsPage } from './pages/settings/SettingsPage';
 import { TenantsPage } from './pages/tenants/TenantsPage';
 import { CronPage } from './pages/cron/CronPage';
 import { NotFoundPage } from './pages/error/NotFoundPage';
@@ -43,6 +46,9 @@ export const App: React.FC = () => {
                 <Route path="/bookings" element={<BookingsPage />} />
                 <Route path="/dispatch" element={<DispatchPage />} />
                 <Route path="/taskers" element={<TaskersPage />} />
+                <Route path="/services" element={<ServicesPage />} />
+                <Route path="/finance" element={<FinancePage />} />
+                <Route path="/settings" element={<SettingsPage />} />
 
                 {/* Super Admin Restricted Routes */}
                 <Route
