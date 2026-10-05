@@ -15,6 +15,7 @@ import { useAuth } from '../../auth/AuthContext';
 import { api } from '../../api/client';
 import { Booking, Tasker } from '../../types';
 import { StatCard } from '../../components/common/StatCard';
+import { SkeletonStatCards, SkeletonTable } from '../../components/common/Skeleton';
 import {
   Table,
   TableHeader,
@@ -138,35 +139,39 @@ export const DashboardPage: React.FC = () => {
       </div>
 
       {/* KPI Stats Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard
-          title="Tổng doanh thu đơn"
-          value={`${totalRevenue.toLocaleString('vi-VN')} đ`}
-          icon={<TrendingUp className="w-5 h-5 text-brand-600" />}
-          trend={{ value: 18.5, isPositive: true, label: 'vs tháng trước' }}
-        />
-        <StatCard
-          title="Đơn đang hoạt động"
-          value={activeOrders}
-          icon={<ShoppingBag className="w-5 h-5 text-blue-600" />}
-          iconBgColor="bg-blue-50 text-blue-600 border border-blue-100"
-          description={`Tổng số ${bookings.length} đơn tích lũy`}
-        />
-        <StatCard
-          title="Tỷ lệ hoàn thành"
-          value={`${completionRate}%`}
-          icon={<CheckCircle2 className="w-5 h-5 text-emerald-600" />}
-          iconBgColor="bg-emerald-50 text-emerald-600 border border-emerald-100"
-          trend={{ value: 2.1, isPositive: true, label: 'chất lượng dịch vụ' }}
-        />
-        <StatCard
-          title="Thợ đang trực tuyến"
-          value={`${onlineTaskers} / ${taskers.length}`}
-          icon={<Users className="w-5 h-5 text-amber-600" />}
-          iconBgColor="bg-amber-50 text-amber-600 border border-amber-100"
-          description="Sẵn sàng nhận việc tức thì"
-        />
-      </div>
+      {loading ? (
+        <SkeletonStatCards count={4} />
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <StatCard
+            title="Tổng doanh thu đơn"
+            value={`${totalRevenue.toLocaleString('vi-VN')} đ`}
+            icon={<TrendingUp className="w-5 h-5 text-brand-600" />}
+            trend={{ value: 18.5, isPositive: true, label: 'vs tháng trước' }}
+          />
+          <StatCard
+            title="Đơn đang hoạt động"
+            value={activeOrders}
+            icon={<ShoppingBag className="w-5 h-5 text-blue-600" />}
+            iconBgColor="bg-blue-50 text-blue-600 border border-blue-100"
+            description={`Tổng số ${bookings.length} đơn tích lũy`}
+          />
+          <StatCard
+            title="Tỷ lệ hoàn thành"
+            value={`${completionRate}%`}
+            icon={<CheckCircle2 className="w-5 h-5 text-emerald-600" />}
+            iconBgColor="bg-emerald-50 text-emerald-600 border border-emerald-100"
+            trend={{ value: 2.1, isPositive: true, label: 'chất lượng dịch vụ' }}
+          />
+          <StatCard
+            title="Thợ đang trực tuyến"
+            value={`${onlineTaskers} / ${taskers.length}`}
+            icon={<Users className="w-5 h-5 text-amber-600" />}
+            iconBgColor="bg-amber-50 text-amber-600 border border-amber-100"
+            description="Sẵn sàng nhận việc tức thì"
+          />
+        </div>
+      )}
 
       {/* Recent Bookings Section */}
       <div className="space-y-3">
@@ -188,10 +193,7 @@ export const DashboardPage: React.FC = () => {
         </div>
 
         {loading ? (
-          <div className="py-16 text-center text-slate-400 bg-white rounded-xl border border-slate-200">
-            <div className="w-8 h-8 border-4 border-brand-500 border-t-transparent rounded-full animate-spin mx-auto mb-2" />
-            <span className="text-xs font-medium">Đang đồng bộ dữ liệu...</span>
-          </div>
+          <SkeletonTable rows={5} cols={7} />
         ) : bookings.length === 0 ? (
           <EmptyState
             icon={<Compass className="w-8 h-8 text-brand-400" />}
@@ -206,68 +208,114 @@ export const DashboardPage: React.FC = () => {
             }
           />
         ) : (
-          <Table>
-            <TableHeader>
-              <tr>
-                <TableHead>Mã đơn</TableHead>
-                <TableHead>Dịch vụ</TableHead>
-                <TableHead>Khách hàng &amp; Địa chỉ</TableHead>
-                <TableHead>Thời gian hẹn</TableHead>
-                <TableHead>Thợ phụ trách</TableHead>
-                <TableHead align="right">Tổng tiền</TableHead>
-                <TableHead align="center">Trạng thái</TableHead>
-              </tr>
-            </TableHeader>
-            <TableBody>
+          <div className="space-y-3">
+            {/* Desktop Table View (>= md) */}
+            <div className="hidden md:block">
+              <Table>
+                <TableHeader>
+                  <tr>
+                    <TableHead>Mã đơn</TableHead>
+                    <TableHead>Dịch vụ</TableHead>
+                    <TableHead>Khách hàng &amp; Địa chỉ</TableHead>
+                    <TableHead>Thời gian hẹn</TableHead>
+                    <TableHead>Thợ phụ trách</TableHead>
+                    <TableHead align="right">Tổng tiền</TableHead>
+                    <TableHead align="center">Trạng thái</TableHead>
+                  </tr>
+                </TableHeader>
+                <TableBody>
+                  {bookings.slice(0, 5).map((b) => (
+                    <TableRow key={b.id}>
+                      <TableCell>
+                        <span className="font-mono font-bold text-brand-600 text-xs">{b.code}</span>
+                      </TableCell>
+                      <TableCell>
+                        <span className="font-semibold text-slate-900 text-xs">{b.serviceName}</span>
+                        <span className="text-[10px] text-slate-400 block uppercase font-medium">
+                          {b.pricingType}
+                        </span>
+                      </TableCell>
+                      <TableCell>
+                        <div className="font-medium text-slate-900 text-xs">{b.customerName}</div>
+                        <div className="text-[11px] text-slate-400 truncate max-w-xs mt-0.5 flex items-center gap-1">
+                          <MapPin className="w-3 h-3 text-slate-400 shrink-0" />
+                          {b.addressText}
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <div className="text-xs text-slate-700 flex items-center gap-1 font-medium">
+                          <Clock className="w-3 h-3 text-brand-500" />
+                          {new Date(b.scheduledAt).toLocaleTimeString('vi-VN', {
+                            hour: '2-digit',
+                            minute: '2-digit',
+                          })}{' '}
+                          • {new Date(b.scheduledAt).toLocaleDateString('vi-VN')}
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        {b.assignedTaskerName ? (
+                          <div className="text-xs font-medium text-slate-900">
+                            {b.assignedTaskerName}
+                          </div>
+                        ) : (
+                          <span className="text-xs text-amber-600 italic font-medium">
+                            Chưa phân công
+                          </span>
+                        )}
+                      </TableCell>
+                      <TableCell align="right">
+                        <span className="font-bold text-xs text-slate-900">
+                          {b.totalAmount.toLocaleString('vi-VN')} đ
+                        </span>
+                      </TableCell>
+                      <TableCell align="center">{getStatusBadge(b.status)}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+
+            {/* Mobile Card View (< md) */}
+            <div className="md:hidden space-y-3">
               {bookings.slice(0, 5).map((b) => (
-                <TableRow key={b.id}>
-                  <TableCell>
-                    <span className="font-mono font-bold text-brand-600 text-xs">{b.code}</span>
-                  </TableCell>
-                  <TableCell>
-                    <span className="font-semibold text-slate-900 text-xs">{b.serviceName}</span>
-                    <span className="text-[10px] text-slate-400 block uppercase font-medium">
-                      {b.pricingType}
-                    </span>
-                  </TableCell>
-                  <TableCell>
-                    <div className="font-medium text-slate-900 text-xs">{b.customerName}</div>
-                    <div className="text-[11px] text-slate-400 truncate max-w-xs mt-0.5 flex items-center gap-1">
+                <div
+                  key={b.id}
+                  className="bg-white rounded-xl border border-slate-200/90 p-4 shadow-xs space-y-2.5 transition active:scale-[0.99]"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <span className="font-mono font-bold text-brand-600 text-xs">{b.code}</span>
+                      <h4 className="font-bold text-slate-900 text-sm mt-0.5">{b.serviceName}</h4>
+                    </div>
+                    {getStatusBadge(b.status)}
+                  </div>
+
+                  <div className="space-y-1 text-xs text-slate-600 bg-slate-50 p-2.5 rounded-lg">
+                    <div className="flex justify-between font-medium">
+                      <span>{b.customerName}</span>
+                      <span className="font-bold text-slate-900">
+                        {b.totalAmount.toLocaleString('vi-VN')} đ
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-1 text-[11px] text-slate-500 truncate">
                       <MapPin className="w-3 h-3 text-slate-400 shrink-0" />
                       {b.addressText}
                     </div>
-                  </TableCell>
-                  <TableCell>
-                    <div className="text-xs text-slate-700 flex items-center gap-1 font-medium">
+                  </div>
+
+                  <div className="flex items-center justify-between text-[11px] text-slate-400 pt-1">
+                    <span className="flex items-center gap-1 text-slate-600 font-medium">
                       <Clock className="w-3 h-3 text-brand-500" />
-                      {new Date(b.scheduledAt).toLocaleTimeString('vi-VN', {
-                        hour: '2-digit',
-                        minute: '2-digit',
-                      })}{' '}
-                      • {new Date(b.scheduledAt).toLocaleDateString('vi-VN')}
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    {b.assignedTaskerName ? (
-                      <div className="text-xs font-medium text-slate-900">
-                        {b.assignedTaskerName}
-                      </div>
-                    ) : (
-                      <span className="text-xs text-amber-600 italic font-medium">
-                        Chưa phân công
-                      </span>
-                    )}
-                  </TableCell>
-                  <TableCell align="right">
-                    <span className="font-bold text-xs text-slate-900">
-                      {b.totalAmount.toLocaleString('vi-VN')} đ
+                      {new Date(b.scheduledAt).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })} • {new Date(b.scheduledAt).toLocaleDateString('vi-VN')}
                     </span>
-                  </TableCell>
-                  <TableCell align="center">{getStatusBadge(b.status)}</TableCell>
-                </TableRow>
+                    <span className="text-slate-700 font-medium">
+                      {b.assignedTaskerName ? b.assignedTaskerName : 'Chưa phân công'}
+                    </span>
+                  </div>
+                </div>
               ))}
-            </TableBody>
-          </Table>
+            </div>
+          </div>
         )}
       </div>
     </div>

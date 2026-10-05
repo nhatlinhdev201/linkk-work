@@ -7,6 +7,7 @@ import { Card, CardHeader, CardTitle, CardContent } from '../../components/commo
 import { Button } from '../../components/common/Button';
 import { Input } from '../../components/common/Input';
 import { Switch } from '../../components/common/Switch';
+import { SkeletonForm } from '../../components/common/Skeleton';
 import {
   Settings,
   Building,
@@ -25,6 +26,7 @@ export const SettingsPage: React.FC = () => {
 
   const [loading, setLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const [formErrors, setFormErrors] = useState<Record<string, string>>({});
   const [form, setForm] = useState<TenantSettings>({
     tenantId: currentTenantId,
     hotline: '',
@@ -59,6 +61,38 @@ export const SettingsPage: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    // Inline validation
+    const errors: Record<string, string> = {};
+    if (!form.hotline.trim()) {
+      errors.hotline = 'Vui lòng nhập số điện thoại hotline';
+    } else if (form.hotline.trim().length < 8) {
+      errors.hotline = 'Số hotline phải có ít nhất 8 ký tự';
+    }
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!form.supportEmail.trim() || !emailRegex.test(form.supportEmail.trim())) {
+      errors.supportEmail = 'Email hỗ trợ không hợp lệ (Ví dụ: hotro@domain.com)';
+    }
+
+    if (!form.businessAddress.trim() || form.businessAddress.trim().length < 5) {
+      errors.businessAddress = 'Vui lòng nhập địa chỉ cụ thể (tối thiểu 5 ký tự)';
+    }
+
+    if (form.maxRadiusKm < 1 || form.maxRadiusKm > 50) {
+      errors.maxRadiusKm = 'Bán kính phục vụ phải từ 1 đến 50 km';
+    }
+
+    if (Object.keys(errors).length > 0) {
+      setFormErrors(errors);
+      toast({
+        type: 'warning',
+        title: 'Dữ liệu chưa hợp lệ',
+        message: 'Vui lòng kiểm tra các trường thông tin báo lỗi màu đỏ.',
+      });
+      return;
+    }
+
     setIsSaving(true);
     try {
       await api.updateTenantSettings(currentTenantId, form);
@@ -67,6 +101,7 @@ export const SettingsPage: React.FC = () => {
         title: 'Lưu cài đặt thành công!',
         message: `Đã cập nhật thông số vận hành cho ${currentTenantName}.`,
       });
+      setFormErrors({});
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Không thể lưu cài đặt';
       toast({
@@ -94,10 +129,7 @@ export const SettingsPage: React.FC = () => {
       </div>
 
       {loading ? (
-        <div className="py-20 flex flex-col items-center justify-center text-slate-400 gap-3">
-          <div className="w-8 h-8 border-4 border-brand-500 border-t-transparent rounded-full animate-spin" />
-          <p className="text-sm font-medium">Đang tải cấu hình...</p>
-        </div>
+        <SkeletonForm fields={6} />
       ) : (
         <form onSubmit={handleSubmit} className="space-y-6">
           {/* 1. General Profile */}
@@ -114,7 +146,15 @@ export const SettingsPage: React.FC = () => {
                   label="Hotline chăm sóc khách hàng"
                   placeholder="1900 xxxx hoặc 09xx"
                   value={form.hotline}
-                  onChange={(e) => setForm({ ...form, hotline: e.target.value })}
+                  error={formErrors.hotline}
+                  onChange={(e) => {
+                    setForm({ ...form, hotline: e.target.value });
+                    if (formErrors.hotline) {
+                      const updated = { ...formErrors };
+                      delete updated.hotline;
+                      setFormErrors(updated);
+                    }
+                  }}
                   icon={<Phone className="w-4 h-4 text-slate-400" />}
                   required
                 />
@@ -123,7 +163,15 @@ export const SettingsPage: React.FC = () => {
                   type="email"
                   placeholder="cskh@domain.com"
                   value={form.supportEmail}
-                  onChange={(e) => setForm({ ...form, supportEmail: e.target.value })}
+                  error={formErrors.supportEmail}
+                  onChange={(e) => {
+                    setForm({ ...form, supportEmail: e.target.value });
+                    if (formErrors.supportEmail) {
+                      const updated = { ...formErrors };
+                      delete updated.supportEmail;
+                      setFormErrors(updated);
+                    }
+                  }}
                   icon={<Mail className="w-4 h-4 text-slate-400" />}
                   required
                 />
@@ -133,7 +181,15 @@ export const SettingsPage: React.FC = () => {
                 label="Địa chỉ văn phòng / trụ sở điều hành"
                 placeholder="Số nhà, tên đường, phường/xã, quận/huyện, tỉnh/thành..."
                 value={form.businessAddress}
-                onChange={(e) => setForm({ ...form, businessAddress: e.target.value })}
+                error={formErrors.businessAddress}
+                onChange={(e) => {
+                  setForm({ ...form, businessAddress: e.target.value });
+                  if (formErrors.businessAddress) {
+                    const updated = { ...formErrors };
+                    delete updated.businessAddress;
+                    setFormErrors(updated);
+                  }
+                }}
                 icon={<MapPin className="w-4 h-4 text-slate-400" />}
                 required
               />
@@ -171,7 +227,15 @@ export const SettingsPage: React.FC = () => {
                   min={1}
                   max={50}
                   value={form.maxRadiusKm}
-                  onChange={(e) => setForm({ ...form, maxRadiusKm: Number(e.target.value) })}
+                  error={formErrors.maxRadiusKm}
+                  onChange={(e) => {
+                    setForm({ ...form, maxRadiusKm: Number(e.target.value) });
+                    if (formErrors.maxRadiusKm) {
+                      const updated = { ...formErrors };
+                      delete updated.maxRadiusKm;
+                      setFormErrors(updated);
+                    }
+                  }}
                   required
                 />
                 <Input

@@ -10,6 +10,8 @@ import { Input } from '../../components/common/Input';
 import { Select } from '../../components/common/Select';
 import { Tabs } from '../../components/common/Tabs';
 import { EmptyState } from '../../components/common/EmptyState';
+import { SkeletonTable } from '../../components/common/Skeleton';
+import { Pagination } from '../../components/common/Pagination';
 import {
   Table,
   TableHeader,
@@ -40,10 +42,13 @@ export const BookingsPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
+  const [currentPage, setCurrentPage] = useState(1);
+  const pageSize = 6;
 
   // Modal manual booking state
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [formErrors, setFormErrors] = useState<Record<string, string>>({});
   const [form, setForm] = useState({
     customerName: '',
     customerPhone: '',
@@ -76,13 +81,33 @@ export const BookingsPage: React.FC = () => {
     loadBookings();
   }, [currentTenantId]);
 
+  const validateForm = (): boolean => {
+    const errors: Record<string, string> = {};
+    if (!form.customerName.trim() || form.customerName.trim().length < 2) {
+      errors.customerName = 'Họ tên khách hàng phải có ít nhất 2 ký tự';
+    }
+    const phoneClean = form.customerPhone.trim().replace(/\s+/g, '');
+    const phoneRegex = /(84|0[3|5|7|8|9])+([0-9]{8})\b/;
+    if (!phoneClean || !phoneRegex.test(phoneClean)) {
+      errors.customerPhone = 'Số điện thoại không hợp lệ (Ví dụ: 0912345678)';
+    }
+    if (!form.addressText.trim() || form.addressText.trim().length < 5) {
+      errors.addressText = 'Vui lòng nhập địa chỉ cụ thể (tối thiểu 5 ký tự)';
+    }
+    if (form.totalAmount <= 0) {
+      errors.totalAmount = 'Tổng cước phí phải lớn hơn 0 đ';
+    }
+    setFormErrors(errors);
+    return Object.keys(errors).length === 0;
+  };
+
   const handleCreateBooking = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!form.customerName || !form.customerPhone || !form.addressText) {
+    if (!validateForm()) {
       toast({
         type: 'warning',
-        title: 'Thiếu thông tin',
-        message: 'Vui lòng nhập đầy đủ tên khách, số điện thoại và địa chỉ thực hiện việc.',
+        title: 'Dữ liệu chưa hợp lệ',
+        message: 'Vui lòng kiểm tra lại các trường báo lỗi màu đỏ trên biểu mẫu.',
       });
       return;
     }
@@ -245,10 +270,7 @@ export const BookingsPage: React.FC = () => {
 
       {/* Bookings Table / Empty State */}
       {loading ? (
-        <div className="py-20 flex flex-col items-center justify-center text-slate-400 gap-3 bg-white rounded-xl border border-slate-200">
-          <div className="w-8 h-8 border-4 border-brand-500 border-t-transparent rounded-full animate-spin" />
-          <p className="text-sm font-medium">Đang tải danh sách đơn hàng...</p>
-        </div>
+        <SkeletonTable rows={6} cols={7} />
       ) : filteredBookings.length === 0 ? (
         <EmptyState
           icon={<CalendarDays className="w-8 h-8 text-brand-400" />}
@@ -260,6 +282,7 @@ export const BookingsPage: React.FC = () => {
               onClick={() => {
                 setStatusFilter('ALL');
                 setSearchQuery('');
+                setCurrentPage(1);
               }}
             >
               Xóa bộ lọc
@@ -267,126 +290,213 @@ export const BookingsPage: React.FC = () => {
           }
         />
       ) : (
-        <Table>
-          <TableHeader>
-            <tr>
-              <TableHead>Mã đơn &amp; Dịch vụ</TableHead>
-              <TableHead>Khách hàng &amp; Địa chỉ</TableHead>
-              <TableHead>Lịch hẹn &amp; Thời lượng</TableHead>
-              <TableHead>Thợ phụ trách</TableHead>
-              <TableHead align="right">Tổng cước</TableHead>
-              <TableHead align="center">Trạng thái</TableHead>
-              <TableHead align="right">Điều phối</TableHead>
-            </tr>
-          </TableHeader>
-          <TableBody>
-            {filteredBookings.map((b) => (
-              <TableRow key={b.id}>
-                <TableCell>
-                  <span className="font-mono font-bold text-brand-600 text-xs block">
-                    {b.code}
-                  </span>
-                  <span className="font-semibold text-slate-800 text-xs mt-0.5 block">
-                    {b.serviceName}
-                  </span>
-                  <span className="text-[10px] text-slate-400 uppercase font-semibold">
-                    {b.pricingType === 'HOURLY'
-                      ? 'Theo giờ'
-                      : b.pricingType === 'PER_UNIT'
-                      ? 'Đơn vị cố định'
-                      : 'Đấu thầu RFQ'}
-                  </span>
-                </TableCell>
+        <div className="space-y-4">
+          {/* Desktop Table View (>= md) */}
+          <div className="hidden md:block">
+            <Table>
+              <TableHeader>
+                <tr>
+                  <TableHead>Mã đơn &amp; Dịch vụ</TableHead>
+                  <TableHead>Khách hàng &amp; Địa chỉ</TableHead>
+                  <TableHead>Lịch hẹn &amp; Thời lượng</TableHead>
+                  <TableHead>Thợ phụ trách</TableHead>
+                  <TableHead align="right">Tổng cước</TableHead>
+                  <TableHead align="center">Trạng thái</TableHead>
+                  <TableHead align="right">Điều phối</TableHead>
+                </tr>
+              </TableHeader>
+              <TableBody>
+                {filteredBookings
+                  .slice((currentPage - 1) * pageSize, currentPage * pageSize)
+                  .map((b) => (
+                    <TableRow key={b.id}>
+                      <TableCell>
+                        <span className="font-mono font-bold text-brand-600 text-xs block">
+                          {b.code}
+                        </span>
+                        <span className="font-semibold text-slate-800 text-xs mt-0.5 block">
+                          {b.serviceName}
+                        </span>
+                        <span className="text-[10px] text-slate-400 uppercase font-semibold">
+                          {b.pricingType === 'HOURLY'
+                            ? 'Theo giờ'
+                            : b.pricingType === 'PER_UNIT'
+                            ? 'Đơn vị cố định'
+                            : 'Đấu thầu RFQ'}
+                        </span>
+                      </TableCell>
 
-                <TableCell>
-                  <div className="flex items-center gap-1.5 font-medium text-slate-900 text-xs">
-                    <User className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                    {b.customerName}
-                  </div>
-                  <div className="text-[11px] text-slate-400 flex items-center gap-1 mt-0.5">
-                    <Phone className="w-3 h-3 shrink-0" />
-                    {b.customerPhone}
-                  </div>
-                  <div className="text-[11px] text-slate-600 flex items-center gap-1 mt-0.5 truncate max-w-xs">
-                    <MapPin className="w-3 h-3 text-slate-400 shrink-0" />
-                    {b.addressText}
-                  </div>
-                </TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-1.5 font-medium text-slate-900 text-xs">
+                          <User className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                          {b.customerName}
+                        </div>
+                        <div className="text-[11px] text-slate-400 flex items-center gap-1 mt-0.5">
+                          <Phone className="w-3 h-3 shrink-0" />
+                          {b.customerPhone}
+                        </div>
+                        <div className="text-[11px] text-slate-600 flex items-center gap-1 mt-0.5 truncate max-w-xs">
+                          <MapPin className="w-3 h-3 text-slate-400 shrink-0" />
+                          {b.addressText}
+                        </div>
+                      </TableCell>
 
-                <TableCell>
-                  <div className="text-slate-800 font-medium flex items-center gap-1.5 text-xs">
-                    <Clock className="w-3.5 h-3.5 text-brand-500 shrink-0" />
-                    {new Date(b.scheduledAt).toLocaleString('vi-VN', {
-                      hour: '2-digit',
-                      minute: '2-digit',
-                      day: '2-digit',
-                      month: '2-digit',
-                    })}
-                  </div>
-                  <div className="text-[11px] text-slate-400 mt-0.5">
-                    {b.durationHours ? `${b.durationHours} giờ làm việc` : 'Theo khối lượng'}
-                  </div>
-                </TableCell>
+                      <TableCell>
+                        <div className="text-slate-800 font-medium flex items-center gap-1.5 text-xs">
+                          <Clock className="w-3.5 h-3.5 text-brand-500 shrink-0" />
+                          {new Date(b.scheduledAt).toLocaleString('vi-VN', {
+                            hour: '2-digit',
+                            minute: '2-digit',
+                            day: '2-digit',
+                            month: '2-digit',
+                          })}
+                        </div>
+                        <div className="text-[11px] text-slate-400 mt-0.5">
+                          {b.durationHours ? `${b.durationHours} giờ làm việc` : 'Theo khối lượng'}
+                        </div>
+                      </TableCell>
 
-                <TableCell>
-                  {b.assignedTaskerName ? (
+                      <TableCell>
+                        {b.assignedTaskerName ? (
+                          <div>
+                            <div className="font-medium text-slate-900 flex items-center gap-1 text-xs">
+                              <CheckCircle className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+                              {b.assignedTaskerName}
+                            </div>
+                            <div className="text-[11px] text-slate-400">{b.assignedTaskerPhone}</div>
+                          </div>
+                        ) : (
+                          <span className="text-xs text-amber-600 font-medium italic">
+                            Chưa phân công thợ
+                          </span>
+                        )}
+                      </TableCell>
+
+                      <TableCell align="right">
+                        <span className="font-bold text-slate-900 text-xs">
+                          {b.totalAmount.toLocaleString('vi-VN')} đ
+                        </span>
+                      </TableCell>
+
+                      <TableCell align="center">{getStatusBadge(b.status)}</TableCell>
+
+                      <TableCell align="right">
+                        {b.status === 'PENDING_DISPATCH' || b.status === 'BROADCASTING' ? (
+                          <Link
+                            to={`/dispatch?bookingId=${b.id}`}
+                            className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-brand-50 text-brand-600 hover:bg-brand-100 transition-colors"
+                          >
+                            Điều phối
+                            <ArrowRight className="w-3 h-3" />
+                          </Link>
+                        ) : (
+                          <Link
+                            to={`/dispatch?bookingId=${b.id}`}
+                            className="text-xs text-slate-400 hover:text-slate-700 font-medium"
+                          >
+                            Chi tiết
+                          </Link>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+              </TableBody>
+            </Table>
+          </div>
+
+          {/* Mobile Card View (< md) */}
+          <div className="md:hidden space-y-3">
+            {filteredBookings
+              .slice((currentPage - 1) * pageSize, currentPage * pageSize)
+              .map((b) => (
+                <div
+                  key={b.id}
+                  className="bg-white rounded-xl border border-slate-200/90 p-4 shadow-xs space-y-3 transition active:scale-[0.99]"
+                >
+                  <div className="flex items-start justify-between gap-2">
                     <div>
-                      <div className="font-medium text-slate-900 flex items-center gap-1 text-xs">
-                        <CheckCircle className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
-                        {b.assignedTaskerName}
+                      <div className="flex items-center gap-1.5">
+                        <span className="font-mono font-bold text-brand-600 text-xs">{b.code}</span>
+                        <span className="text-[10px] text-slate-400 font-semibold uppercase">
+                          • {b.pricingType === 'HOURLY' ? 'Theo giờ' : b.pricingType === 'PER_UNIT' ? 'Cố định' : 'RFQ'}
+                        </span>
                       </div>
-                      <div className="text-[11px] text-slate-400">{b.assignedTaskerPhone}</div>
+                      <h4 className="font-bold text-slate-900 text-sm mt-0.5">{b.serviceName}</h4>
                     </div>
-                  ) : (
-                    <span className="text-xs text-amber-600 font-medium italic">
-                      Chưa phân công thợ
-                    </span>
-                  )}
-                </TableCell>
+                    {getStatusBadge(b.status)}
+                  </div>
 
-                <TableCell align="right">
-                  <span className="font-bold text-slate-900 text-xs">
-                    {b.totalAmount.toLocaleString('vi-VN')} đ
-                  </span>
-                </TableCell>
+                  <div className="grid grid-cols-1 gap-1.5 text-xs bg-slate-50 p-2.5 rounded-lg">
+                    <div className="flex items-center justify-between">
+                      <span className="text-slate-500 flex items-center gap-1">
+                        <User className="w-3.5 h-3.5 text-slate-400" />
+                        {b.customerName}
+                      </span>
+                      <span className="text-slate-400 font-mono">{b.customerPhone}</span>
+                    </div>
+                    <div className="flex items-center gap-1 text-slate-600 truncate">
+                      <MapPin className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                      {b.addressText}
+                    </div>
+                    <div className="flex items-center justify-between pt-1 border-t border-slate-200/60 text-[11px]">
+                      <span className="text-slate-500 flex items-center gap-1">
+                        <Clock className="w-3.5 h-3.5 text-brand-500" />
+                        {new Date(b.scheduledAt).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })} • {new Date(b.scheduledAt).toLocaleDateString('vi-VN')}
+                      </span>
+                      <span className="font-medium text-slate-700">
+                        {b.assignedTaskerName ? b.assignedTaskerName : 'Chưa phân công'}
+                      </span>
+                    </div>
+                  </div>
 
-                <TableCell align="center">{getStatusBadge(b.status)}</TableCell>
+                  <div className="flex items-center justify-between pt-1">
+                    <div>
+                      <span className="text-[10px] text-slate-400 block font-medium">Tổng cước:</span>
+                      <span className="text-sm font-black text-brand-600">
+                        {b.totalAmount.toLocaleString('vi-VN')} đ
+                      </span>
+                    </div>
 
-                <TableCell align="right">
-                  {b.status === 'PENDING_DISPATCH' || b.status === 'BROADCASTING' ? (
                     <Link
                       to={`/dispatch?bookingId=${b.id}`}
-                      className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-brand-50 text-brand-600 hover:bg-brand-100 transition-colors"
+                      className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-semibold bg-brand-50 text-brand-600 hover:bg-brand-100 transition-colors"
                     >
-                      Điều phối
-                      <ArrowRight className="w-3 h-3" />
+                      {b.status === 'PENDING_DISPATCH' || b.status === 'BROADCASTING' ? 'Điều phối ngay' : 'Chi tiết đơn'}
+                      <ArrowRight className="w-3.5 h-3.5" />
                     </Link>
-                  ) : (
-                    <Link
-                      to={`/dispatch?bookingId=${b.id}`}
-                      className="text-xs text-slate-400 hover:text-slate-700 font-medium"
-                    >
-                      Chi tiết
-                    </Link>
-                  )}
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
+                  </div>
+                </div>
+              ))}
+          </div>
+
+          {/* Pagination */}
+          <Pagination
+            currentPage={currentPage}
+            totalPages={Math.ceil(filteredBookings.length / pageSize)}
+            totalItems={filteredBookings.length}
+            pageSize={pageSize}
+            onPageChange={setCurrentPage}
+          />
+        </div>
       )}
 
       {/* Manual Booking Modal */}
       <Modal
         isOpen={isModalOpen}
-        onClose={() => setIsModalOpen(false)}
+        onClose={() => {
+          setIsModalOpen(false);
+          setFormErrors({});
+        }}
         title="Tạo đơn hàng dịch vụ thủ công"
         maxWidth="lg"
         footer={
           <div className="flex justify-end gap-2">
             <Button
               variant="outline"
-              onClick={() => setIsModalOpen(false)}
+              onClick={() => {
+                setIsModalOpen(false);
+                setFormErrors({});
+              }}
               disabled={isSubmitting}
             >
               Hủy
@@ -411,26 +521,38 @@ export const BookingsPage: React.FC = () => {
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <Input
-              label="Họ và tên khách hàng *"
+              label="Họ và tên khách hàng"
               placeholder="Nguyễn Văn A"
               value={form.customerName}
-              onChange={(e) => setForm({ ...form, customerName: e.target.value })}
+              onChange={(e) => {
+                setForm({ ...form, customerName: e.target.value });
+                if (formErrors.customerName) setFormErrors({ ...formErrors, customerName: '' });
+              }}
+              error={formErrors.customerName}
               required
             />
             <Input
-              label="Số điện thoại liên hệ *"
+              label="Số điện thoại liên hệ"
               placeholder="0912345678"
               value={form.customerPhone}
-              onChange={(e) => setForm({ ...form, customerPhone: e.target.value })}
+              onChange={(e) => {
+                setForm({ ...form, customerPhone: e.target.value });
+                if (formErrors.customerPhone) setFormErrors({ ...formErrors, customerPhone: '' });
+              }}
+              error={formErrors.customerPhone}
               required
             />
           </div>
 
           <Input
-            label="Địa chỉ chi tiết nơi làm việc *"
+            label="Địa chỉ chi tiết nơi làm việc"
             placeholder="Số 45, Đường Lê Duẩn, Phường Bến Nghé, Quận 1, TP.HCM"
             value={form.addressText}
-            onChange={(e) => setForm({ ...form, addressText: e.target.value })}
+            onChange={(e) => {
+              setForm({ ...form, addressText: e.target.value });
+              if (formErrors.addressText) setFormErrors({ ...formErrors, addressText: '' });
+            }}
+            error={formErrors.addressText}
             required
           />
 

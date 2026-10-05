@@ -9,6 +9,8 @@ import { Badge } from '../../components/common/Badge';
 import { Modal } from '../../components/common/Modal';
 import { Tabs } from '../../components/common/Tabs';
 import { EmptyState } from '../../components/common/EmptyState';
+import { SkeletonTable, SkeletonCardGrid } from '../../components/common/Skeleton';
+import { Pagination } from '../../components/common/Pagination';
 import {
   Table,
   TableHeader,
@@ -42,10 +44,18 @@ export const TenantsPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
 
+  // Pagination states
+  const [currentPage, setCurrentPage] = useState(1);
+  const pageSize = 6;
+  const [appCurrentPage, setAppCurrentPage] = useState(1);
+  const appPageSize = 4;
+
   // Reject modal state
   const [rejectingAppId, setRejectingAppId] = useState<string | null>(null);
   const [rejectionReason, setRejectionReason] = useState('');
+  const [rejectionError, setRejectionError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
 
   const loadData = async () => {
     setLoading(true);
@@ -97,11 +107,7 @@ export const TenantsPage: React.FC = () => {
   const handleConfirmReject = async () => {
     if (!rejectingAppId) return;
     if (!rejectionReason.trim()) {
-      toast({
-        type: 'warning',
-        title: 'Thiếu lý do từ chối',
-        message: 'Vui lòng nhập lý do để thông báo cho đối tác.',
-      });
+      setRejectionError('Vui lòng nhập lý do từ chối để thông báo cho đối tác.');
       return;
     }
 
@@ -115,6 +121,7 @@ export const TenantsPage: React.FC = () => {
       });
       setRejectingAppId(null);
       setRejectionReason('');
+      setRejectionError(null);
       await loadData();
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Thao tác thất bại';
@@ -194,10 +201,11 @@ export const TenantsPage: React.FC = () => {
 
       {/* Main Content */}
       {loading ? (
-        <div className="py-20 flex flex-col items-center justify-center text-slate-400 gap-3 bg-white rounded-xl border border-slate-200">
-          <div className="w-8 h-8 border-4 border-brand-500 border-t-transparent rounded-full animate-spin" />
-          <p className="text-sm font-medium">Đang tải dữ liệu đối tác...</p>
-        </div>
+        activeTab === 'tenants' ? (
+          <SkeletonTable rows={6} cols={6} />
+        ) : (
+          <SkeletonCardGrid count={4} columns={2} />
+        )
       ) : activeTab === 'tenants' ? (
         <div className="space-y-4">
           {/* Search bar */}
@@ -208,16 +216,19 @@ export const TenantsPage: React.FC = () => {
                 type="text"
                 placeholder="Tìm theo tên công ty, mã tenant, tỉnh thành..."
                 value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
+                onChange={(e) => {
+                  setSearchQuery(e.target.value);
+                  setCurrentPage(1);
+                }}
                 className="w-full pl-10 pr-4 py-2 text-xs bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500"
               />
             </div>
             <span className="text-xs text-slate-500">
-              Hiển thị {filteredTenants.length} / {tenants.length} đơn vị
+              Hiển thị {Math.min(filteredTenants.length, (currentPage - 1) * pageSize + 1)} - {Math.min(filteredTenants.length, currentPage * pageSize)} / {filteredTenants.length} đơn vị
             </span>
           </div>
 
-          {/* Tenants Table */}
+          {/* Tenants Dual-Mode (Desktop Table + Mobile Cards) */}
           {filteredTenants.length === 0 ? (
             <EmptyState
               icon={<Building2 className="w-8 h-8 text-brand-400" />}
@@ -225,111 +236,212 @@ export const TenantsPage: React.FC = () => {
               description="Hãy thử nhập từ khóa tìm kiếm khác."
             />
           ) : (
-            <Table>
-              <TableHeader>
-                <tr>
-                  <TableHead>Mã &amp; Doanh nghiệp</TableHead>
-                  <TableHead>Địa bàn &amp; Thuế</TableHead>
-                  <TableHead>Gói cước / Phí sàn</TableHead>
-                  <TableHead>Quy mô thợ &amp; Đơn</TableHead>
-                  <TableHead>Trạng thái</TableHead>
-                  <TableHead align="right">Thao tác</TableHead>
-                </tr>
-              </TableHeader>
-              <TableBody>
-                {filteredTenants.map((t) => {
-                  const isImpersonatingThis = impersonatedTenantId === t.id;
-                  return (
-                    <TableRow
-                      key={t.id}
-                      className={`${t.isDefault ? 'bg-brand-50/20' : ''} ${
-                        isImpersonatingThis ? 'bg-amber-50/40' : ''
-                      }`}
-                    >
-                      <TableCell>
-                        <div className="flex items-center gap-3">
-                          <div className="w-9 h-9 rounded-lg bg-brand-100 text-brand-700 flex items-center justify-center font-bold text-xs uppercase shrink-0">
-                            {t.code.slice(0, 3)}
+            <div className="space-y-4">
+              {/* Desktop Table View (>= md) */}
+              <div className="hidden md:block">
+                <Table>
+                  <TableHeader>
+                    <tr>
+                      <TableHead>Mã &amp; Doanh nghiệp</TableHead>
+                      <TableHead>Địa bàn &amp; Thuế</TableHead>
+                      <TableHead>Gói cước / Phí sàn</TableHead>
+                      <TableHead>Quy mô thợ &amp; Đơn</TableHead>
+                      <TableHead>Trạng thái</TableHead>
+                      <TableHead align="right">Thao tác</TableHead>
+                    </tr>
+                  </TableHeader>
+                  <TableBody>
+                    {filteredTenants
+                      .slice((currentPage - 1) * pageSize, currentPage * pageSize)
+                      .map((t) => {
+                        const isImpersonatingThis = impersonatedTenantId === t.id;
+                        return (
+                          <TableRow
+                            key={t.id}
+                            className={`${t.isDefault ? 'bg-brand-50/20' : ''} ${
+                              isImpersonatingThis ? 'bg-amber-50/40' : ''
+                            }`}
+                          >
+                            <TableCell>
+                              <div className="flex items-center gap-3">
+                                <div className="w-9 h-9 rounded-lg bg-brand-100 text-brand-700 flex items-center justify-center font-bold text-xs uppercase shrink-0">
+                                  {t.code.slice(0, 3)}
+                                </div>
+                                <div>
+                                  <div className="font-semibold text-slate-900 text-xs flex items-center gap-1.5">
+                                    {t.name}
+                                    {t.isDefault && (
+                                      <Badge variant="warning" size="sm">
+                                        Mặc định Sàn
+                                      </Badge>
+                                    )}
+                                  </div>
+                                  <div className="text-[11px] text-slate-400 font-mono">
+                                    CODE: {t.code} • {t.email}
+                                  </div>
+                                </div>
+                              </div>
+                            </TableCell>
+
+                            <TableCell>
+                              <div className="text-slate-800 font-medium text-xs">{t.city}</div>
+                              <div className="text-[11px] text-slate-400">MST: {t.taxId || 'N/A'}</div>
+                            </TableCell>
+
+                            <TableCell>
+                              <div className="flex items-center gap-2">
+                                <Badge
+                                  variant={t.plan === 'ENTERPRISE' ? 'brand' : 'neutral'}
+                                  size="sm"
+                                >
+                                  {t.plan}
+                                </Badge>
+                                <span className="text-xs font-semibold text-slate-600">
+                                  {t.commissionRate}% hoa hồng
+                                </span>
+                              </div>
+                            </TableCell>
+
+                            <TableCell>
+                              <div className="flex items-center gap-4 text-xs">
+                                <span className="flex items-center gap-1 text-slate-600 font-medium">
+                                  <Users className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                                  {t.taskerCount} thợ
+                                </span>
+                                <span className="flex items-center gap-1 text-slate-600 font-medium">
+                                  <Briefcase className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                                  {t.activeOrderCount} đơn chạy
+                                </span>
+                              </div>
+                            </TableCell>
+
+                            <TableCell>
+                              <Badge
+                                variant={t.status === 'ACTIVE' ? 'success' : 'danger'}
+                                size="sm"
+                              >
+                                {t.status === 'ACTIVE' ? 'Hoạt động' : 'Tạm khóa'}
+                              </Badge>
+                            </TableCell>
+
+                            <TableCell align="right">
+                              {user?.role === 'SUPER_ADMIN' && !t.isDefault && (
+                                <Button
+                                  size="sm"
+                                  variant={isImpersonatingThis ? 'secondary' : 'outline'}
+                                  onClick={() => handleImpersonate(t.id, t.name)}
+                                  leftIcon={<LogIn className="w-3.5 h-3.5 text-amber-600" />}
+                                  className={
+                                    isImpersonatingThis
+                                      ? 'border-amber-400 bg-amber-100 text-amber-800'
+                                      : ''
+                                  }
+                                >
+                                  {isImpersonatingThis ? 'Đang đại diện' : 'Đại diện'}
+                                </Button>
+                              )}
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
+                  </TableBody>
+                </Table>
+              </div>
+
+              {/* Mobile Card View (< md) */}
+              <div className="md:hidden space-y-3">
+                {filteredTenants
+                  .slice((currentPage - 1) * pageSize, currentPage * pageSize)
+                  .map((t) => {
+                    const isImpersonatingThis = impersonatedTenantId === t.id;
+                    return (
+                      <div
+                        key={t.id}
+                        className={`p-4 rounded-xl border bg-white shadow-xs space-y-3 ${
+                          isImpersonatingThis ? 'border-amber-400 bg-amber-50/30' : 'border-slate-200'
+                        }`}
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="flex items-center gap-2.5">
+                            <div className="w-9 h-9 rounded-lg bg-brand-100 text-brand-700 flex items-center justify-center font-bold text-xs uppercase shrink-0">
+                              {t.code.slice(0, 3)}
+                            </div>
+                            <div>
+                              <h3 className="font-bold text-slate-900 text-xs flex items-center gap-1.5">
+                                {t.name}
+                                {t.isDefault && (
+                                  <Badge variant="warning" size="sm">
+                                    Sàn
+                                  </Badge>
+                                )}
+                              </h3>
+                              <div className="text-[10px] text-slate-400 font-mono mt-0.5">
+                                CODE: {t.code}
+                              </div>
+                            </div>
+                          </div>
+                          <Badge
+                            variant={t.status === 'ACTIVE' ? 'success' : 'danger'}
+                            size="sm"
+                          >
+                            {t.status === 'ACTIVE' ? 'Hoạt động' : 'Tạm khóa'}
+                          </Badge>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-2 text-[11px] bg-slate-50 p-2.5 rounded-lg">
+                          <div>
+                            <span className="text-slate-400 block">Địa bàn:</span>
+                            <span className="font-medium text-slate-800">{t.city}</span>
                           </div>
                           <div>
-                            <div className="font-semibold text-slate-900 text-xs flex items-center gap-1.5">
-                              {t.name}
-                              {t.isDefault && (
-                                <Badge variant="warning" size="sm">
-                                  Mặc định Sàn
-                                </Badge>
-                              )}
-                            </div>
-                            <div className="text-[11px] text-slate-400 font-mono">
-                              CODE: {t.code} • {t.email}
-                            </div>
+                            <span className="text-slate-400 block">Mã số thuế:</span>
+                            <span className="font-mono text-slate-800">{t.taxId || 'N/A'}</span>
+                          </div>
+                          <div>
+                            <span className="text-slate-400 block">Gói &amp; Phí sàn:</span>
+                            <span className="font-medium text-brand-600">
+                              {t.plan} ({t.commissionRate}%)
+                            </span>
+                          </div>
+                          <div>
+                            <span className="text-slate-400 block">Quy mô:</span>
+                            <span className="font-medium text-slate-800">
+                              {t.taskerCount} thợ • {t.activeOrderCount} đơn
+                            </span>
                           </div>
                         </div>
-                      </TableCell>
 
-                      <TableCell>
-                        <div className="text-slate-800 font-medium text-xs">{t.city}</div>
-                        <div className="text-[11px] text-slate-400">MST: {t.taxId || 'N/A'}</div>
-                      </TableCell>
-
-                      <TableCell>
-                        <div className="flex items-center gap-2">
-                          <Badge
-                            variant={t.plan === 'ENTERPRISE' ? 'brand' : 'neutral'}
-                            size="sm"
-                          >
-                            {t.plan}
-                          </Badge>
-                          <span className="text-xs font-semibold text-slate-600">
-                            {t.commissionRate}% hoa hồng
-                          </span>
-                        </div>
-                      </TableCell>
-
-                      <TableCell>
-                        <div className="flex items-center gap-4 text-xs">
-                          <span className="flex items-center gap-1 text-slate-600 font-medium">
-                            <Users className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                            {t.taskerCount} thợ
-                          </span>
-                          <span className="flex items-center gap-1 text-slate-600 font-medium">
-                            <Briefcase className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                            {t.activeOrderCount} đơn chạy
-                          </span>
-                        </div>
-                      </TableCell>
-
-                      <TableCell>
-                        <Badge
-                          variant={t.status === 'ACTIVE' ? 'success' : 'danger'}
-                          size="sm"
-                        >
-                          {t.status === 'ACTIVE' ? 'Hoạt động' : 'Tạm khóa'}
-                        </Badge>
-                      </TableCell>
-
-                      <TableCell align="right">
                         {user?.role === 'SUPER_ADMIN' && !t.isDefault && (
-                          <Button
-                            size="sm"
-                            variant={isImpersonatingThis ? 'secondary' : 'outline'}
-                            onClick={() => handleImpersonate(t.id, t.name)}
-                            leftIcon={<LogIn className="w-3.5 h-3.5 text-amber-600" />}
-                            className={
-                              isImpersonatingThis
-                                ? 'border-amber-400 bg-amber-100 text-amber-800'
-                                : ''
-                            }
-                          >
-                            {isImpersonatingThis ? 'Đang đại diện' : 'Đại diện'}
-                          </Button>
+                          <div className="pt-2 border-t border-slate-100 flex justify-end">
+                            <Button
+                              size="sm"
+                              variant={isImpersonatingThis ? 'secondary' : 'outline'}
+                              onClick={() => handleImpersonate(t.id, t.name)}
+                              leftIcon={<LogIn className="w-3.5 h-3.5 text-amber-600" />}
+                              className={
+                                isImpersonatingThis
+                                  ? 'border-amber-400 bg-amber-100 text-amber-800 text-xs'
+                                  : 'text-xs'
+                              }
+                            >
+                              {isImpersonatingThis ? 'Đang đại diện' : 'Đóng vai đối tác'}
+                            </Button>
+                          </div>
                         )}
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
+                      </div>
+                    );
+                  })}
+              </div>
+
+              {/* Tenants Pagination */}
+              <Pagination
+                currentPage={currentPage}
+                totalPages={Math.ceil(filteredTenants.length / pageSize)}
+                totalItems={filteredTenants.length}
+                pageSize={pageSize}
+                onPageChange={setCurrentPage}
+              />
+            </div>
           )}
         </div>
       ) : (
@@ -355,143 +467,163 @@ export const TenantsPage: React.FC = () => {
                 />
               </div>
             ) : (
-              applications.map((app) => (
-                <Card key={app.id} className="relative overflow-hidden">
-                  <div
-                    className={`absolute top-0 left-0 right-0 h-1.5 ${
-                      app.status === 'SUBMITTED'
-                        ? 'bg-amber-500'
-                        : app.status === 'APPROVED'
-                        ? 'bg-emerald-500'
-                        : 'bg-rose-500'
-                    }`}
-                  />
-                  <CardHeader className="flex flex-row items-start justify-between pb-2">
-                    <div>
-                      <CardTitle className="text-base font-bold text-slate-900">
-                        {app.businessName}
-                      </CardTitle>
-                      <p className="text-xs text-slate-400 mt-0.5">
-                        Mã đơn: {app.id} • Ngày nộp:{' '}
-                        {new Date(app.createdAt).toLocaleDateString('vi-VN')}
-                      </p>
-                    </div>
-                    <Badge
-                      variant={
+              applications
+                .slice((appCurrentPage - 1) * appPageSize, appCurrentPage * appPageSize)
+                .map((app) => (
+                  <Card key={app.id} className="relative overflow-hidden">
+                    <div
+                      className={`absolute top-0 left-0 right-0 h-1.5 ${
                         app.status === 'SUBMITTED'
-                          ? 'warning'
+                          ? 'bg-amber-500'
                           : app.status === 'APPROVED'
-                          ? 'success'
-                          : 'danger'
-                      }
-                    >
-                      {app.status === 'SUBMITTED'
-                        ? 'Chờ duyệt'
-                        : app.status === 'APPROVED'
-                        ? 'Đã duyệt'
-                        : 'Từ chối'}
-                    </Badge>
-                  </CardHeader>
+                          ? 'bg-emerald-500'
+                          : 'bg-rose-500'
+                      }`}
+                    />
+                    <CardHeader className="flex flex-row items-start justify-between pb-2">
+                      <div>
+                        <CardTitle className="text-base font-bold text-slate-900">
+                          {app.businessName}
+                        </CardTitle>
+                        <p className="text-xs text-slate-400 mt-0.5">
+                          Mã đơn: {app.id} • Ngày nộp:{' '}
+                          {new Date(app.createdAt).toLocaleDateString('vi-VN')}
+                        </p>
+                      </div>
+                      <Badge
+                        variant={
+                          app.status === 'SUBMITTED'
+                            ? 'warning'
+                            : app.status === 'APPROVED'
+                            ? 'success'
+                            : 'danger'
+                        }
+                      >
+                        {app.status === 'SUBMITTED'
+                          ? 'Chờ duyệt'
+                          : app.status === 'APPROVED'
+                          ? 'Đã duyệt'
+                          : 'Từ chối'}
+                      </Badge>
+                    </CardHeader>
 
-                  <CardContent className="space-y-3 text-sm">
-                    <div className="grid grid-cols-2 gap-2 text-xs py-2 bg-slate-50 rounded-lg p-2.5">
-                      <div>
-                        <span className="text-slate-400 block">Đại diện pháp luật:</span>
-                        <span className="font-semibold text-slate-800">{app.contactName}</span>
+                    <CardContent className="space-y-3 text-sm">
+                      <div className="grid grid-cols-2 gap-2 text-xs py-2 bg-slate-50 rounded-lg p-2.5">
+                        <div>
+                          <span className="text-slate-400 block">Đại diện pháp luật:</span>
+                          <span className="font-semibold text-slate-800">{app.contactName}</span>
+                        </div>
+                        <div>
+                          <span className="text-slate-400 block">Số điện thoại:</span>
+                          <span className="font-semibold text-slate-800">{app.contactPhone}</span>
+                        </div>
+                        <div>
+                          <span className="text-slate-400 block">Mã số thuế (MST):</span>
+                          <span className="font-mono font-medium text-slate-800">{app.taxId}</span>
+                        </div>
+                        <div>
+                          <span className="text-slate-400 block">Khu vực hoạt động:</span>
+                          <span className="font-semibold text-slate-800">{app.city}</span>
+                        </div>
                       </div>
-                      <div>
-                        <span className="text-slate-400 block">Số điện thoại:</span>
-                        <span className="font-semibold text-slate-800">{app.contactPhone}</span>
-                      </div>
-                      <div>
-                        <span className="text-slate-400 block">Mã số thuế (MST):</span>
-                        <span className="font-mono font-medium text-slate-800">{app.taxId}</span>
-                      </div>
-                      <div>
-                        <span className="text-slate-400 block">Khu vực hoạt động:</span>
-                        <span className="font-semibold text-slate-800">{app.city}</span>
-                      </div>
-                    </div>
 
-                    <div>
-                      <span className="text-xs text-slate-400 block mb-1">Dịch vụ cung cấp:</span>
-                      <div className="flex flex-wrap gap-1.5">
-                        {app.services.map((s, idx) => (
-                          <span
-                            key={idx}
-                            className="px-2 py-0.5 text-xs bg-brand-50 text-brand-700 rounded-md font-medium"
+                      <div>
+                        <span className="text-xs text-slate-400 block mb-1">Dịch vụ cung cấp:</span>
+                        <div className="flex flex-wrap gap-1.5">
+                          {app.services.map((s, idx) => (
+                            <span
+                              key={idx}
+                              className="px-2 py-0.5 text-xs bg-brand-50 text-brand-700 rounded-md font-medium"
+                            >
+                              {s}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div className="flex items-center justify-between text-xs pt-1">
+                        <span className="text-slate-500">Giấy phép ĐKKD:</span>
+                        {app.licenseDocUrl ? (
+                          <a
+                            href={app.licenseDocUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-brand-600 hover:text-brand-700 flex items-center gap-1 font-medium underline"
                           >
-                            {s}
-                          </span>
-                        ))}
+                            Xem tài liệu xác minh <ExternalLink className="w-3 h-3" />
+                          </a>
+                        ) : (
+                          <span className="text-slate-400 italic">Chưa đính kèm tài liệu</span>
+                        )}
                       </div>
-                    </div>
 
-                    <div className="flex items-center justify-between text-xs pt-1">
-                      <span className="text-slate-500">Giấy phép ĐKKD:</span>
-                      {app.licenseDocUrl ? (
-                        <a
-                          href={app.licenseDocUrl}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="text-brand-600 hover:text-brand-700 flex items-center gap-1 font-medium underline"
-                        >
-                          Xem tài liệu xác minh <ExternalLink className="w-3 h-3" />
-                        </a>
-                      ) : (
-                        <span className="text-slate-400 italic">Chưa đính kèm tài liệu</span>
+                      {app.rejectionReason && (
+                        <div className="p-2 bg-rose-50 border border-rose-200 rounded text-xs text-rose-700">
+                          <span className="font-semibold">Lý do từ chối:</span> {app.rejectionReason}
+                        </div>
                       )}
-                    </div>
 
-                    {app.rejectionReason && (
-                      <div className="p-2 bg-rose-50 border border-rose-200 rounded text-xs text-rose-700">
-                        <span className="font-semibold">Lý do từ chối:</span> {app.rejectionReason}
-                      </div>
-                    )}
-
-                    {app.status === 'SUBMITTED' && (
-                      <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => {
-                            setRejectingAppId(app.id);
-                            setRejectionReason('');
-                          }}
-                          leftIcon={<XCircle className="w-3.5 h-3.5 text-rose-500" />}
-                          disabled={isSubmitting}
-                        >
-                          Từ chối
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="primary"
-                          onClick={() => handleApprove(app.id)}
-                          leftIcon={<CheckCircle2 className="w-3.5 h-3.5" />}
-                          disabled={isSubmitting}
-                        >
-                          Phê duyệt &amp; Cấp Tenant
-                        </Button>
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
-              ))
+                      {app.status === 'SUBMITTED' && (
+                        <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => {
+                              setRejectingAppId(app.id);
+                              setRejectionReason('');
+                              setRejectionError(null);
+                            }}
+                            leftIcon={<XCircle className="w-3.5 h-3.5 text-rose-500" />}
+                            disabled={isSubmitting}
+                          >
+                            Từ chối
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="primary"
+                            onClick={() => handleApprove(app.id)}
+                            leftIcon={<CheckCircle2 className="w-3.5 h-3.5" />}
+                            disabled={isSubmitting}
+                          >
+                            Phê duyệt &amp; Cấp Tenant
+                          </Button>
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                ))
             )}
           </div>
+
+          {/* Applications Pagination */}
+          {applications.length > appPageSize && (
+            <Pagination
+              currentPage={appCurrentPage}
+              totalPages={Math.ceil(applications.length / appPageSize)}
+              totalItems={applications.length}
+              pageSize={appPageSize}
+              onPageChange={setAppCurrentPage}
+            />
+          )}
         </div>
       )}
 
-      {/* Reject Modal */}
+      {/* Reject Modal with Inline Validation */}
       <Modal
         isOpen={!!rejectingAppId}
-        onClose={() => setRejectingAppId(null)}
+        onClose={() => {
+          setRejectingAppId(null);
+          setRejectionError(null);
+        }}
         title="Từ chối hồ sơ đăng ký đối tác"
         footer={
           <div className="flex justify-end gap-2">
             <Button
               variant="outline"
-              onClick={() => setRejectingAppId(null)}
+              onClick={() => {
+                setRejectingAppId(null);
+                setRejectionError(null);
+              }}
               disabled={isSubmitting}
             >
               Hủy
@@ -512,13 +644,25 @@ export const TenantsPage: React.FC = () => {
           </p>
           <textarea
             rows={4}
-            className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500"
+            className={`w-full px-3 py-2 text-sm border rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500 ${
+              rejectionError ? 'border-rose-400 bg-rose-50/20' : 'border-slate-300'
+            }`}
             placeholder="Ví dụ: Giấy phép kinh doanh bị mờ, mã số thuế không trùng khớp trên Cổng thông tin quốc gia..."
             value={rejectionReason}
-            onChange={(e) => setRejectionReason(e.target.value)}
+            onChange={(e) => {
+              setRejectionReason(e.target.value);
+              if (rejectionError) setRejectionError(null);
+            }}
           />
+          {rejectionError && (
+            <p className="text-xs text-rose-600 flex items-center gap-1 font-medium">
+              <AlertCircle className="w-3.5 h-3.5" />
+              {rejectionError}
+            </p>
+          )}
         </div>
       </Modal>
     </div>
   );
 };
+

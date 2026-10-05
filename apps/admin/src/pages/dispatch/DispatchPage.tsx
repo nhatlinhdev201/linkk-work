@@ -7,6 +7,7 @@ import { useToast } from '../../components/feedback/ToastContext';
 import { Card, CardHeader, CardTitle, CardContent } from '../../components/common/Card';
 import { Button } from '../../components/common/Button';
 import { Badge } from '../../components/common/Badge';
+import { SkeletonDispatch } from '../../components/common/Skeleton';
 import {
   Compass,
   Radio,
@@ -58,11 +59,12 @@ export const DispatchPage: React.FC = () => {
       } else if (pendingList.length > 0 && !selectedBookingId) {
         setSelectedBookingId(pendingList[0].id);
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Lỗi tải dữ liệu điều phối';
       toast({
         type: 'error',
         title: 'Lỗi tải dữ liệu điều phối',
-        message: err.message,
+        message,
       });
     } finally {
       setLoading(false);
@@ -86,11 +88,12 @@ export const DispatchPage: React.FC = () => {
         message: `Đơn [${selectedBooking.code}] đã được giao cho đối tác ${taskerName}.`,
       });
       await loadData();
-    } catch (err: any) {
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Chỉ định thất bại';
       toast({
         type: 'error',
         title: 'Chỉ định thất bại',
-        message: err.message,
+        message,
       });
     } finally {
       setAssigningTaskId(null);
@@ -107,11 +110,12 @@ export const DispatchPage: React.FC = () => {
         message: `Hệ thống đã bắn thông báo đơn [${selectedBooking.code}] tới ứng dụng của toàn bộ thợ thuộc ${currentTenantName}.`,
       });
       await loadData();
-    } catch (err: any) {
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Bắn đơn thất bại';
       toast({
         type: 'error',
         title: 'Bắn đơn thất bại',
-        message: err.message,
+        message,
       });
     }
   };
@@ -149,11 +153,9 @@ export const DispatchPage: React.FC = () => {
       </div>
 
       {loading ? (
-        <div className="py-20 flex flex-col items-center justify-center text-slate-400 gap-3">
-          <div className="w-8 h-8 border-4 border-brand-500 border-t-transparent rounded-full animate-spin" />
-          <p className="text-sm font-medium">Đang kết nối Bàn điều phối...</p>
-        </div>
+        <SkeletonDispatch />
       ) : (
+
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
           {/* Left Column: List of Pending Bookings */}
           <div className="lg:col-span-4 space-y-3">

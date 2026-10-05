@@ -21,8 +21,9 @@ export const LoginPage: React.FC = () => {
     try {
       await loginAs(email);
       navigate('/dashboard');
-    } catch (err: any) {
-      setErrorMsg(err.message || 'Đăng nhập không thành công');
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Đăng nhập không thành công';
+      setErrorMsg(message);
     } finally {
       setLoading(false);
     }
@@ -34,8 +35,9 @@ export const LoginPage: React.FC = () => {
     try {
       await loginAs(demoEmail);
       navigate('/dashboard');
-    } catch (err: any) {
-      setErrorMsg(err.message || 'Đăng nhập không thành công');
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Đăng nhập không thành công';
+      setErrorMsg(message);
     } finally {
       setLoading(false);
     }

@@ -21,6 +21,7 @@ export const PartnerRegisterPage: React.FC = () => {
   ]);
   const [loading, setLoading] = useState(false);
   const [submittedAppId, setSubmittedAppId] = useState<string | null>(null);
+  const [formErrors, setFormErrors] = useState<Record<string, string>>({});
   const { success, error } = useToast();
 
   const handleToggleService = (srv: string) => {
@@ -33,8 +34,32 @@ export const PartnerRegisterPage: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    const errors: Record<string, string> = {};
+    if (!businessName.trim() || businessName.trim().length < 3) {
+      errors.businessName = 'Tên doanh nghiệp phải có ít nhất 3 ký tự';
+    }
+    if (!taxId.trim() || taxId.trim().length < 8) {
+      errors.taxId = 'Mã số thuế phải có từ 8 - 14 ký tự';
+    }
+    if (!contactName.trim() || contactName.trim().length < 2) {
+      errors.contactName = 'Họ tên người đại diện phải có ít nhất 2 ký tự';
+    }
+    const phoneRegex = /(84|0[3|5|7|8|9])+([0-9]{8})\b/;
+    if (!contactPhone.trim() || !phoneRegex.test(contactPhone.trim().replace(/\s+/g, ''))) {
+      errors.contactPhone = 'Số điện thoại không hợp lệ (Ví dụ: 0912345678)';
+    }
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!contactEmail.trim() || !emailRegex.test(contactEmail.trim())) {
+      errors.contactEmail = 'Email không hợp lệ (Ví dụ: contact@domain.com)';
+    }
     if (selectedServices.length === 0) {
-      error('Vui lòng chọn ít nhất 1 dịch vụ cung ứng');
+      errors.services = 'Vui lòng chọn ít nhất 1 dịch vụ cung ứng';
+    }
+
+    if (Object.keys(errors).length > 0) {
+      setFormErrors(errors);
+      error('Dữ liệu chưa hợp lệ', 'Vui lòng kiểm tra lại các trường thông tin báo lỗi.');
       return;
     }
 
@@ -51,9 +76,11 @@ export const PartnerRegisterPage: React.FC = () => {
         selectedServices,
       });
       setSubmittedAppId(app.id);
+      setFormErrors({});
       success('Nộp hồ sơ thành công!', 'Hồ sơ đã được gửi tới Ban Quản Trị LinkkWork để thẩm định.');
-    } catch (err: any) {
-      error('Lỗi nộp hồ sơ', err.message);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Lỗi nộp hồ sơ';
+      error('Lỗi nộp hồ sơ', message);
     } finally {
       setLoading(false);
     }
@@ -130,14 +157,30 @@ export const PartnerRegisterPage: React.FC = () => {
                 <Input
                   label="Tên Công ty / Hộ kinh doanh *"
                   value={businessName}
-                  onChange={(e) => setBusinessName(e.target.value)}
+                  error={formErrors.businessName}
+                  onChange={(e) => {
+                    setBusinessName(e.target.value);
+                    if (formErrors.businessName) {
+                      const updated = { ...formErrors };
+                      delete updated.businessName;
+                      setFormErrors(updated);
+                    }
+                  }}
                   placeholder="Công ty TNHH Vệ Sinh Việt"
                   required
                 />
                 <Input
                   label="Mã số thuế (MST) *"
                   value={taxId}
-                  onChange={(e) => setTaxId(e.target.value)}
+                  error={formErrors.taxId}
+                  onChange={(e) => {
+                    setTaxId(e.target.value);
+                    if (formErrors.taxId) {
+                      const updated = { ...formErrors };
+                      delete updated.taxId;
+                      setFormErrors(updated);
+                    }
+                  }}
                   placeholder="0109876543"
                   required
                 />
@@ -146,7 +189,7 @@ export const PartnerRegisterPage: React.FC = () => {
               <div className="border-b border-slate-100 pb-3 pt-2">
                 <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
                   <ShieldCheck className="w-4 h-4 text-brand-500" />
-                  <span>2. Thông tin Người đại diện & Liên hệ</span>
+                  <span>2. Thông tin Người đại diện &amp; Liên hệ</span>
                 </h3>
               </div>
 
@@ -154,7 +197,15 @@ export const PartnerRegisterPage: React.FC = () => {
                 <Input
                   label="Họ và tên Người đại diện *"
                   value={contactName}
-                  onChange={(e) => setContactName(e.target.value)}
+                  error={formErrors.contactName}
+                  onChange={(e) => {
+                    setContactName(e.target.value);
+                    if (formErrors.contactName) {
+                      const updated = { ...formErrors };
+                      delete updated.contactName;
+                      setFormErrors(updated);
+                    }
+                  }}
                   placeholder="Nguyễn Văn A"
                   required
                 />
@@ -162,7 +213,15 @@ export const PartnerRegisterPage: React.FC = () => {
                   label="Số điện thoại Hotline *"
                   type="tel"
                   value={contactPhone}
-                  onChange={(e) => setContactPhone(e.target.value)}
+                  error={formErrors.contactPhone}
+                  onChange={(e) => {
+                    setContactPhone(e.target.value);
+                    if (formErrors.contactPhone) {
+                      const updated = { ...formErrors };
+                      delete updated.contactPhone;
+                      setFormErrors(updated);
+                    }
+                  }}
                   placeholder="0912 345 678"
                   required
                 />
@@ -170,7 +229,15 @@ export const PartnerRegisterPage: React.FC = () => {
                   label="Email Doanh nghiệp *"
                   type="email"
                   value={contactEmail}
-                  onChange={(e) => setContactEmail(e.target.value)}
+                  error={formErrors.contactEmail}
+                  onChange={(e) => {
+                    setContactEmail(e.target.value);
+                    if (formErrors.contactEmail) {
+                      const updated = { ...formErrors };
+                      delete updated.contactEmail;
+                      setFormErrors(updated);
+                    }
+                  }}
                   placeholder="contact@doanhnghiep.vn"
                   required
                 />

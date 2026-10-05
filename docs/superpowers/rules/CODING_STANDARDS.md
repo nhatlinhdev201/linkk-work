@@ -6,40 +6,50 @@ Tài liệu quy định toàn bộ tiêu chuẩn viết mã, phong cách kiến 
 
 ## 1. Nguyên Tắc Cốt Lõi (Core Principles)
 
-1. **Type Strictness (Kiểu dữ liệu nghiêm ngặt - Không fake):**
+1. **Type Strictness (Kiểu dữ liệu nghiêm ngặt - Tuyệt đối không fake):**
    - **Tuyệt đối cấm sử dụng `any`** trong toàn bộ codebase TypeScript/React.
    - Mọi thực thể nghiệp vụ (Tenant, Booking, Tasker, Ledger, Service...) phải có Interface/Type rõ ràng, phản ánh chính xác trạng thái thực tế của hệ thống.
    - Sử dụng Discriminated Unions cho các trạng thái máy hữu hạn (State Machine) thay vì chuỗi string tự do.
    - Các API response, mock data, props component phải được typed tường minh.
 
-2. **UI Component Consistency (Ưu tiên Common Components):**
+2. **UI Component Consistency & Animation:**
    - **Bắt buộc tái sử dụng** bộ thư viện thành phần dùng chung (`src/components/common/`):
-     - `Button`, `Input`, `Select`, `Badge`, `Card`, `Modal`, `Switch`, `Table`, `StatCard`, `EmptyState`, `Tabs`.
+     - `Button`, `Input`, `Select`, `Badge`, `Card`, `Modal`, `Switch`, `Table`, `StatCard`, `EmptyState`, `Tabs`, `Pagination`, `Skeleton`.
    - **Không viết style HTML trần trụi:** Không tạo các nút bấm hoặc ô nhập liệu dạng `<button className="...">` hay `<input className="...">` rời rạc trên từng trang.
-   - Giữ tính nhất quán về visual hierarchy, padding, typography và semantic color palette.
+   - **Animation & Micro-interactions:** Ưu tiên hiệu ứng mượt mà (`transition-all duration-200`, `ease-in-out`), hover scales, modal backdrop blur, toast slide-in, tab indicator chuyển động êm ái.
 
-3. **Responsive-First Design:**
-   - 100% màn hình, modal, bảng biểu và form phải hiển thị hoàn hảo trên mọi kích thước thiết bị:
-     - **Mobile:** `< 640px` (Drawer menu trượt, card view hoặc scrollable table, touch target >= 44px).
-     - **Tablet:** `640px - 1024px` (Grid 2 cột, bảng dữ liệu rút gọn).
-     - **Desktop & Widescreen:** `>= 1024px` (Sidebar cố định, grid 3-4 cột, dashboard toàn cảnh).
-   - Layout shell không được phép tràn ngang (no horizontal overflow ở cấp body/main).
+3. **Skeleton Loading Rule (Bắt buộc trên 100% Trang):**
+   - **Không dùng Spinner đơn điệu:** Tuyệt đối không dùng 1 vòng quay tròn ở giữa trang làm người dùng hụt hẫng.
+   - **Mô phỏng chính xác cấu trúc:** Khi trang ở trạng thái `loading === true`, bắt buộc render khung xương (Skeleton) với hiệu ứng sóng Shimmer (`animate-pulse bg-slate-200`):
+     - Trang Dashboard: 4 StatCard Skeletons + 1 Table Skeleton.
+     - Trang Danh sách Đơn / Thợ / Dịch vụ: Filter Tabs Skeleton + Cards/Table Rows Skeletons.
+     - Trang Chi tiết / Cài đặt: Form Field Skeletons.
 
-4. **Tone Màu & Design System Standards:**
-   - Màu nhấn chủ đạo: **Cam sáng `#F97316` (`brand-500`)**.
-   - Màu trung tính: Nền chính `bg-slate-50`, card `bg-white`, đường viền `border-slate-200/90`, chữ chính `text-slate-900`, chữ phụ `text-slate-500`.
-   - Màu trạng thái nghiệp vụ (Semantic Tokens):
-     - `success`: `emerald-600` (Đơn hoàn thành, Tasker online, KYC đã xác thực).
-     - `warning`: `amber-600` (Đang chờ điều phối, đơn chưa gán thợ, cảnh báo cọc).
-     - `danger`: `rose-600` (Đơn đã hủy, tiến trình lỗi, từ chối hồ sơ).
-     - `info`: `sky-600` (Đang bắn đơn, đang di chuyển, thông tin tiến trình).
+4. **Responsive Dual-Mode Table & Pagination:**
+   - Bảng dữ liệu trên màn hình lớn (`>= md`) hiển thị dạng `<table />` chuẩn, căn gióng số liệu khoa học.
+   - Trên màn hình nhỏ điện thoại (`< md`), bảng phải tự động co giãn thông minh hoặc chuyển đổi sang cấu trúc Thẻ (Card View) để người dùng thao tác vuốt chạm dễ dàng.
+   - Mọi bảng danh sách dữ liệu (Đơn hàng, Bút toán tài chính, Danh sách thợ, Doanh nghiệp) đều phải tích hợp **Phân trang (Pagination)** chuẩn hóa (Số bản ghi/trang, Nút Trước/Sau, Trang hiện tại).
 
-5. **Realistic Mock API & Data Persistence:**
+5. **Layout Layering & Sidebar Performance:**
+   - **Render đúng một lớp duy nhất:** Tránh render thừa 2 lần Sidebar trong cây DOM khi chuyển breakpoint desktop/mobile.
+   - **Animation đóng/mở mượt mà:**
+     - Trên desktop: Hỗ trợ thu gọn (Collapsed: icon only) hoặc mở rộng (Expanded: icon + label) với transition mượt mà.
+     - Trên mobile: Menu Drawer trượt nhẹ nhàng từ bên trái (`transform -translate-x-full` sang `translate-x-0`), overlay backdrop làm mờ màn hình, tự động đóng khi bấm chuyển trang.
+
+6. **Form Layout Consistency & Validation:**
+   - Cấu trúc Form chuẩn hóa: Label rõ ràng, dấu sao đỏ `*` cho trường bắt buộc, helper text hoặc placeholder trực quan.
+   - **Validation đồng bộ ngay dưới Input:** Hiển thị thông báo lỗi màu đỏ kèm viền đỏ (`border-rose-400 focus:ring-rose-500`) ngay bên dưới trường vi phạm khi submit hoặc blur:
+     - Họ tên: >= 2 ký tự.
+     - Số điện thoại: Regex định dạng di động Việt Nam (`/(84|0[3|5|7|8|9])+([0-9]{8})\b/`).
+     - Email: Regex email chuẩn quốc tế.
+     - Số tiền / Giờ: Số dương hợp lệ (> 0).
+
+7. **Realistic Mock API & Data Persistence:**
    - Dữ liệu mock không được hardcode tĩnh trên view: phải đi qua lớp `ApiClient` handler.
    - Phải mô phỏng độ trễ mạng thực tế (`sleep(150ms - 300ms)`) để kiểm tra loading states và button loaders.
    - Dữ liệu tạo mới/sửa đổi phải persist vào `localStorage` để không bị mất khi F5 reload.
 
-6. **Error Handling & User Feedback:**
+8. **Error Handling & User Feedback:**
    - Mọi tác vụ async (tạo đơn, chỉ định thợ, duyệt đối tác, lưu cấu hình) đều phải được bọc trong khối `try/catch`.
    - Thông báo phản hồi qua `ToastContext` (`toast.success`, `toast.error`, `toast.warning`, `toast.info`).
    - Màn hình trắng hoặc crash phải được chặn bởi `ErrorBoundary`.
@@ -50,7 +60,7 @@ Tài liệu quy định toàn bộ tiêu chuẩn viết mã, phong cách kiến 
 
 | Đối tượng | Quy chuẩn | Ví dụ |
 | :--- | :--- | :--- |
-| **Component React** | PascalCase, 1 component chính/file | `BookingsPage.tsx`, `StatCard.tsx` |
+| **Component React** | PascalCase, 1 component chính/file | `BookingsPage.tsx`, `StatCard.tsx`, `Pagination.tsx` |
 | **Hook Custom** | camelCase bắt đầu bằng `use` | `useAuth.ts`, `useToast.ts` |
 | **File tiện ích / API** | kebab-case hoặc camelCase | `client.ts`, `mock-data.ts` |
 | **Interface / Type** | PascalCase | `Booking`, `Tasker`, `WalletTransaction` |
@@ -62,7 +72,9 @@ Tài liệu quy định toàn bộ tiêu chuẩn viết mã, phong cách kiến 
 ## 3. Checklist Trước Khi Hoàn Tất Bất Kỳ Tính Năng Nào
 
 - [ ] Toàn bộ Types được khai báo chính xác trong `types/index.ts`, không còn `any`.
-- [ ] Sử dụng các Common Components (`StatCard`, `EmptyState`, `Table`, `Badge`, `Button`, `Modal`).
-- [ ] Giao diện hỗ trợ đầy đủ responsive trên mobile breakpoint (`< 640px`).
+- [ ] Bắt buộc có Skeleton Loading đúng layout khi `loading === true`.
+- [ ] Bảng danh sách có Phân trang (Pagination) và hiển thị thân thiện trên mobile.
+- [ ] Form có validation logic rõ ràng, hiển thị lỗi màu đỏ dưới input.
+- [ ] Sidebar đóng mở có animation mượt mà, không bị duplicate DOM node.
 - [ ] Đã thêm Toast feedback cho cả 2 trường hợp thành công và thất bại.
 - [ ] Chạy `npm run build` đạt 0 lỗi TypeScript và 0 cảnh báo nghiêm trọng.

@@ -12,6 +12,8 @@ import { Input } from '../../components/common/Input';
 import { Select } from '../../components/common/Select';
 import { Tabs } from '../../components/common/Tabs';
 import { EmptyState } from '../../components/common/EmptyState';
+import { SkeletonCardGrid } from '../../components/common/Skeleton';
+import { Pagination } from '../../components/common/Pagination';
 import {
   Sparkles,
   PlusCircle,
@@ -32,10 +34,13 @@ export const ServicesPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [selectedCategory, setSelectedCategory] = useState<string>('ALL');
   const [searchQuery, setSearchQuery] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
+  const pageSize = 6;
 
   // Create Service Modal
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [formErrors, setFormErrors] = useState<Record<string, string>>({});
   const [form, setForm] = useState({
     name: '',
     categoryId: 'cat-cleaning',
@@ -92,13 +97,25 @@ export const ServicesPage: React.FC = () => {
     }
   };
 
+  const validateForm = (): boolean => {
+    const errors: Record<string, string> = {};
+    if (!form.name.trim() || form.name.trim().length < 2) {
+      errors.name = 'Tên dịch vụ phải có ít nhất 2 ký tự';
+    }
+    if (form.pricingModel !== 'BIDDING' && form.basePrice <= 0) {
+      errors.basePrice = 'Đơn giá cơ bản phải lớn hơn 0 đ';
+    }
+    setFormErrors(errors);
+    return Object.keys(errors).length === 0;
+  };
+
   const handleCreateService = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!form.name.trim()) {
+    if (!validateForm()) {
       toast({
         type: 'warning',
-        title: 'Thiếu tên dịch vụ',
-        message: 'Vui lòng nhập tên dịch vụ.',
+        title: 'Dữ liệu chưa hợp lệ',
+        message: 'Vui lòng kiểm tra lại thông tin báo lỗi trên form.',
       });
       return;
     }
@@ -236,10 +253,7 @@ export const ServicesPage: React.FC = () => {
 
       {/* Services Grid */}
       {loading ? (
-        <div className="py-20 flex flex-col items-center justify-center text-slate-400 gap-3">
-          <div className="w-8 h-8 border-4 border-brand-500 border-t-transparent rounded-full animate-spin" />
-          <p className="text-sm font-medium">Đang tải danh mục dịch vụ...</p>
-        </div>
+        <SkeletonCardGrid count={6} />
       ) : filteredServices.length === 0 ? (
         <EmptyState
           icon={<Layers className="w-8 h-8 text-brand-400" />}
@@ -256,126 +270,145 @@ export const ServicesPage: React.FC = () => {
           }
         />
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {filteredServices.map((service) => {
-            const isHourly = service.pricingModel === 'HOURLY';
-            const isBidding = service.pricingModel === 'BIDDING';
+        <div className="space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {filteredServices
+              .slice((currentPage - 1) * pageSize, currentPage * pageSize)
+              .map((service) => {
+                const isHourly = service.pricingModel === 'HOURLY';
+                const isBidding = service.pricingModel === 'BIDDING';
 
-            return (
-              <Card
-                key={service.id}
-                className={`relative overflow-hidden transition-all duration-150 ${
-                  service.isActive
-                    ? 'border-slate-200'
-                    : 'border-slate-200 bg-slate-50/70 opacity-80'
-                }`}
-              >
-                <div
-                  className={`absolute top-0 left-0 right-0 h-1.5 ${
-                    service.isActive ? 'bg-brand-500' : 'bg-slate-300'
-                  }`}
-                />
+                return (
+                  <Card
+                    key={service.id}
+                    className={`relative overflow-hidden transition-all duration-150 ${
+                      service.isActive
+                        ? 'border-slate-200'
+                        : 'border-slate-200 bg-slate-50/70 opacity-80'
+                    }`}
+                  >
+                    <div
+                      className={`absolute top-0 left-0 right-0 h-1.5 ${
+                        service.isActive ? 'bg-brand-500' : 'bg-slate-300'
+                      }`}
+                    />
 
-                <CardHeader className="flex flex-row items-start justify-between pb-2 gap-2">
-                  <div className="space-y-1">
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-brand-600 bg-brand-50 px-2 py-0.5 rounded-full inline-block">
-                      {service.categoryName}
-                    </span>
-                    <CardTitle className="text-base font-bold text-slate-900 leading-snug">
-                      {service.name}
-                    </CardTitle>
-                  </div>
-
-                  <Switch
-                    checked={service.isActive}
-                    onChange={() => handleToggleActive(service)}
-                  />
-                </CardHeader>
-
-                <CardContent className="space-y-3.5 pt-1 text-xs">
-                  <p className="text-slate-500 leading-relaxed line-clamp-2">
-                    {service.description}
-                  </p>
-
-                  {/* Pricing Box */}
-                  <div className="p-3 bg-slate-50 rounded-xl flex items-center justify-between border border-slate-100">
-                    <div>
-                      <span className="text-[10px] text-slate-400 block font-medium">
-                        Cơ chế định giá:
-                      </span>
-                      <Badge
-                        variant={isHourly ? 'brand' : isBidding ? 'warning' : 'info'}
-                        size="sm"
-                      >
-                        {isHourly
-                          ? 'Theo giờ làm việc'
-                          : isBidding
-                          ? 'Đấu thầu báo giá'
-                          : 'Theo đơn vị cố định'}
-                      </Badge>
-                    </div>
-
-                    <div className="text-right">
-                      <span className="text-[10px] text-slate-400 block font-medium">
-                        Mức giá cơ bản:
-                      </span>
-                      <span className="text-base font-black text-slate-900">
-                        {isBidding
-                          ? 'Khảo sát báo giá'
-                          : `${service.basePrice.toLocaleString('vi-VN')} đ / ${
-                              service.unitLabel || 'lần'
-                            }`}
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* Add-ons list */}
-                  {service.addons && service.addons.length > 0 && (
-                    <div className="space-y-1.5">
-                      <span className="text-[11px] font-semibold text-slate-700 flex items-center gap-1">
-                        <Tag className="w-3 h-3 text-brand-500" />
-                        Dịch vụ & Dụng cụ bán kèm (+Add-ons):
-                      </span>
+                    <CardHeader className="flex flex-row items-start justify-between pb-2 gap-2">
                       <div className="space-y-1">
-                        {service.addons.map((addon) => (
-                          <div
-                            key={addon.id}
-                            className="flex items-center justify-between py-1 px-2 rounded-lg bg-orange-50/50 text-[11px] text-slate-700"
-                          >
-                            <span className="truncate max-w-[190px]">{addon.name}</span>
-                            <span className="font-bold text-brand-700 shrink-0">
-                              +{addon.price.toLocaleString('vi-VN')} đ
-                            </span>
-                          </div>
-                        ))}
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-brand-600 bg-brand-50 px-2 py-0.5 rounded-full inline-block">
+                          {service.categoryName}
+                        </span>
+                        <CardTitle className="text-base font-bold text-slate-900 leading-snug">
+                          {service.name}
+                        </CardTitle>
                       </div>
-                    </div>
-                  )}
 
-                  <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-400">
-                    <span>Mã: {service.id}</span>
-                    <span className="font-medium text-slate-600">
-                      {service.tenantId ? 'Dịch vụ riêng' : 'Toàn sàn LinkkWork'}
-                    </span>
-                  </div>
-                </CardContent>
-              </Card>
-            );
-          })}
+                      <Switch
+                        checked={service.isActive}
+                        onChange={() => handleToggleActive(service)}
+                      />
+                    </CardHeader>
+
+                    <CardContent className="space-y-3.5 pt-1 text-xs">
+                      <p className="text-slate-500 leading-relaxed line-clamp-2">
+                        {service.description}
+                      </p>
+
+                      {/* Pricing Box */}
+                      <div className="p-3 bg-slate-50 rounded-xl flex items-center justify-between border border-slate-100">
+                        <div>
+                          <span className="text-[10px] text-slate-400 block font-medium">
+                            Cơ chế định giá:
+                          </span>
+                          <Badge
+                            variant={isHourly ? 'brand' : isBidding ? 'warning' : 'info'}
+                            size="sm"
+                          >
+                            {isHourly
+                              ? 'Theo giờ làm việc'
+                              : isBidding
+                              ? 'Đấu thầu báo giá'
+                              : 'Theo đơn vị cố định'}
+                          </Badge>
+                        </div>
+
+                        <div className="text-right">
+                          <span className="text-[10px] text-slate-400 block font-medium">
+                            Mức giá cơ bản:
+                          </span>
+                          <span className="text-base font-black text-slate-900">
+                            {isBidding
+                              ? 'Khảo sát báo giá'
+                              : `${service.basePrice.toLocaleString('vi-VN')} đ / ${
+                                  service.unitLabel || 'lần'
+                                }`}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Add-ons list */}
+                      {service.addons && service.addons.length > 0 && (
+                        <div className="space-y-1.5">
+                          <span className="text-[11px] font-semibold text-slate-700 flex items-center gap-1">
+                            <Tag className="w-3 h-3 text-brand-500" />
+                            Dịch vụ & Dụng cụ bán kèm (+Add-ons):
+                          </span>
+                          <div className="space-y-1">
+                            {service.addons.map((addon) => (
+                              <div
+                                key={addon.id}
+                                className="flex items-center justify-between py-1 px-2 rounded-lg bg-orange-50/50 text-[11px] text-slate-700"
+                              >
+                                <span className="truncate max-w-[190px]">{addon.name}</span>
+                                <span className="font-bold text-brand-700 shrink-0">
+                                  +{addon.price.toLocaleString('vi-VN')} đ
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-400">
+                        <span>Mã: {service.id}</span>
+                        <span className="font-medium text-slate-600">
+                          {service.tenantId ? 'Dịch vụ riêng' : 'Toàn sàn LinkkWork'}
+                        </span>
+                      </div>
+                    </CardContent>
+                  </Card>
+                );
+              })}
+          </div>
+
+          {/* Pagination */}
+          <Pagination
+            currentPage={currentPage}
+            totalPages={Math.ceil(filteredServices.length / pageSize)}
+            totalItems={filteredServices.length}
+            pageSize={pageSize}
+            onPageChange={setCurrentPage}
+          />
         </div>
       )}
 
       {/* Create Service Modal */}
       <Modal
         isOpen={isModalOpen}
-        onClose={() => setIsModalOpen(false)}
+        onClose={() => {
+          setIsModalOpen(false);
+          setFormErrors({});
+        }}
         title="Thêm Dịch Vụ Mới Vào Danh Mục"
         maxWidth="lg"
         footer={
           <div className="flex justify-end gap-2">
             <Button
               variant="outline"
-              onClick={() => setIsModalOpen(false)}
+              onClick={() => {
+                setIsModalOpen(false);
+                setFormErrors({});
+              }}
               disabled={isSubmitting}
             >
               Hủy
@@ -392,10 +425,14 @@ export const ServicesPage: React.FC = () => {
       >
         <form onSubmit={handleCreateService} className="space-y-4">
           <Input
-            label="Tên dịch vụ *"
+            label="Tên dịch vụ"
             placeholder="Ví dụ: Vệ sinh máy giặt lồng đứng"
             value={form.name}
-            onChange={(e) => setForm({ ...form, name: e.target.value })}
+            onChange={(e) => {
+              setForm({ ...form, name: e.target.value });
+              if (formErrors.name) setFormErrors({ ...formErrors, name: '' });
+            }}
+            error={formErrors.name}
             required
           />
 

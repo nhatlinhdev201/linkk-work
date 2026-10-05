@@ -10,6 +10,7 @@ import { Switch } from '../../components/common/Switch';
 import { Modal } from '../../components/common/Modal';
 import { Input } from '../../components/common/Input';
 import { StatCard } from '../../components/common/StatCard';
+import { SkeletonStatCards, SkeletonCardGrid } from '../../components/common/Skeleton';
 import {
   Cpu,
   Play,
@@ -34,7 +35,9 @@ export const CronPage: React.FC = () => {
   // Settings modal
   const [editingJob, setEditingJob] = useState<CronJobItem | null>(null);
   const [paramState, setParamState] = useState<Record<string, string | number | boolean>>({});
+  const [paramErrors, setParamErrors] = useState<Record<string, string>>({});
   const [isSaving, setIsSaving] = useState(false);
+
 
   const loadJobs = async () => {
     setLoading(true);
@@ -103,10 +106,31 @@ export const CronPage: React.FC = () => {
   const handleOpenSettings = (job: CronJobItem) => {
     setEditingJob(job);
     setParamState(job.params || {});
+    setParamErrors({});
   };
 
   const handleSaveParams = async () => {
     if (!editingJob) return;
+
+    // Validate params
+    const errors: Record<string, string> = {};
+    Object.keys(editingJob.params || {}).forEach((key) => {
+      const isNum = typeof editingJob.params[key] === 'number';
+      const val = paramState[key];
+      if (isNum) {
+        if (val === '' || val === undefined || isNaN(Number(val)) || Number(val) <= 0) {
+          errors[key] = 'Giá trị tham số phải là số dương lớn hơn 0';
+        }
+      } else if (!String(val ?? '').trim()) {
+        errors[key] = 'Tham số này không được để trống';
+      }
+    });
+
+    if (Object.keys(errors).length > 0) {
+      setParamErrors(errors);
+      return;
+    }
+
     try {
       setIsSaving(true);
       await api.updateCronJobParams(editingJob.jobName, paramState);
@@ -116,6 +140,7 @@ export const CronPage: React.FC = () => {
         message: `Đã cập nhật cấu hình cho tiến trình [${editingJob.jobName}].`,
       });
       setEditingJob(null);
+      setParamErrors({});
       await loadJobs();
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Lưu cấu hình thất bại';
@@ -169,38 +194,39 @@ export const CronPage: React.FC = () => {
       </div>
 
       {/* Overview StatCards */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <StatCard
-          title="Tổng số tiến trình"
-          value={cronJobs.length}
-          icon={<Server className="w-5 h-5 text-slate-600" />}
-          iconBgColor="bg-slate-100 text-slate-700 border border-slate-200"
-          description="Workers nền tảng"
-        />
+      {loading ? (
+        <SkeletonStatCards count={3} />
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <StatCard
+            title="Tổng số tiến trình"
+            value={cronJobs.length}
+            icon={<Server className="w-5 h-5 text-slate-600" />}
+            iconBgColor="bg-slate-100 text-slate-700 border border-slate-200"
+            description="Workers nền tảng"
+          />
 
-        <StatCard
-          title="Đang hoạt động"
-          value={activeCount}
-          icon={<Activity className="w-5 h-5 text-emerald-600 animate-pulse" />}
-          iconBgColor="bg-emerald-50 text-emerald-600 border border-emerald-100"
-          description="Sẵn sàng kích hoạt theo lịch"
-        />
+          <StatCard
+            title="Đang hoạt động"
+            value={activeCount}
+            icon={<Activity className="w-5 h-5 text-emerald-600 animate-pulse" />}
+            iconBgColor="bg-emerald-50 text-emerald-600 border border-emerald-100"
+            description="Sẵn sàng kích hoạt theo lịch"
+          />
 
-        <StatCard
-          title="Đang tạm dừng"
-          value={pausedCount}
-          icon={<AlertTriangle className="w-5 h-5 text-amber-600" />}
-          iconBgColor="bg-amber-50 text-amber-600 border border-amber-100"
-          description="Đã tắt thủ công bởi Admin"
-        />
-      </div>
+          <StatCard
+            title="Đang tạm dừng"
+            value={pausedCount}
+            icon={<AlertTriangle className="w-5 h-5 text-amber-600" />}
+            iconBgColor="bg-amber-50 text-amber-600 border border-amber-100"
+            description="Đã tắt thủ công bởi Admin"
+          />
+        </div>
+      )}
 
       {/* Cron Jobs Grid */}
       {loading ? (
-        <div className="py-20 flex flex-col items-center justify-center text-slate-400 gap-3 bg-white rounded-xl border border-slate-200">
-          <div className="w-8 h-8 border-4 border-brand-500 border-t-transparent rounded-full animate-spin" />
-          <p className="text-sm font-medium">Đang tải trạng thái tiến trình...</p>
-        </div>
+        <SkeletonCardGrid count={4} columns={2} />
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
           {cronJobs.map((job) => {
@@ -357,6 +383,8 @@ export const CronPage: React.FC = () => {
                 label={paramKey}
                 type={typeof editingJob.params[paramKey] === 'number' ? 'number' : 'text'}
                 value={String(paramState[paramKey] ?? '')}
+                error={paramErrors[paramKey]}
+                required
                 onChange={(e) => {
                   const val =
                     typeof editingJob.params[paramKey] === 'number'
@@ -366,6 +394,11 @@ export const CronPage: React.FC = () => {
                     ...paramState,
                     [paramKey]: val,
                   });
+                  if (paramErrors[paramKey]) {
+                    const newErr = { ...paramErrors };
+                    delete newErr[paramKey];
+                    setParamErrors(newErr);
+                  }
                 }}
               />
             ))}
