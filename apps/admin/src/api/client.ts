@@ -42,8 +42,65 @@ export const STORAGE_KEYS = {
   SETTINGS: 'linkkwork_admin_tenant_settings',
 };
 
+export interface BackendTenantResponse {
+  id: string;
+  code: string;
+  name: string;
+  taxId?: string | null;
+  phone?: string | null;
+  email?: string | null;
+  city?: string | null;
+  status: Tenant['status'];
+  plan?: 'BASIC' | 'PRO' | 'ENTERPRISE';
+  commissionRate?: number;
+  isDefault?: boolean;
+  taskerCount?: number;
+  bookingCount?: number;
+  userCount?: number;
+  createdAt?: string;
+  updatedAt?: string;
+  _count?: {
+    taskerProfiles?: number;
+    originBookings?: number;
+    servicingBookings?: number;
+    users?: number;
+  };
+}
+
+export interface BackendUserResponse {
+  id: string;
+  name: string;
+  email: string;
+  role: User['role'];
+  isSuperAdmin?: boolean;
+  tenantId?: string | null;
+  resolvedTenantId?: string | null;
+  status?: string;
+  avatarUrl?: string | null;
+  tenant?: {
+    id: string;
+    code: string;
+    name: string;
+  } | null;
+}
+
+export interface AuthResponse {
+  accessToken: string;
+  refreshToken: string;
+  user: BackendUserResponse;
+}
+
+type GlobalWithStorageAndProcess = {
+  localStorage?: Storage;
+  process?: { env?: Record<string, string | undefined> };
+};
+
+type ImportMetaWithEnv = {
+  env?: { VITE_API_URL?: string };
+};
+
 const memStore = new Map<string, string>();
-const memoryStorage = {
+const memoryStorage: Storage = {
   getItem: (key: string): string | null => memStore.get(key) ?? null,
   setItem: (key: string, value: string): void => {
     memStore.set(key, String(value));
@@ -60,27 +117,31 @@ const memoryStorage = {
   },
 };
 
-if (typeof globalThis !== 'undefined' && typeof (globalThis as any).localStorage === 'undefined') {
-  (globalThis as any).localStorage = memoryStorage;
+if (
+  typeof globalThis !== 'undefined' &&
+  typeof (globalThis as unknown as GlobalWithStorageAndProcess).localStorage === 'undefined'
+) {
+  (globalThis as unknown as GlobalWithStorageAndProcess).localStorage = memoryStorage;
 }
 
-function getStorage() {
+function getStorage(): Storage {
   if (typeof window !== 'undefined' && window.localStorage) {
     return window.localStorage;
   }
-  if (typeof globalThis !== 'undefined' && (globalThis as any).localStorage) {
-    return (globalThis as any).localStorage;
+  const globalStorage = (globalThis as unknown as GlobalWithStorageAndProcess).localStorage;
+  if (globalStorage) {
+    return globalStorage;
   }
   return memoryStorage;
 }
 
 const getBaseApiUrl = (): string => {
   try {
-    const metaEnv = (import.meta as any)?.env?.VITE_API_URL;
+    const metaEnv = (import.meta as unknown as ImportMetaWithEnv)?.env?.VITE_API_URL;
     if (metaEnv) return metaEnv;
   } catch {}
   try {
-    const procEnv = (globalThis as any)?.process?.env?.VITE_API_URL;
+    const procEnv = (globalThis as unknown as GlobalWithStorageAndProcess)?.process?.env?.VITE_API_URL;
     if (procEnv) return procEnv;
   } catch {}
   return 'http://localhost:3000/api/v1';
@@ -111,6 +172,7 @@ const sleep = (ms = 200) => new Promise((resolve) => setTimeout(resolve, ms));
 export class ApiClient {
   private static instance: ApiClient;
   private readonly baseUrl: string;
+  private refreshPromise: Promise<boolean> | null = null;
 
   private constructor() {
     this.baseUrl = getBaseApiUrl();
@@ -150,29 +212,65 @@ export class ApiClient {
     return ApiClient.instance;
   }
 
-  private getAuthHeaders(includeImpersonation = true): Record<string, string> {
-    const headers: Record<string, string> = {
-      'Content-Type': 'application/json',
-    };
-    const token = getStorage().getItem(STORAGE_KEYS.ACCESS_TOKEN);
-    if (token) {
-      headers['Authorization'] = `Bearer ${token}`;
-    }
-    if (includeImpersonation) {
-      const impId = getStorage().getItem(STORAGE_KEYS.IMPERSONATED_TENANT_ID);
-      if (impId) {
-        headers['X-Impersonate-Tenant-Id'] = impId;
-      }
-    }
-    return headers;
-  }
-
   private clearSession(): void {
     const storage = getStorage();
     storage.removeItem(STORAGE_KEYS.ACCESS_TOKEN);
     storage.removeItem(STORAGE_KEYS.REFRESH_TOKEN);
     storage.removeItem(STORAGE_KEYS.CURRENT_USER);
     storage.removeItem(STORAGE_KEYS.IMPERSONATED_TENANT_ID);
+  }
+
+  private async fetchWithAuth<T>(
+    endpoint: string,
+    options: RequestInit = {},
+    includeImpersonation = true
+  ): Promise<T> {
+    const url = endpoint.startsWith('http')
+      ? endpoint
+      : `${this.baseUrl}${endpoint.startsWith('/') ? endpoint : `/${endpoint}`}`;
+
+    const headers = new Headers(options.headers);
+    if (!headers.has('Content-Type') && !(options.body instanceof FormData)) {
+      headers.set('Content-Type', 'application/json');
+    }
+
+    const token = getStorage().getItem(STORAGE_KEYS.ACCESS_TOKEN);
+    if (token) {
+      headers.set('Authorization', `Bearer ${token}`);
+    }
+    if (includeImpersonation) {
+      const impId = getStorage().getItem(STORAGE_KEYS.IMPERSONATED_TENANT_ID);
+      if (impId) {
+        headers.set('X-Impersonate-Tenant-Id', impId);
+      }
+    }
+
+    let res = await fetch(url, { ...options, headers });
+
+    if (res.status === 401) {
+      const refreshed = await this.refreshToken();
+      if (refreshed) {
+        const newToken = getStorage().getItem(STORAGE_KEYS.ACCESS_TOKEN);
+        if (newToken) {
+          headers.set('Authorization', `Bearer ${newToken}`);
+        }
+        res = await fetch(url, { ...options, headers });
+      } else {
+        this.clearSession();
+        throw new Error('Phiên làm việc đã hết hạn. Vui lòng đăng nhập lại.');
+      }
+    }
+
+    if (!res.ok) {
+      const errorData = (await res.json().catch(() => ({}))) as { message?: string | string[] };
+      const rawMsg = errorData.message || `Yêu cầu thất bại (${res.status})`;
+      const errorMsg = Array.isArray(rawMsg) ? rawMsg.join(', ') : rawMsg;
+      const err = new Error(errorMsg) as Error & { status?: number };
+      err.status = res.status;
+      throw err;
+    }
+
+    return (await res.json()) as T;
   }
 
   // --- AUTHENTICATION & SESSIONS ---
@@ -202,16 +300,16 @@ export class ApiClient {
       });
 
       if (!res.ok) {
-        const errorData = await res.json().catch(() => ({}));
-        const message =
+        const errorData = (await res.json().catch(() => ({}))) as { message?: string | string[] };
+        const rawMsg =
           errorData.message ||
           (res.status === 401
             ? 'Tài khoản hoặc mật khẩu không chính xác.'
             : `Đăng nhập thất bại (${res.status})`);
-        throw new Error(Array.isArray(message) ? message.join(', ') : message);
+        throw new Error(Array.isArray(rawMsg) ? rawMsg.join(', ') : rawMsg);
       }
 
-      const data = await res.json();
+      const data = (await res.json()) as AuthResponse;
       const storage = getStorage();
       storage.setItem(STORAGE_KEYS.ACCESS_TOKEN, data.accessToken);
       storage.setItem(STORAGE_KEYS.REFRESH_TOKEN, data.refreshToken);
@@ -232,7 +330,7 @@ export class ApiClient {
 
       saveData(STORAGE_KEYS.CURRENT_USER, normalizedUser);
       return normalizedUser;
-    } catch (err: any) {
+    } catch (err: unknown) {
       if (
         err instanceof TypeError &&
         (err.message.toLowerCase().includes('fetch') || err.message.toLowerCase().includes('failed to fetch'))
@@ -246,46 +344,56 @@ export class ApiClient {
   }
 
   async refreshToken(): Promise<boolean> {
-    const storage = getStorage();
-    const refreshToken = storage.getItem(STORAGE_KEYS.REFRESH_TOKEN);
-    if (!refreshToken) return false;
-
-    try {
-      const res = await fetch(`${this.baseUrl}/auth/refresh`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ refreshToken }),
-      });
-
-      if (!res.ok) {
-        return false;
-      }
-
-      const data = await res.json();
-      if (data.accessToken && data.refreshToken) {
-        storage.setItem(STORAGE_KEYS.ACCESS_TOKEN, data.accessToken);
-        storage.setItem(STORAGE_KEYS.REFRESH_TOKEN, data.refreshToken);
-        if (data.user) {
-          const rawUser = data.user;
-          const normalizedUser: User = {
-            id: rawUser.id,
-            name: rawUser.name,
-            email: rawUser.email,
-            role: rawUser.role,
-            isSuperAdmin: !!rawUser.isSuperAdmin,
-            tenantId: rawUser.tenantId || (rawUser.tenant && rawUser.tenant.id) || '',
-            tenantName: rawUser.tenant?.name || 'Nền tảng LinkkWork',
-            status: rawUser.status,
-            avatarUrl: rawUser.avatarUrl || undefined,
-          };
-          saveData(STORAGE_KEYS.CURRENT_USER, normalizedUser);
-        }
-        return true;
-      }
-      return false;
-    } catch {
-      return false;
+    if (this.refreshPromise) {
+      return this.refreshPromise;
     }
+
+    this.refreshPromise = (async () => {
+      const storage = getStorage();
+      const refreshToken = storage.getItem(STORAGE_KEYS.REFRESH_TOKEN);
+      if (!refreshToken) return false;
+
+      try {
+        const res = await fetch(`${this.baseUrl}/auth/refresh`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ refreshToken }),
+        });
+
+        if (!res.ok) {
+          return false;
+        }
+
+        const data = (await res.json()) as AuthResponse;
+        if (data.accessToken && data.refreshToken) {
+          storage.setItem(STORAGE_KEYS.ACCESS_TOKEN, data.accessToken);
+          storage.setItem(STORAGE_KEYS.REFRESH_TOKEN, data.refreshToken);
+          if (data.user) {
+            const rawUser = data.user;
+            const normalizedUser: User = {
+              id: rawUser.id,
+              name: rawUser.name,
+              email: rawUser.email,
+              role: rawUser.role,
+              isSuperAdmin: !!rawUser.isSuperAdmin,
+              tenantId: rawUser.tenantId || (rawUser.tenant && rawUser.tenant.id) || '',
+              tenantName: rawUser.tenant?.name || 'Nền tảng LinkkWork',
+              status: rawUser.status,
+              avatarUrl: rawUser.avatarUrl || undefined,
+            };
+            saveData(STORAGE_KEYS.CURRENT_USER, normalizedUser);
+          }
+          return true;
+        }
+        return false;
+      } catch {
+        return false;
+      } finally {
+        this.refreshPromise = null;
+      }
+    })();
+
+    return this.refreshPromise;
   }
 
   async getCurrentUser(): Promise<User | null> {
@@ -296,33 +404,7 @@ export class ApiClient {
     }
 
     try {
-      let res = await fetch(`${this.baseUrl}/auth/me`, {
-        method: 'GET',
-        headers: this.getAuthHeaders(true),
-      });
-
-      if (res.status === 401) {
-        const refreshed = await this.refreshToken();
-        if (refreshed) {
-          res = await fetch(`${this.baseUrl}/auth/me`, {
-            method: 'GET',
-            headers: this.getAuthHeaders(true),
-          });
-        } else {
-          this.clearSession();
-          return null;
-        }
-      }
-
-      if (!res.ok) {
-        if (res.status === 401 || res.status === 403) {
-          this.clearSession();
-          return null;
-        }
-        return loadData<User | null>(STORAGE_KEYS.CURRENT_USER, null);
-      }
-
-      const data = await res.json();
+      const data = await this.fetchWithAuth<BackendUserResponse>('/auth/me', { method: 'GET' }, true);
       const normalizedUser: User = {
         id: data.id,
         name: data.name,
@@ -337,8 +419,19 @@ export class ApiClient {
 
       saveData(STORAGE_KEYS.CURRENT_USER, normalizedUser);
       return normalizedUser;
-    } catch (err) {
-      console.warn('Network error during getCurrentUser:', err);
+    } catch (err: unknown) {
+      if (err instanceof Error && err.message.includes('Phiên làm việc đã hết hạn')) {
+        return null;
+      }
+      const errStatus =
+        typeof err === 'object' && err !== null && 'status' in err
+          ? (err as { status?: number }).status
+          : undefined;
+      if (errStatus === 401 || errStatus === 403) {
+        this.clearSession();
+        return null;
+      }
+      console.warn('Network error during getCurrentUser:', err instanceof Error ? err.message : String(err));
       return loadData<User | null>(STORAGE_KEYS.CURRENT_USER, null);
     }
   }
@@ -358,8 +451,8 @@ export class ApiClient {
           },
           body: JSON.stringify({ refreshToken: refreshToken || undefined }),
         });
-      } catch (err) {
-        console.warn('Logout API call failed:', err);
+      } catch (err: unknown) {
+        console.warn('Logout API call failed:', err instanceof Error ? err.message : String(err));
       }
     }
 
@@ -375,22 +468,12 @@ export class ApiClient {
     }
 
     try {
-      const res = await fetch(`${this.baseUrl}/tenants`, {
-        method: 'GET',
-        headers: this.getAuthHeaders(false),
-      });
-
-      if (!res.ok) {
-        console.warn(`Failed to fetch tenants from API (${res.status}), fallback to cached tenants`);
-        return loadData<Tenant[]>(STORAGE_KEYS.TENANTS, INITIAL_TENANTS);
-      }
-
-      const items = await res.json();
+      const items = await this.fetchWithAuth<BackendTenantResponse[]>('/tenants', { method: 'GET' }, false);
       if (!Array.isArray(items)) {
         return loadData<Tenant[]>(STORAGE_KEYS.TENANTS, INITIAL_TENANTS);
       }
 
-      const tenants: Tenant[] = items.map((t: any) => ({
+      const tenants: Tenant[] = items.map((t) => ({
         id: t.id,
         code: t.code,
         name: t.name,
@@ -411,8 +494,11 @@ export class ApiClient {
 
       saveData(STORAGE_KEYS.TENANTS, tenants);
       return tenants;
-    } catch (err) {
-      console.warn('Network error fetching tenants, fallback to cache:', err);
+    } catch (err: unknown) {
+      console.warn(
+        'Network error fetching tenants, fallback to cache:',
+        err instanceof Error ? err.message : String(err)
+      );
       return loadData<Tenant[]>(STORAGE_KEYS.TENANTS, INITIAL_TENANTS);
     }
   }
@@ -422,34 +508,27 @@ export class ApiClient {
     const token = storage.getItem(STORAGE_KEYS.ACCESS_TOKEN);
     if (token) {
       try {
-        const res = await fetch(`${this.baseUrl}/tenants/${id}`, {
-          method: 'GET',
-          headers: this.getAuthHeaders(true),
-        });
-
-        if (res.ok) {
-          const t = await res.json();
-          return {
-            id: t.id,
-            code: t.code,
-            name: t.name,
-            taxId: t.taxId || '',
-            phone: t.phone || '',
-            email: t.email || '',
-            city: t.city || '',
-            status: t.status,
-            plan: t.plan || 'BASIC',
-            commissionRate: t.commissionRate ?? 15,
-            isDefault: !!t.isDefault,
-            taskerCount: t.taskerCount ?? (t._count?.taskerProfiles || 0),
-            activeOrderCount:
-              t.bookingCount ??
-              ((t._count?.originBookings || 0) + (t._count?.servicingBookings || 0)),
-            createdAt: t.createdAt || new Date().toISOString(),
-          };
-        }
-      } catch (err) {
-        console.warn(`Error fetching tenant ${id}:`, err);
+        const t = await this.fetchWithAuth<BackendTenantResponse>(`/tenants/${id}`, { method: 'GET' }, true);
+        return {
+          id: t.id,
+          code: t.code,
+          name: t.name,
+          taxId: t.taxId || '',
+          phone: t.phone || '',
+          email: t.email || '',
+          city: t.city || '',
+          status: t.status,
+          plan: t.plan || 'BASIC',
+          commissionRate: t.commissionRate ?? 15,
+          isDefault: !!t.isDefault,
+          taskerCount: t.taskerCount ?? (t._count?.taskerProfiles || 0),
+          activeOrderCount:
+            t.bookingCount ??
+            ((t._count?.originBookings || 0) + (t._count?.servicingBookings || 0)),
+          createdAt: t.createdAt || new Date().toISOString(),
+        };
+      } catch (err: unknown) {
+        console.warn(`Error fetching tenant ${id}:`, err instanceof Error ? err.message : String(err));
       }
     }
 
@@ -506,12 +585,15 @@ export class ApiClient {
       });
 
       if (!res.ok) {
-        const errorData = await res.json().catch(() => ({}));
-        const message = errorData.message || `Đăng ký đối tác thất bại (${res.status})`;
-        throw new Error(Array.isArray(message) ? message.join(', ') : message);
+        const errorData = (await res.json().catch(() => ({}))) as { message?: string | string[] };
+        const rawMsg = errorData.message || `Đăng ký đối tác thất bại (${res.status})`;
+        throw new Error(Array.isArray(rawMsg) ? rawMsg.join(', ') : rawMsg);
       }
 
-      const resData = await res.json();
+      const resData = (await res.json()) as {
+        tenant?: BackendTenantResponse;
+        adminUser?: BackendUserResponse;
+      };
       const newApp: PartnerApplication = {
         id: resData.tenant?.id || `app-${Date.now()}`,
         businessName: data.businessName,
@@ -530,7 +612,7 @@ export class ApiClient {
       apps.unshift(newApp);
       saveData(STORAGE_KEYS.APPLICATIONS, apps);
       return newApp;
-    } catch (err: any) {
+    } catch (err: unknown) {
       if (
         err instanceof TypeError &&
         (err.message.toLowerCase().includes('fetch') || err.message.toLowerCase().includes('failed to fetch'))
@@ -555,54 +637,50 @@ export class ApiClient {
     const token = storage.getItem(STORAGE_KEYS.ACCESS_TOKEN);
 
     if (token) {
-      try {
-        const res = await fetch(`${this.baseUrl}/tenants/${tenantId}/approve`, {
-          method: 'POST',
-          headers: this.getAuthHeaders(false),
-        });
+      // Routed through fetchWithAuth: extracts & throws error message on non-2xx status
+      const t = await this.fetchWithAuth<BackendTenantResponse>(
+        `/tenants/${tenantId}/approve`,
+        { method: 'POST' },
+        false
+      );
 
-        if (res.ok) {
-          const t = await res.json();
-          const mappedTenant: Tenant = {
-            id: t.id,
-            code: t.code,
-            name: t.name,
-            taxId: t.taxId || '',
-            phone: t.phone || '',
-            email: t.email || '',
-            city: t.city || '',
-            status: t.status,
-            plan: t.plan || 'BASIC',
-            commissionRate: t.commissionRate ?? 15,
-            isDefault: !!t.isDefault,
-            taskerCount: t.taskerCount ?? 0,
-            activeOrderCount: t.bookingCount ?? 0,
-            createdAt: t.createdAt || new Date().toISOString(),
-          };
+      const mappedTenant: Tenant = {
+        id: t.id,
+        code: t.code,
+        name: t.name,
+        taxId: t.taxId || '',
+        phone: t.phone || '',
+        email: t.email || '',
+        city: t.city || '',
+        status: t.status,
+        plan: t.plan || 'BASIC',
+        commissionRate: t.commissionRate ?? 15,
+        isDefault: !!t.isDefault,
+        taskerCount: t.taskerCount ?? 0,
+        activeOrderCount: t.bookingCount ?? 0,
+        createdAt: t.createdAt || new Date().toISOString(),
+      };
 
-          const apps = await this.getPartnerApplications();
-          const app = apps.find((a) => a.id === tenantId);
-          if (app) {
-            app.status = 'APPROVED';
-            saveData(STORAGE_KEYS.APPLICATIONS, apps);
-          }
-
-          const tenants = await this.getTenants();
-          const existingIdx = tenants.findIndex((existing) => existing.id === t.id);
-          if (existingIdx >= 0) {
-            tenants[existingIdx] = mappedTenant;
-          } else {
-            tenants.unshift(mappedTenant);
-          }
-          saveData(STORAGE_KEYS.TENANTS, tenants);
-
-          return mappedTenant;
-        }
-      } catch (err) {
-        console.warn('Backend approveTenant failed, checking mock:', err);
+      const apps = await this.getPartnerApplications();
+      const app = apps.find((a) => a.id === tenantId);
+      if (app) {
+        app.status = 'APPROVED';
+        saveData(STORAGE_KEYS.APPLICATIONS, apps);
       }
+
+      const tenants = await this.getTenants();
+      const existingIdx = tenants.findIndex((existing) => existing.id === t.id);
+      if (existingIdx >= 0) {
+        tenants[existingIdx] = mappedTenant;
+      } else {
+        tenants.unshift(mappedTenant);
+      }
+      saveData(STORAGE_KEYS.TENANTS, tenants);
+
+      return mappedTenant;
     }
 
+    // Fallback to mock applications only if completely unauthenticated
     await sleep(250);
     const apps = await this.getPartnerApplications();
     const app = apps.find((a) => a.id === tenantId);

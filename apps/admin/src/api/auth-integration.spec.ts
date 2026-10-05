@@ -128,4 +128,47 @@ test('Admin Auth & Impersonation Integration Suite', async (t) => {
     // Cleanup logout
     await api.logout();
   });
+
+  // Test 7: approvePartnerApplication throws extracted error message on non-2xx response
+  await t.test('7. approvePartnerApplication throws error on invalid/non-existent tenant ID', async () => {
+    await api.login('admin@linkkwork.vn', 'Admin@123456');
+
+    const fakeId = '00000000-0000-0000-0000-000000000000';
+    await assert.rejects(
+      async () => {
+        await api.approvePartnerApplication(fakeId);
+      },
+      (err: Error) => {
+        assert.ok(
+          err.message.includes('not found') || err.message.includes('404') || err.message.includes('Không tìm thấy'),
+          `Error message should indicate not found: "${err.message}"`
+        );
+        return true;
+      }
+    );
+
+    await api.logout();
+  });
+
+  // Test 8: Concurrent refresh token requests share single in-flight mutex lock
+  await t.test('8. Concurrent refresh calls share a single refresh request without triggering replay defense', async () => {
+    await api.login('admin@linkkwork.vn', 'Admin@123456');
+
+    // Fire 3 simultaneous refresh calls
+    const [res1, res2, res3] = await Promise.all([
+      api.refreshToken(),
+      api.refreshToken(),
+      api.refreshToken(),
+    ]);
+
+    assert.equal(res1, true, 'First refresh should succeed');
+    assert.equal(res2, true, 'Second concurrent refresh should succeed (sharing promise)');
+    assert.equal(res3, true, 'Third concurrent refresh should succeed (sharing promise)');
+
+    // Verify current user still works after shared refresh
+    const me = await api.getCurrentUser();
+    assert.ok(me, 'Current user should be active after mutex refresh');
+
+    await api.logout();
+  });
 });

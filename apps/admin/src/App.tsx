@@ -34,6 +34,7 @@ export const App: React.FC = () => {
               {/* Public Routes */}
               <Route path="/login" element={<LoginPage />} />
               <Route path="/partner/register" element={<PartnerRegisterPage />} />
+              <Route path="/unauthorized" element={<UnauthorizedPage />} />
               <Route path="/403" element={<UnauthorizedPage />} />
 
               {/* Protected Authenticated Routes */}
