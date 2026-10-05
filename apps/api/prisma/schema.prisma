@@ -1,0 +1,257 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum UserRole {
+  SUPER_ADMIN
+  TENANT_ADMIN
+  TENANT_DISPATCHER
+  TASKER
+  CUSTOMER
+}
+
+enum TenantSubscriptionStatus {
+  ACTIVE
+  PAST_DUE
+  RESTRICTED
+  SUSPENDED
+  CANCELLED
+}
+
+enum BookingStatus {
+  DRAFT
+  PENDING_DISPATCH
+  OFFERED_TO_FAVORITE
+  BROADCASTING
+  ASSIGNED
+  ARRIVING
+  IN_PROGRESS
+  PENDING_ACCEPTANCE
+  COMPLETED
+  REVIEWED
+  CANCELLED
+  EMERGENCY_REDISPATCH
+  DISPATCH_FAILED
+}
+
+enum ServicePricingType {
+  HOURLY
+  PER_UNIT
+  BIDDING
+}
+
+enum PaymentStatus {
+  PENDING
+  ESCROW_HOLD
+  RELEASED_TO_TASKER
+  REFUNDED
+  DISPUTED
+}
+
+model Tenant {
+  id                 String                   @id @default(uuid())
+  code               String                   @unique
+  name               String
+  taxId              String?
+  phone              String
+  email              String
+  city               String
+  status             TenantSubscriptionStatus @default(ACTIVE)
+  plan               String                   @default("BASIC")
+  commissionRate     Float                    @default(15.0)
+  isDefault          Boolean                  @default(false)
+  createdAt          DateTime                 @default(now())
+  updatedAt          DateTime                 @updatedAt
+
+  users              User[]
+  services           Service[]
+  taskerProfiles     TaskerProfile[]
+  originBookings     Booking[]                @relation("OriginTenantBookings")
+  servicingBookings  Booking[]                @relation("ServicingTenantBookings")
+  auditLogs          AuditLog[]
+
+  @@map("tenants")
+}
+
+model User {
+  id               String          @id @default(uuid())
+  tenantId         String?
+  email            String          @unique
+  phone            String?
+  passwordHash     String
+  name             String
+  role             UserRole
+  status           String          @default("ACTIVE")
+  avatarUrl        String?
+  isSuperAdmin     Boolean         @default(false)
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+
+  tenant           Tenant?         @relation(fields: [tenantId], references: [id], onDelete: SetNull)
+  refreshTokens    RefreshToken[]
+  taskerProfile    TaskerProfile?
+  customerBookings Booking[]       @relation("CustomerBookings")
+  assignedBookings Booking[]       @relation("TaskerBookings")
+  auditLogs        AuditLog[]
+
+  @@map("users")
+}
+
+model RefreshToken {
+  id        String   @id @default(uuid())
+  userId    String
+  tokenHash String
+  expiresAt DateTime
+  isRevoked Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("refresh_tokens")
+}
+
+model AuditLog {
+  id             String   @id @default(uuid())
+  tenantId       String?
+  userId         String?
+  action         String
+  resource       String
+  resourceId     String?
+  payload        Json?
+  ipAddress      String?
+  impersonatedBy String?
+  createdAt      DateTime @default(now())
+
+  tenant         Tenant?  @relation(fields: [tenantId], references: [id], onDelete: SetNull)
+  user           User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId])
+  @@index([userId])
+  @@map("audit_logs")
+}
+
+model Category {
+  id           String    @id @default(uuid())
+  name         String
+  slug         String    @unique
+  icon         String?
+  isActive     Boolean   @default(true)
+  displayOrder Int       @default(0)
+  createdAt    DateTime  @default(now())
+
+  services     Service[]
+
+  @@map("categories")
+}
+
+model Service {
+  id            String             @id @default(uuid())
+  tenantId      String?
+  categoryId    String
+  name          String
+  slug          String             @unique
+  pricingType   ServicePricingType
+  baseUnitPrice Float
+  durationHours Float?
+  description   String?
+  isActive      Boolean            @default(true)
+  createdAt     DateTime           @default(now())
+  updatedAt     DateTime           @updatedAt
+
+  tenant        Tenant?            @relation(fields: [tenantId], references: [id], onDelete: SetNull)
+  category      Category           @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  addons        Addon[]
+  bookings      Booking[]
+
+  @@index([tenantId])
+  @@index([categoryId])
+  @@map("services")
+}
+
+model Addon {
+  id        String   @id @default(uuid())
+  serviceId String
+  name      String
+  price     Float
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  service   Service  @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+
+  @@index([serviceId])
+  @@map("addons")
+}
+
+model Booking {
+  id                String             @id @default(uuid())
+  code              String             @unique
+  originTenantId    String
+  servicingTenantId String
+  customerId        String?
+  assignedTaskerId  String?
+  serviceId         String
+  status            BookingStatus      @default(PENDING_DISPATCH)
+  pricingType       ServicePricingType
+  baseUnitPrice     Float
+  scheduledAt       DateTime
+  customerName      String
+  customerPhone     String
+  addressText       String
+  totalAmount       Float
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+
+  originTenant      Tenant             @relation("OriginTenantBookings", fields: [originTenantId], references: [id])
+  servicingTenant   Tenant             @relation("ServicingTenantBookings", fields: [servicingTenantId], references: [id])
+  customer          User?              @relation("CustomerBookings", fields: [customerId], references: [id], onDelete: SetNull)
+  assignedTasker    User?              @relation("TaskerBookings", fields: [assignedTaskerId], references: [id], onDelete: SetNull)
+  service           Service            @relation(fields: [serviceId], references: [id])
+  events            BookingEvent[]
+
+  @@index([originTenantId])
+  @@index([servicingTenantId])
+  @@index([customerId])
+  @@index([assignedTaskerId])
+  @@index([status])
+  @@map("bookings")
+}
+
+model BookingEvent {
+  id         String         @id @default(uuid())
+  bookingId  String
+  fromStatus BookingStatus?
+  toStatus   BookingStatus
+  triggeredBy String
+  note       String?
+  createdAt  DateTime       @default(now())
+
+  booking    Booking        @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+
+  @@index([bookingId])
+  @@map("booking_events")
+}
+
+model TaskerProfile {
+  id                 String   @id @default(uuid())
+  userId             String   @unique
+  tenantId           String
+  rating             Float    @default(5.0)
+  completedJobsCount Int      @default(0)
+  isOnline           Boolean  @default(false)
+  currentLat         Float?
+  currentLng         Float?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  user               User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tenant             Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@map("tasker_profiles")
+}
