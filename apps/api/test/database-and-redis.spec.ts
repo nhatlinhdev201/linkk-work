@@ -114,6 +114,66 @@ describe('Database and Redis Integration Tests', () => {
       expect(perUnitService?.pricingType).toBe('PER_UNIT');
       expect(perUnitService?.baseUnitPrice).toBe(150000);
     });
+
+    it('should support enhanced Booking fields including paymentStatus, latitude and longitude', async () => {
+      const platformTenant = await prisma.tenant.findUnique({
+        where: { code: 'TENANT_LINKKWORK' },
+      });
+      const service = await prisma.service.findFirst();
+
+      const booking = await prisma.booking.create({
+        data: {
+          code: `TEST-BK-${Date.now()}`,
+          originTenantId: platformTenant!.id,
+          servicingTenantId: platformTenant!.id,
+          serviceId: service!.id,
+          status: 'PENDING_DISPATCH',
+          paymentStatus: 'PENDING',
+          pricingType: 'HOURLY',
+          baseUnitPrice: 80000,
+          scheduledAt: new Date(),
+          customerName: 'Test Customer',
+          customerPhone: '0909999999',
+          addressText: '72 Lê Thánh Tôn, Bến Nghé, Quận 1, TP.HCM',
+          latitude: 10.7769,
+          longitude: 106.7009,
+          totalAmount: 160000,
+        },
+      });
+
+      expect(booking.paymentStatus).toBe('PENDING');
+      expect(booking.latitude).toBeCloseTo(10.7769);
+      expect(booking.longitude).toBeCloseTo(106.7009);
+
+      // Clean up test booking
+      await prisma.booking.delete({ where: { id: booking.id } });
+    });
+
+    it('should enforce unique constraint on RefreshToken tokenHash', async () => {
+      const user = await prisma.user.findFirst();
+      const tokenHash = `hash-${Date.now()}`;
+
+      const token1 = await prisma.refreshToken.create({
+        data: {
+          userId: user!.id,
+          tokenHash,
+          expiresAt: new Date(Date.now() + 3600000),
+        },
+      });
+
+      await expect(
+        prisma.refreshToken.create({
+          data: {
+            userId: user!.id,
+            tokenHash,
+            expiresAt: new Date(Date.now() + 7200000),
+          },
+        }),
+      ).rejects.toThrow();
+
+      // Clean up test token
+      await prisma.refreshToken.delete({ where: { id: token1.id } });
+    });
   });
 
   describe('Redis Module & Service', () => {
@@ -147,6 +207,20 @@ describe('Database and Redis Integration Tests', () => {
       const luaScript = 'return ARGV[1]';
       const result = await redis.eval(luaScript, 0, 'linkkwork_eval_test');
       expect(result).toBe('linkkwork_eval_test');
+    });
+
+    it('should instantiate RedisService with custom REDIS_URL when provided', async () => {
+      const customConfigService = {
+        get: jest.fn((key: string, defaultValue?: any) => {
+          if (key === 'REDIS_URL') return 'redis://127.0.0.1:6379';
+          return defaultValue;
+        }),
+      };
+      const customRedis = new RedisService(customConfigService as any);
+      await customRedis.onModuleInit();
+      const pong = await customRedis.ping();
+      expect(pong).toBe('PONG');
+      await customRedis.onModuleDestroy();
     });
   });
 });

@@ -99,13 +99,14 @@ model User {
   assignedBookings Booking[]       @relation("TaskerBookings")
   auditLogs        AuditLog[]
 
+  @@index([tenantId])
   @@map("users")
 }
 
 model RefreshToken {
   id        String   @id @default(uuid())
   userId    String
-  tokenHash String
+  tokenHash String   @unique
   expiresAt DateTime
   isRevoked Boolean  @default(false)
   createdAt DateTime @default(now())
@@ -165,7 +166,7 @@ model Service {
   updatedAt     DateTime           @updatedAt
 
   tenant        Tenant?            @relation(fields: [tenantId], references: [id], onDelete: SetNull)
-  category      Category           @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  category      Category           @relation(fields: [categoryId], references: [id], onDelete: Restrict)
   addons        Addon[]
   bookings      Booking[]
 
@@ -197,12 +198,15 @@ model Booking {
   assignedTaskerId  String?
   serviceId         String
   status            BookingStatus      @default(PENDING_DISPATCH)
+  paymentStatus     PaymentStatus      @default(PENDING)
   pricingType       ServicePricingType
   baseUnitPrice     Float
   scheduledAt       DateTime
   customerName      String
   customerPhone     String
   addressText       String
+  latitude          Float?
+  longitude         Float?
   totalAmount       Float
   createdAt         DateTime           @default(now())
   updatedAt         DateTime           @updatedAt

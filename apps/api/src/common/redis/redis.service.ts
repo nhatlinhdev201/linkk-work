@@ -1,6 +1,6 @@
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import Redis from 'ioredis';
+import Redis, { RedisOptions } from 'ioredis';
 
 @Injectable()
 export class RedisService implements OnModuleInit, OnModuleDestroy {
@@ -8,19 +8,33 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
   private client: Redis;
 
   constructor(private readonly configService: ConfigService) {
+    const redisUrl = this.configService.get<string>('REDIS_URL');
+    const password = this.configService.get<string>('REDIS_PASSWORD');
     const host = this.configService.get<string>('REDIS_HOST', '127.0.0.1');
     const port = Number(this.configService.get<number>('REDIS_PORT', 6379));
 
-    this.client = new Redis({
-      host,
-      port,
+    const options: RedisOptions = {
       lazyConnect: true,
       maxRetriesPerRequest: 3,
       retryStrategy: (times) => {
         const delay = Math.min(times * 100, 3000);
         return delay;
       },
-    });
+    };
+
+    if (password) {
+      options.password = password;
+    }
+
+    if (redisUrl) {
+      this.client = new Redis(redisUrl, options);
+    } else {
+      this.client = new Redis({
+        ...options,
+        host,
+        port,
+      });
+    }
 
     this.client.on('error', (err) => {
       this.logger.error(`Redis connection error: ${err.message}`, err.stack);
