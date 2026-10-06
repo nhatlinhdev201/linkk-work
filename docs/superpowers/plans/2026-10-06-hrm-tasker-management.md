@@ -289,13 +289,13 @@ git commit -m "feat(admin): implement HRMAlertsBanner, TaskerModal, WorkFloorMod
 **Interfaces:**
 - Produces: Interactive enterprise HRM dashboard with alert banners, tabs, rich cards, action triggers, and responsive layout.
 
-- [ ] **Step 1: Integrate HRMAlertsBanner and Quick Alert Filters**
+- [x] **Step 1: Integrate HRMAlertsBanner and Quick Alert Filters**
 Clicking alert chip filters list immediately to affected taskers.
 
-- [ ] **Step 2: Enhance Filter Tabs**
+- [x] **Step 2: Enhance Filter Tabs**
 Tabs: All (`ALL`), Online (`ONLINE`), Offline (`OFFLINE`), Low Deposit (`LOW_DEPOSIT`), Pending KYC (`PENDING_KYC`).
 
-- [ ] **Step 3: Upgrade Tasker Cards with Action Buttons**
+- [x] **Step 3: Upgrade Tasker Cards with Action Buttons**
 Each card features:
 - Avatar, name, phone, KYC verified badge.
 - Online/Offline toggle switch.
@@ -303,17 +303,17 @@ Each card features:
 - Skills tags.
 - Action buttons: "Sửa", "Sàn & Bán kính", "Nạp ký quỹ", "Duyệt KYC" (if not verified), "Chi tiết / Sổ cái".
 
-- [ ] **Step 4: Protect critical actions with useConfirm**
+- [x] **Step 4: Protect critical actions with useConfirm**
 KYC approval and status toggling protected with confirm modal.
 
-- [ ] **Step 5: Run admin tests and build**
+- [x] **Step 5: Run admin tests and build**
 
 ```bash
 npm --prefix apps/admin test && npm --prefix apps/admin run build
 ```
 Expected: PASS with 0 errors.
 
-- [ ] **Step 6: Commit TaskersPage overhaul**
+- [x] **Step 6: Commit TaskersPage overhaul**
 
 ```bash
 git add apps/admin/src/pages/taskers/TaskersPage.tsx
@@ -327,7 +327,7 @@ git commit -m "feat(admin): overhaul TaskersPage with HRM alerts banner, work fl
 **Files:**
 - Create: `apps/admin/src/api/tasker-integration.spec.ts`
 
-- [ ] **Step 1: Write frontend integration test suite**
+- [x] **Step 1: Write frontend integration test suite**
 Test full flow:
 1. Partner login.
 2. Register new tasker.
@@ -336,7 +336,7 @@ Test full flow:
 5. Verify KYC.
 6. Check transactions list.
 
-- [ ] **Step 2: Run both API and Admin test suites**
+- [x] **Step 2: Run both API and Admin test suites**
 
 ```bash
 npm --prefix apps/api test
@@ -344,7 +344,7 @@ npm --prefix apps/admin test
 ```
 Expected: 100% tests PASS across all suites.
 
-- [ ] **Step 3: Run production builds**
+- [x] **Step 3: Run production builds**
 
 ```bash
 npm --prefix apps/api run build
@@ -352,7 +352,7 @@ npm --prefix apps/admin run build
 ```
 Expected: 0 errors, clean builds.
 
-- [ ] **Step 4: Commit test suite and final verification**
+- [x] **Step 4: Commit test suite and final verification**
 
 ```bash
 git add apps/admin/src/api/tasker-integration.spec.ts
