@@ -61,6 +61,16 @@ export class BookingController {
     return this.bookingService.getBookings(effectiveTenantId, query);
   }
 
+  @Get('taskers/available')
+  @ApiOperation({ summary: 'Lấy danh sách thợ khả dụng của Tenant để phục vụ điều phối' })
+  async getAvailableTaskers(
+    @Req() req: RequestWithTenant,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    const effectiveTenantId = getEffectiveTenantId(user, req);
+    return this.bookingService.getAvailableTaskers(effectiveTenantId);
+  }
+
   @Get(':id')
   @ApiOperation({ summary: 'Xem chi tiết đơn hàng kèm lịch sử sự kiện và addons' })
   async getBookingById(

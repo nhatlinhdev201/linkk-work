@@ -44,7 +44,9 @@ export type BookingStatus =
   | 'PENDING_ACCEPTANCE'
   | 'COMPLETED'
   | 'CANCELLED'
-  | 'EMERGENCY_REDISPATCH';
+  | 'EMERGENCY_REDISPATCH'
+  | 'REVIEWED'
+  | 'DISPATCH_FAILED';
 
 export type PricingModel = 'HOURLY' | 'PER_UNIT' | 'BIDDING';
 

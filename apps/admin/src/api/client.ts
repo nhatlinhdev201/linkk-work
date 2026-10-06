@@ -182,6 +182,102 @@ function mapBackendServiceToServiceItem(s: BackendServiceResponse): ServiceItem 
   };
 }
 
+export interface BackendBookingResponse {
+  id: string;
+  code: string;
+  originTenantId: string;
+  servicingTenantId: string;
+  customerId?: string | null;
+  assignedTaskerId?: string | null;
+  serviceId: string;
+  status: Booking['status'];
+  pricingType: 'HOURLY' | 'PER_UNIT' | 'BIDDING';
+  baseUnitPrice: number;
+  durationHours?: number | null;
+  unitCount?: number | null;
+  areaSurcharge?: number;
+  addonsPrice?: number;
+  surgeMultiplier?: number;
+  surgeAmount?: number;
+  discountAmount?: number;
+  voucherCode?: string | null;
+  scheduledAt: string;
+  customerName: string;
+  customerPhone: string;
+  addressText: string;
+  latitude?: number | null;
+  longitude?: number | null;
+  totalAmount: number;
+  createdAt: string;
+  updatedAt?: string;
+  service?: {
+    id: string;
+    name: string;
+    pricingType?: string;
+    baseUnitPrice?: number;
+  };
+  originTenant?: {
+    id: string;
+    name: string;
+  };
+  servicingTenant?: {
+    id: string;
+    name: string;
+  };
+  assignedTasker?: {
+    id: string;
+    name: string;
+    phone: string;
+    avatarUrl?: string | null;
+  } | null;
+  addons?: Array<{
+    id: string;
+    addonId?: string | null;
+    name: string;
+    price: number;
+  }>;
+  events?: Array<{
+    id: string;
+    fromStatus?: string | null;
+    toStatus: string;
+    triggeredBy: string;
+    note?: string | null;
+    createdAt: string;
+  }>;
+}
+
+export interface BackendPaginatedBookingsResponse {
+  items: BackendBookingResponse[];
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+}
+
+export function mapBackendBookingToAdminBooking(b: BackendBookingResponse): Booking {
+  return {
+    id: b.id,
+    code: b.code,
+    originTenantId: b.originTenantId,
+    servicingTenantId: b.servicingTenantId,
+    servicingTenantName: b.servicingTenant?.name || b.originTenant?.name || 'Nền tảng LinkkWork',
+    customerName: b.customerName,
+    customerPhone: b.customerPhone,
+    addressText: b.addressText,
+    serviceId: b.serviceId,
+    serviceName: b.service?.name || 'Dịch vụ chuẩn',
+    pricingType: b.pricingType as 'HOURLY' | 'PER_UNIT' | 'BIDDING',
+    scheduledAt: b.scheduledAt,
+    durationHours: b.durationHours ?? undefined,
+    totalAmount: b.totalAmount,
+    status: b.status,
+    assignedTaskerId: b.assignedTaskerId || (b.assignedTasker ? b.assignedTasker.id : null),
+    assignedTaskerName: b.assignedTasker?.name || null,
+    assignedTaskerPhone: b.assignedTasker?.phone || null,
+    createdAt: b.createdAt,
+  };
+}
+
 type GlobalWithStorageAndProcess = {
   localStorage?: Storage;
   process?: { env?: Record<string, string | undefined> };
@@ -819,12 +915,52 @@ export class ApiClient {
 
   // --- BOOKINGS (SCOPED BY TENANT) ---
   async getBookings(tenantId?: string | null): Promise<Booking[]> {
-    await sleep(200);
+    const storage = getStorage();
+    const token = storage.getItem(STORAGE_KEYS.ACCESS_TOKEN);
+    if (token) {
+      try {
+        const res = await this.fetchWithAuth<BackendPaginatedBookingsResponse | BackendBookingResponse[]>(
+          '/bookings',
+          { method: 'GET' },
+          true
+        );
+        const rawList = Array.isArray(res) ? res : res.items || [];
+        const mapped = rawList.map(mapBackendBookingToAdminBooking);
+        saveData(STORAGE_KEYS.BOOKINGS, mapped);
+        return mapped;
+      } catch (err: unknown) {
+        console.warn(
+          'Network error fetching bookings, fallback to cache:',
+          err instanceof Error ? err.message : String(err)
+        );
+      }
+    }
+
     const bookings = loadData<Booking[]>(STORAGE_KEYS.BOOKINGS, INITIAL_BOOKINGS);
     if (!tenantId) return bookings;
     return bookings.filter(
       (b) => b.servicingTenantId === tenantId || b.originTenantId === tenantId
     );
+  }
+
+  async getBookingById(id: string): Promise<Booking | undefined> {
+    const storage = getStorage();
+    const token = storage.getItem(STORAGE_KEYS.ACCESS_TOKEN);
+    if (token) {
+      try {
+        const raw = await this.fetchWithAuth<BackendBookingResponse>(
+          `/bookings/${id}`,
+          { method: 'GET' },
+          true
+        );
+        return mapBackendBookingToAdminBooking(raw);
+      } catch (err: unknown) {
+        console.warn(`Error fetching booking ${id}:`, err instanceof Error ? err.message : String(err));
+      }
+    }
+
+    const bookings = await this.getBookings();
+    return bookings.find((b) => b.id === id);
   }
 
   async createManualBooking(
@@ -841,11 +977,58 @@ export class ApiClient {
       totalAmount: number;
     }
   ): Promise<Booking> {
-    await sleep(250);
+    const storage = getStorage();
+    const token = storage.getItem(STORAGE_KEYS.ACCESS_TOKEN);
+    if (token) {
+      try {
+        // Resolve matching service from real catalog
+        const services = await this.getServices(tenantId);
+        const activeServices = services.filter((s) => s.isActive);
+        const matched =
+          activeServices.find((s) => s.name.toLowerCase() === data.serviceName.toLowerCase()) ||
+          activeServices.find((s) => s.pricingModel === data.pricingType) ||
+          activeServices[0];
+        const serviceId = matched?.id || '33ff9d04-1150-4403-84f9-cabe982d55f4';
+
+        const raw = await this.fetchWithAuth<BackendBookingResponse>(
+          '/bookings',
+          {
+            method: 'POST',
+            body: JSON.stringify({
+              serviceId,
+              scheduledAt: data.scheduledAt,
+              customerName: data.customerName,
+              customerPhone: data.customerPhone,
+              addressText: data.addressText,
+              durationHours: data.durationHours || 2,
+              note: `Tạo thủ công từ Web Admin (${tenantName})`,
+            }),
+          },
+          true
+        );
+
+        const mapped = mapBackendBookingToAdminBooking(raw);
+        const bookings = await this.getBookings(tenantId);
+        const updatedList = [mapped, ...bookings.filter((b) => b.id !== mapped.id)];
+        saveData(STORAGE_KEYS.BOOKINGS, updatedList);
+        return mapped;
+      } catch (err: unknown) {
+        const errorWithStatus = err as { status?: number };
+        if (errorWithStatus && errorWithStatus.status) {
+          throw err;
+        }
+        console.warn(
+          'API createManualBooking network failure, using local fallback:',
+          err instanceof Error ? err.message : String(err)
+        );
+      }
+    }
+
+    // Offline fallback
     const bookings = loadData<Booking[]>(STORAGE_KEYS.BOOKINGS, INITIAL_BOOKINGS);
     const newBooking: Booking = {
       id: `bk-${Date.now()}`,
-      code: `BK-2026-${Math.floor(100 + Math.random() * 900)}`,
+      code: `BK-2026-${Math.floor(100000 + Math.random() * 900000)}`,
       originTenantId: tenantId,
       servicingTenantId: tenantId,
       servicingTenantName: tenantName,
@@ -867,7 +1050,36 @@ export class ApiClient {
     taskerId: string,
     adminTenantId: string
   ): Promise<Booking> {
-    await sleep(200);
+    const storage = getStorage();
+    const token = storage.getItem(STORAGE_KEYS.ACCESS_TOKEN);
+    if (token) {
+      try {
+        const raw = await this.fetchWithAuth<BackendBookingResponse>(
+          `/bookings/${bookingId}/assign`,
+          {
+            method: 'POST',
+            body: JSON.stringify({
+              taskerId,
+              note: 'Chỉ định trực tiếp từ Web Admin Dispatch Console',
+            }),
+          },
+          true
+        );
+        const mapped = mapBackendBookingToAdminBooking(raw);
+        const bookings = await this.getBookings(adminTenantId);
+        const updatedList = bookings.map((b) => (b.id === mapped.id ? mapped : b));
+        saveData(STORAGE_KEYS.BOOKINGS, updatedList);
+        return mapped;
+      } catch (err: unknown) {
+        // If not a 404 mock ID, re-throw real backend error (e.g. 403 Forbidden or 400 BadRequest)
+        const errorWithStatus = err as { status?: number };
+        if (errorWithStatus.status !== 404 && !bookingId.startsWith('bk-')) {
+          throw err;
+        }
+      }
+    }
+
+    // Offline fallback for mock bookings
     const bookings = loadData<Booking[]>(STORAGE_KEYS.BOOKINGS, INITIAL_BOOKINGS);
     const taskers = await this.getTaskers(adminTenantId);
 
@@ -889,7 +1101,28 @@ export class ApiClient {
   }
 
   async broadcastInternalBooking(bookingId: string): Promise<Booking> {
-    await sleep(150);
+    const storage = getStorage();
+    const token = storage.getItem(STORAGE_KEYS.ACCESS_TOKEN);
+    if (token) {
+      try {
+        const raw = await this.fetchWithAuth<BackendBookingResponse>(
+          `/bookings/${bookingId}/broadcast`,
+          { method: 'POST' },
+          true
+        );
+        const mapped = mapBackendBookingToAdminBooking(raw);
+        const bookings = await this.getBookings();
+        const updatedList = bookings.map((b) => (b.id === mapped.id ? mapped : b));
+        saveData(STORAGE_KEYS.BOOKINGS, updatedList);
+        return mapped;
+      } catch (err: unknown) {
+        const errorWithStatus = err as { status?: number };
+        if (errorWithStatus.status !== 404 && !bookingId.startsWith('bk-')) {
+          throw err;
+        }
+      }
+    }
+
     const bookings = loadData<Booking[]>(STORAGE_KEYS.BOOKINGS, INITIAL_BOOKINGS);
     const booking = bookings.find((b) => b.id === bookingId);
     if (!booking) throw new Error('Không tìm thấy đơn hàng');
@@ -901,7 +1134,57 @@ export class ApiClient {
 
   // --- TASKERS (SCOPED BY TENANT) ---
   async getTaskers(tenantId?: string | null): Promise<Tasker[]> {
-    await sleep(150);
+    const storage = getStorage();
+    const token = storage.getItem(STORAGE_KEYS.ACCESS_TOKEN);
+    if (token) {
+      try {
+        const rawList = await this.fetchWithAuth<
+          Array<{
+            id: string;
+            name: string;
+            phone: string;
+            email: string;
+            avatarUrl?: string | null;
+            tenantId: string;
+            taskerProfile?: {
+              rating?: number;
+              completedJobsCount?: number;
+              isOnline?: boolean;
+            } | null;
+          }>
+        >('/bookings/taskers/available', { method: 'GET' }, true);
+
+        if (Array.isArray(rawList)) {
+          const mapped: Tasker[] = rawList.map((t) => ({
+            id: t.id,
+            code: `TSK-${t.id.slice(0, 6).toUpperCase()}`,
+            name: t.name,
+            phone: t.phone,
+            avatarUrl: t.avatarUrl || undefined,
+            tenantId: t.tenantId,
+            tenantName: 'Đội ngũ thợ đối tác',
+            rating: t.taskerProfile?.rating ?? 5.0,
+            ratingScore: t.taskerProfile?.rating ?? 5.0,
+            completedJobs: t.taskerProfile?.completedJobsCount ?? 0,
+            isOnline: t.taskerProfile?.isOnline ?? true,
+            walletBalance: 1000000,
+            depositBalance: 500000,
+            softHoldBalance: 0,
+            currentStatus: 'IDLE',
+            kycVerified: true,
+            skills: ['Dọn dẹp nhà', 'Vệ sinh máy lạnh'],
+          }));
+          saveData(STORAGE_KEYS.TASKERS, mapped);
+          return mapped;
+        }
+      } catch (err: unknown) {
+        console.warn(
+          'Network error fetching available taskers, fallback to cache:',
+          err instanceof Error ? err.message : String(err)
+        );
+      }
+    }
+
     const taskers = loadData<Tasker[]>(STORAGE_KEYS.TASKERS, INITIAL_TASKERS);
     if (!tenantId) return taskers;
     return taskers.filter((t) => t.tenantId === tenantId);
@@ -995,11 +1278,7 @@ export class ApiClient {
         if (Array.isArray(items)) {
           const mappedServices = items.map(mapBackendServiceToServiceItem);
           saveData(STORAGE_KEYS.SERVICES, mappedServices);
-
-          if (!tenantId || tenantId === 'tenant-linkkwork') {
-            return mappedServices;
-          }
-          return mappedServices.filter((s) => !s.tenantId || s.tenantId === tenantId);
+          return mappedServices;
         }
       } catch (err: unknown) {
         console.warn(

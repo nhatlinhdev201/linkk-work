@@ -438,4 +438,31 @@ export class BookingService {
       return updated;
     });
   }
+
+  /**
+   * Danh sách thợ khả dụng của Tenant để phục vụ điều phối
+   */
+  async getAvailableTaskers(effectiveTenantId: string | null) {
+    const where: Record<string, unknown> = {
+      role: UserRole.TASKER,
+    };
+
+    if (effectiveTenantId) {
+      where.tenantId = effectiveTenantId;
+    }
+
+    return this.prisma.user.findMany({
+      where,
+      select: {
+        id: true,
+        name: true,
+        phone: true,
+        email: true,
+        avatarUrl: true,
+        tenantId: true,
+        taskerProfile: true,
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
 }
