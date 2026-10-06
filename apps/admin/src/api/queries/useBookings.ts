@@ -213,7 +213,7 @@ export const useTransitionBookingStatusMutation = (tenantId?: string | null) => 
     { previousBookings?: Booking[] }
   >({
     mutationFn: async ({ bookingId, status, note }) => {
-      return api.transitionBookingStatus(bookingId, status, note);
+      return api.transitionBookingStatus(bookingId, status, note, tenantId);
     },
     onMutate: async ({ bookingId, status }) => {
       await queryClient.cancelQueries({ queryKey: QUERY_KEYS.bookings(tenantId) });

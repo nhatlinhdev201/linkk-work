@@ -1114,7 +1114,10 @@ export class ApiClient {
       const allTaskers = loadData<Tasker[]>(STORAGE_KEYS.TASKERS, INITIAL_TASKERS);
       tasker = allTaskers.find((t) => t.id === taskerId);
       if (!tasker) {
-        throw new Error('Tasker không thuộc thẩm quyền của Tenant này.');
+        throw new Error('Không tìm thấy Tasker');
+      }
+      if (adminTenantId && tasker.tenantId !== adminTenantId) {
+        throw new Error('Thợ không thuộc thẩm quyền của Tenant quản lý đơn này');
       }
       booking.servicingTenantId = tasker.tenantId;
     }
@@ -1131,7 +1134,8 @@ export class ApiClient {
   async transitionBookingStatus(
     bookingId: string,
     status: BookingStatus,
-    note?: string
+    note?: string,
+    tenantId?: string | null
   ): Promise<Booking> {
     const storage = getStorage();
     const token = storage.getItem(STORAGE_KEYS.ACCESS_TOKEN);
@@ -1149,7 +1153,7 @@ export class ApiClient {
           true
         );
         const mapped = mapBackendBookingToAdminBooking(raw);
-        const bookings = await this.getBookings();
+        const bookings = await this.getBookings(tenantId || undefined);
         const updatedList = bookings.map((b) => (b.id === mapped.id ? mapped : b));
         saveData(STORAGE_KEYS.BOOKINGS, updatedList);
         return mapped;

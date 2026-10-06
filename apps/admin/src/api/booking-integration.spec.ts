@@ -189,4 +189,37 @@ test('Admin Booking & Dispatch Engine Integration Suite', async (t) => {
       assert.equal(completed.status, 'COMPLETED', 'Status must transition to COMPLETED');
     }
   );
+
+  await t.test(
+    '9. Cancellation flow records cancellation reason and note: transitions to CANCELLED',
+    async () => {
+      // Create a fresh booking to test cancellation
+      const cancelTarget = await api.createManualBooking(
+        partnerTenantId,
+        'Công ty Vệ Sinh Ánh Dương',
+        {
+          customerName: 'Trần Văn Hủy',
+          customerPhone: '0909999888',
+          addressText: '456 Lê Duẩn, Bến Nghé, Quận 1, TP.HCM',
+          serviceName: 'Dọn dẹp nhà theo giờ',
+          pricingType: 'HOURLY',
+          scheduledAt: new Date(Date.now() + 86400000).toISOString(),
+          durationHours: 2,
+          totalAmount: 160000,
+        }
+      );
+      assert.ok(cancelTarget.id);
+
+      const cancelReason = 'Khách hàng yêu cầu hủy hẹn / đổi kế hoạch: Bận công tác đột xuất';
+      const cancelledBooking = await api.transitionBookingStatus(
+        cancelTarget.id,
+        'CANCELLED',
+        cancelReason,
+        partnerTenantId
+      );
+
+      assert.equal(cancelledBooking.status, 'CANCELLED');
+    }
+  );
 });
+

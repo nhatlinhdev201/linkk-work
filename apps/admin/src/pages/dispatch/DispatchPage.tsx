@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../auth/AuthContext';
 import { useConfirm } from '../../components/feedback/ConfirmContext';
@@ -38,6 +38,12 @@ import {
   SlidersHorizontal,
   X,
 } from 'lucide-react';
+import {
+  DispatchStepper,
+  CompletionModal,
+  CancelBookingModal,
+  getStatusBadgeInfo,
+} from './components';
 
 type QueueTab = 'pending' | 'in_progress' | 'history';
 type TaskerFilter = 'all' | 'tenant' | 'cross';
@@ -66,69 +72,7 @@ const HISTORY_STATUSES: BookingStatus[] = [
   'DISPATCH_FAILED',
 ];
 
-const LIFECYCLE_STEPS: Array<{
-  key: BookingStatus;
-  stepNum: number;
-  label: string;
-  icon: React.ReactNode;
-}> = [
-  { key: 'ASSIGNED', stepNum: 1, label: 'Đã gán thợ', icon: <UserCheck className="w-4 h-4" /> },
-  { key: 'ARRIVING', stepNum: 2, label: 'Đang di chuyển', icon: <Truck className="w-4 h-4" /> },
-  { key: 'IN_PROGRESS', stepNum: 3, label: 'Đang thực hiện', icon: <Wrench className="w-4 h-4" /> },
-  { key: 'PENDING_ACCEPTANCE', stepNum: 4, label: 'Chờ nghiệm thu', icon: <Clock className="w-4 h-4" /> },
-  { key: 'COMPLETED', stepNum: 5, label: 'Hoàn thành', icon: <CheckCircle2 className="w-4 h-4" /> },
-];
-
-const getStepNumber = (status: BookingStatus): number => {
-  switch (status) {
-    case 'ASSIGNED':
-      return 1;
-    case 'ARRIVING':
-    case 'ON_THE_WAY':
-      return 2;
-    case 'IN_PROGRESS':
-      return 3;
-    case 'PENDING_ACCEPTANCE':
-      return 4;
-    case 'COMPLETED':
-    case 'REVIEWED':
-      return 5;
-    default:
-      return 0;
-  }
-};
-
-const getStatusBadge = (status: BookingStatus): { variant: BadgeVariant; label: string } => {
-  switch (status) {
-    case 'PENDING_DISPATCH':
-      return { variant: 'warning', label: 'Chờ điều phối' };
-    case 'BROADCASTING':
-      return { variant: 'info', label: 'Đang phát sóng' };
-    case 'MATCHING':
-      return { variant: 'info', label: 'Đang ghép thợ' };
-    case 'ASSIGNED':
-      return { variant: 'brand', label: 'Đã gán thợ' };
-    case 'ARRIVING':
-    case 'ON_THE_WAY':
-      return { variant: 'info', label: 'Đang di chuyển' };
-    case 'IN_PROGRESS':
-      return { variant: 'brand', label: 'Đang thực hiện' };
-    case 'PENDING_ACCEPTANCE':
-      return { variant: 'warning', label: 'Chờ nghiệm thu' };
-    case 'COMPLETED':
-      return { variant: 'success', label: 'Hoàn thành' };
-    case 'CANCELLED':
-      return { variant: 'danger', label: 'Đã hủy' };
-    case 'EMERGENCY_REDISPATCH':
-      return { variant: 'warning', label: 'Điều phối lại' };
-    case 'REVIEWED':
-      return { variant: 'success', label: 'Đã đánh giá' };
-    case 'DISPATCH_FAILED':
-      return { variant: 'danger', label: 'Điều phối thất bại' };
-    default:
-      return { variant: 'neutral', label: status };
-  }
-};
+const getStatusBadge = getStatusBadgeInfo;
 
 export const DispatchPage: React.FC = () => {
   const [searchParams] = useSearchParams();
@@ -152,10 +96,11 @@ export const DispatchPage: React.FC = () => {
   const [mobileView, setMobileView] = useState<'list' | 'detail'>('list');
   const [taskerFilter, setTaskerFilter] = useState<TaskerFilter>('all');
 
-  // Complete Order Modal states
+  // Modals state
   const [isCompleteModalOpen, setIsCompleteModalOpen] = useState(false);
-  const [completionRating, setCompletionRating] = useState<number>(5);
-  const [completionNote, setCompletionNote] = useState<string>('');
+  const [isCancelModalOpen, setIsCancelModalOpen] = useState(false);
+
+  const hasInitializedUrlRef = useRef<string | null>(null);
 
   const confirm = useConfirm();
 
@@ -185,12 +130,12 @@ export const DispatchPage: React.FC = () => {
     }
   }, [activeTab, pendingBookings, inProgressBookings, historyBookings]);
 
-  // Synchronize selected booking based on active tab and URL
+  // Synchronize selected booking based on active tab and URL (one-time initialization for url query)
   useEffect(() => {
-    if (urlBookingId && bookings.find((b) => b.id === urlBookingId)) {
-      setSelectedBookingId(urlBookingId);
+    if (urlBookingId && hasInitializedUrlRef.current !== urlBookingId) {
       const urlBooking = bookings.find((b) => b.id === urlBookingId);
       if (urlBooking) {
+        setSelectedBookingId(urlBooking.id);
         if (IN_PROGRESS_STATUSES.includes(urlBooking.status)) {
           setActiveTab('in_progress');
         } else if (HISTORY_STATUSES.includes(urlBooking.status)) {
@@ -198,8 +143,12 @@ export const DispatchPage: React.FC = () => {
         } else {
           setActiveTab('pending');
         }
+        hasInitializedUrlRef.current = urlBookingId;
+        return;
       }
-    } else if (
+    }
+
+    if (
       !selectedBookingId ||
       !currentQueueList.some((b) => b.id === selectedBookingId)
     ) {
@@ -324,29 +273,41 @@ export const DispatchPage: React.FC = () => {
   // Status transitions
   const handleMarkArriving = async () => {
     if (!selectedBooking) return;
-    await transitionMutation.mutateAsync({
-      bookingId: selectedBooking.id,
-      status: 'ARRIVING',
-      note: 'Quản trị viên xác nhận thợ bắt đầu xuất phát di chuyển tới điểm hẹn',
-    });
+    try {
+      await transitionMutation.mutateAsync({
+        bookingId: selectedBooking.id,
+        status: 'ARRIVING',
+        note: 'Quản trị viên xác nhận thợ bắt đầu xuất phát di chuyển tới điểm hẹn',
+      });
+    } catch {
+      // Handled in mutation onError
+    }
   };
 
   const handleStartJob = async () => {
     if (!selectedBooking) return;
-    await transitionMutation.mutateAsync({
-      bookingId: selectedBooking.id,
-      status: 'IN_PROGRESS',
-      note: 'Thợ đã có mặt và bắt đầu triển khai dịch vụ',
-    });
+    try {
+      await transitionMutation.mutateAsync({
+        bookingId: selectedBooking.id,
+        status: 'IN_PROGRESS',
+        note: 'Thợ đã có mặt và bắt đầu triển khai dịch vụ',
+      });
+    } catch {
+      // Handled in mutation onError
+    }
   };
 
   const handleReportPendingAcceptance = async () => {
     if (!selectedBooking) return;
-    await transitionMutation.mutateAsync({
-      bookingId: selectedBooking.id,
-      status: 'PENDING_ACCEPTANCE',
-      note: 'Thợ đã hoàn thành công việc, gửi báo cáo nghiệm thu',
-    });
+    try {
+      await transitionMutation.mutateAsync({
+        bookingId: selectedBooking.id,
+        status: 'PENDING_ACCEPTANCE',
+        note: 'Thợ đã hoàn thành công việc, gửi báo cáo nghiệm thu',
+      });
+    } catch {
+      // Handled in mutation onError
+    }
   };
 
   const handleRedispatch = async () => {
@@ -363,54 +324,49 @@ export const DispatchPage: React.FC = () => {
       cancelText: 'Hủy bỏ',
     });
     if (!confirmed) return;
-    await transitionMutation.mutateAsync({
-      bookingId: selectedBooking.id,
-      status: 'EMERGENCY_REDISPATCH',
-      note: 'Yêu cầu điều phối lại / đổi thợ tiếp nhận',
-    });
+    try {
+      await transitionMutation.mutateAsync({
+        bookingId: selectedBooking.id,
+        status: 'EMERGENCY_REDISPATCH',
+        note: 'Yêu cầu điều phối lại / đổi thợ tiếp nhận',
+      });
+    } catch {
+      // Handled in mutation onError
+    }
   };
 
-  const handleCancelBooking = async () => {
+  const handleCancelBooking = () => {
     if (!selectedBooking) return;
-    const confirmed = await confirm({
-      title: `Hủy đơn hàng "${selectedBooking.code}"?`,
-      message: (
-        <div className="space-y-2 text-sm text-slate-600">
-          <p>
-            Bạn có chắc chắn muốn hủy đơn hàng <strong>{selectedBooking.code}</strong>?
-          </p>
-          <p className="text-xs text-rose-600 font-medium">
-            Hành động này sẽ dừng toàn bộ quy trình dịch vụ và không thể khôi phục lại.
-          </p>
-        </div>
-      ),
-      variant: 'danger',
-      confirmText: 'Xác nhận hủy đơn',
-      cancelText: 'Đóng',
-    });
-    if (!confirmed) return;
-
-    await transitionMutation.mutateAsync({
-      bookingId: selectedBooking.id,
-      status: 'CANCELLED',
-      note: 'Đơn hàng bị hủy từ Bàn Điều Phối Admin',
-    });
+    setIsCancelModalOpen(true);
   };
 
-  const handleConfirmComplete = async () => {
+  const handleConfirmCancel = async (reason: string) => {
     if (!selectedBooking) return;
-    await transitionMutation.mutateAsync({
-      bookingId: selectedBooking.id,
-      status: 'COMPLETED',
-      note: `Nghiệm thu đạt ${completionRating}/5 sao${completionNote ? `: ${completionNote}` : ''}`,
-    });
-    setIsCompleteModalOpen(false);
-    setCompletionNote('');
-    setCompletionRating(5);
+    try {
+      await transitionMutation.mutateAsync({
+        bookingId: selectedBooking.id,
+        status: 'CANCELLED',
+        note: reason,
+      });
+      setIsCancelModalOpen(false);
+    } catch {
+      // Handled in mutation onError
+    }
   };
 
-  const currentStep = selectedBooking ? getStepNumber(selectedBooking.status) : 0;
-  const isSelectedCancelled = selectedBooking?.status === 'CANCELLED';
+  const handleConfirmComplete = async (rating: number, note: string) => {
+    if (!selectedBooking) return;
+    try {
+      await transitionMutation.mutateAsync({
+        bookingId: selectedBooking.id,
+        status: 'COMPLETED',
+        note: `Nghiệm thu đạt ${rating}/5 sao${note ? `: ${note}` : ''}`,
+      });
+      setIsCompleteModalOpen(false);
+    } catch {
+      // Handled in mutation onError
+    }
+  };
 
   const isDispatchable =
     selectedBooking &&
@@ -663,69 +619,7 @@ export const DispatchPage: React.FC = () => {
             {selectedBooking ? (
               <>
                 {/* Visual Workflow Stepper */}
-                <div className="bg-white border border-slate-200 rounded-xl p-4 sm:p-5 shadow-sm space-y-4">
-                  <div className="flex items-center justify-between">
-                    <div className="text-xs font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
-                      <SlidersHorizontal className="w-3.5 h-3.5 text-brand-500" />
-                      Quy trình Vòng đời Đơn hàng
-                    </div>
-                    <Badge variant={getStatusBadge(selectedBooking.status).variant}>
-                      {getStatusBadge(selectedBooking.status).label}
-                    </Badge>
-                  </div>
-
-                  {isSelectedCancelled ? (
-                    <div className="p-3.5 rounded-xl border border-rose-200 bg-rose-50/70 flex items-center gap-3">
-                      <XCircle className="w-6 h-6 text-rose-500 shrink-0" />
-                      <div>
-                        <div className="font-bold text-rose-900 text-sm">
-                          Đơn hàng đã bị hủy bỏ
-                        </div>
-                        <div className="text-xs text-rose-700 mt-0.5">
-                          Tiến trình đã kết thúc. Không thể thực hiện các bước tiếp theo.
-                        </div>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="grid grid-cols-5 gap-1 sm:gap-2 pt-2">
-                      {LIFECYCLE_STEPS.map((step) => {
-                        const isDone = currentStep > step.stepNum;
-                        const isCurrent = currentStep === step.stepNum;
-                        const isPending = currentStep < step.stepNum;
-
-                        return (
-                          <div
-                            key={step.key}
-                            className="flex flex-col items-center text-center relative"
-                          >
-                            <div
-                              className={`w-8 h-8 sm:w-9 sm:h-9 rounded-full flex items-center justify-center text-xs font-bold transition-all ${
-                                isDone
-                                  ? 'bg-emerald-500 text-white shadow-sm'
-                                  : isCurrent
-                                  ? 'bg-brand-600 text-white ring-4 ring-brand-100 shadow-sm animate-pulse'
-                                  : 'bg-white border-2 border-slate-200 text-slate-400'
-                              }`}
-                            >
-                              {isDone ? <Check className="w-4 h-4 stroke-[2.5]" /> : step.stepNum}
-                            </div>
-                            <div
-                              className={`mt-2 text-[10px] sm:text-xs leading-tight ${
-                                isCurrent
-                                  ? 'font-bold text-brand-700'
-                                  : isDone
-                                  ? 'font-medium text-emerald-700'
-                                  : 'text-slate-400'
-                              }`}
-                            >
-                              {step.label}
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
+                <DispatchStepper status={selectedBooking.status} />
 
                 {/* Selected Booking Detail Card */}
                 <Card className="border-brand-200 bg-gradient-to-br from-white to-orange-50/30">
@@ -1183,104 +1077,23 @@ export const DispatchPage: React.FC = () => {
       )}
 
       {/* Completion Modal */}
-      {isCompleteModalOpen && selectedBooking && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-fadeIn">
-          <div className="bg-white rounded-2xl max-w-md w-full shadow-2xl border border-slate-200 overflow-hidden animate-scaleIn">
-            <div className="p-5 border-b border-slate-100 flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <CheckCircle2 className="w-5 h-5 text-emerald-600" />
-                <h3 className="text-base font-bold text-slate-900">
-                  Nghiệm thu & Hoàn thành đơn
-                </h3>
-              </div>
-              <button
-                onClick={() => setIsCompleteModalOpen(false)}
-                className="text-slate-400 hover:text-slate-600 p-1 rounded-lg"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
+      {/* Completion Modal */}
+      <CompletionModal
+        isOpen={isCompleteModalOpen}
+        booking={selectedBooking || null}
+        isSubmitting={transitionMutation.isPending}
+        onClose={() => setIsCompleteModalOpen(false)}
+        onConfirm={handleConfirmComplete}
+      />
 
-            <div className="p-5 space-y-4">
-              <div>
-                <span className="text-xs font-mono font-bold bg-brand-50 text-brand-700 px-2 py-0.5 rounded">
-                  {selectedBooking.code}
-                </span>
-                <p className="text-sm font-semibold text-slate-800 mt-1">
-                  {selectedBooking.serviceName}
-                </p>
-                <p className="text-xs text-slate-500">
-                  Khách hàng: {selectedBooking.customerName} ({selectedBooking.customerPhone})
-                </p>
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
-                  Đánh giá mức độ hài lòng
-                </label>
-                <div className="flex items-center gap-1.5">
-                  {[1, 2, 3, 4, 5].map((star) => (
-                    <button
-                      key={star}
-                      type="button"
-                      onClick={() => setCompletionRating(star)}
-                      className={`p-1.5 rounded-lg transition-transform hover:scale-110 ${
-                        star <= completionRating ? 'text-amber-400' : 'text-slate-200'
-                      }`}
-                    >
-                      <Star className="w-6 h-6 fill-current" />
-                    </button>
-                  ))}
-                  <span className="text-xs font-bold text-amber-600 ml-2">
-                    {completionRating === 5
-                      ? '5/5 - Xuất sắc'
-                      : completionRating === 4
-                      ? '4/5 - Hài lòng'
-                      : completionRating === 3
-                      ? '3/5 - Đạt chuẩn'
-                      : completionRating === 2
-                      ? '2/5 - Chưa đạt'
-                      : '1/5 - Không hài lòng'}
-                  </span>
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-                  Ghi chú nghiệm thu
-                </label>
-                <textarea
-                  value={completionNote}
-                  onChange={(e) => setCompletionNote(e.target.value)}
-                  rows={3}
-                  placeholder="Nhập nhận xét nghiệm thu, biên bản bàn giao hoặc ghi chú đặc biệt..."
-                  className="w-full text-xs p-2.5 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500"
-                />
-              </div>
-            </div>
-
-            <div className="p-4 bg-slate-50 border-t border-slate-100 flex items-center justify-end gap-2.5">
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => setIsCompleteModalOpen(false)}
-              >
-                Hủy bỏ
-              </Button>
-              <Button
-                size="sm"
-                variant="primary"
-                className="bg-emerald-600 hover:bg-emerald-700 text-white"
-                disabled={transitionMutation.isPending}
-                onClick={handleConfirmComplete}
-                leftIcon={<Check className="w-3.5 h-3.5" />}
-              >
-                {transitionMutation.isPending ? 'Đang hoàn tất...' : 'Xác nhận hoàn thành'}
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Cancel Booking Modal */}
+      <CancelBookingModal
+        isOpen={isCancelModalOpen}
+        booking={selectedBooking || null}
+        isSubmitting={transitionMutation.isPending}
+        onClose={() => setIsCancelModalOpen(false)}
+        onConfirm={handleConfirmCancel}
+      />
     </div>
   );
 };

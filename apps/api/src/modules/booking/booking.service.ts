@@ -314,16 +314,13 @@ export class BookingService {
     const previousStatus = booking.status;
 
     return this.prisma.$transaction(async (tx) => {
-      if (tasker.tenantId !== booking.servicingTenantId && isSuperAdmin && tasker.tenantId) {
-        await tx.booking.update({
-          where: { id: bookingId },
-          data: { servicingTenantId: tasker.tenantId },
-        });
-      }
+      const isCrossTenant =
+        tasker.tenantId !== booking.servicingTenantId && isSuperAdmin && Boolean(tasker.tenantId);
 
       const updatedBooking = await tx.booking.update({
         where: { id: bookingId },
         data: {
+          ...(isCrossTenant && tasker.tenantId ? { servicingTenantId: tasker.tenantId } : {}),
           assignedTaskerId: tasker.id,
           status: BookingStatus.ASSIGNED,
           events: {
