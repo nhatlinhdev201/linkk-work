@@ -31,6 +31,16 @@ export interface TaskerQueryParams {
   limit?: number;
 }
 
+/**
+ * Loại bỏ passwordHash khỏi đối tượng User trước khi trả về client
+ */
+export function sanitizeTaskerUser<T extends { passwordHash?: string }>(
+  user: T,
+): Omit<T, 'passwordHash'> {
+  const { passwordHash: _hash, ...sanitized } = user;
+  return sanitized;
+}
+
 @Injectable()
 export class TaskerService {
   constructor(private readonly prisma: PrismaService) {}
@@ -126,7 +136,7 @@ export class TaskerService {
         throw new NotFoundException(`Tasker ${user.id} not found after creation`);
       }
 
-      return result;
+      return sanitizeTaskerUser(result);
     });
   }
 
@@ -192,7 +202,7 @@ export class TaskerService {
     ]);
 
     return {
-      taskers,
+      taskers: taskers.map(sanitizeTaskerUser),
       total,
       page,
       limit,
@@ -226,11 +236,13 @@ export class TaskerService {
       throw new NotFoundException(`Tasker with ID ${id} not found`);
     }
 
-    if (!isSuperAdmin && tasker.tenantId !== effectiveTenantId) {
-      throw new ForbiddenException('You do not have access to taskers in another tenant');
+    if (!isSuperAdmin) {
+      if (!effectiveTenantId || tasker.tenantId !== effectiveTenantId) {
+        throw new ForbiddenException('You do not have access to taskers in another tenant');
+      }
     }
 
-    return tasker;
+    return sanitizeTaskerUser(tasker);
   }
 
   /**
@@ -283,7 +295,7 @@ export class TaskerService {
         throw new NotFoundException(`Tasker ${tasker.id} not found after update`);
       }
 
-      return updated;
+      return sanitizeTaskerUser(updated);
     });
   }
 

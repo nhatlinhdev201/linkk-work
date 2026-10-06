@@ -1,6 +1,7 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import {
   IsArray,
+  IsIn,
   IsOptional,
   IsString,
   Matches,
@@ -56,5 +57,8 @@ export class UpdateTaskerDto {
   })
   @IsOptional()
   @IsString()
+  @IsIn(['COMMISSION', 'FIXED_SALARY'], {
+    message: 'salaryType phải là COMMISSION hoặc FIXED_SALARY',
+  })
   salaryType?: string;
 }

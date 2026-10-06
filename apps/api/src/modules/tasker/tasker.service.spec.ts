@@ -89,6 +89,8 @@ describe('TaskerService', () => {
     walletTransactions: [],
   };
 
+  const { passwordHash: _hash, ...sanitizedMockUser } = mockUserTasker;
+
   beforeEach(async () => {
     prisma = {
       user: {
@@ -217,7 +219,8 @@ describe('TaskerService', () => {
         }),
       );
 
-      expect(result).toEqual(mockUserTasker);
+      expect(result).toEqual(sanitizedMockUser);
+      expect((result as Record<string, unknown>).passwordHash).toBeUndefined();
     });
 
     it('should allow Super Admin to create tasker with default tenant if none specified', async () => {
@@ -269,6 +272,7 @@ describe('TaskerService', () => {
       );
       expect(result.total).toBe(1);
       expect(result.taskers).toHaveLength(1);
+      expect((result.taskers[0] as Record<string, unknown>).passwordHash).toBeUndefined();
     });
 
     it('should throw ForbiddenException if non-superadmin has no tenant context', async () => {
@@ -353,7 +357,8 @@ describe('TaskerService', () => {
           }),
         }),
       );
-      expect(result).toEqual(mockUserTasker);
+      expect(result).toEqual(sanitizedMockUser);
+      expect((result as Record<string, unknown>).passwordHash).toBeUndefined();
     });
 
     it('should throw NotFoundException if tasker not found', async () => {
@@ -362,6 +367,14 @@ describe('TaskerService', () => {
       await expect(
         service.getTaskerById('non-existent', mockTenantId, false),
       ).rejects.toThrow(NotFoundException);
+    });
+
+    it('should throw ForbiddenException if non-superadmin has null tenant context', async () => {
+      prisma.user.findFirst.mockResolvedValueOnce(mockUserTasker);
+
+      await expect(
+        service.getTaskerById('user-tasker-1', null, false),
+      ).rejects.toThrow(ForbiddenException);
     });
 
     it('should throw ForbiddenException if tasker belongs to another tenant for non-superadmin', async () => {
@@ -383,6 +396,7 @@ describe('TaskerService', () => {
 
       const result = await service.getTaskerById('user-tasker-1', null, true);
       expect(result.tenantId).toBe(otherTenantId);
+      expect((result as Record<string, unknown>).passwordHash).toBeUndefined();
     });
   });
 
@@ -418,6 +432,7 @@ describe('TaskerService', () => {
       });
 
       expect(result.name).toBe(updateDto.name);
+      expect((result as Record<string, unknown>).passwordHash).toBeUndefined();
     });
 
     it('should throw ForbiddenException if non-superadmin updates tasker in another tenant', async () => {
@@ -876,6 +891,34 @@ describe('TaskerService', () => {
         });
         const negErrors = await validate(negDto);
         expect(negErrors).toHaveLength(0);
+      });
+    });
+
+    describe('UpdateTaskerDto', () => {
+      it('should accept valid salaryType values', async () => {
+        const commDto = plainToInstance(UpdateTaskerDto, {
+          salaryType: 'COMMISSION',
+        });
+        const commErrors = await validate(commDto);
+        expect(commErrors).toHaveLength(0);
+
+        const fixedDto = plainToInstance(UpdateTaskerDto, {
+          salaryType: 'FIXED_SALARY',
+        });
+        const fixedErrors = await validate(fixedDto);
+        expect(fixedErrors).toHaveLength(0);
+
+        const emptyDto = plainToInstance(UpdateTaskerDto, {});
+        const emptyErrors = await validate(emptyDto);
+        expect(emptyErrors).toHaveLength(0);
+      });
+
+      it('should reject invalid salaryType value', async () => {
+        const invalidDto = plainToInstance(UpdateTaskerDto, {
+          salaryType: 'HOURLY',
+        });
+        const errors = await validate(invalidDto);
+        expect(errors.some((e) => e.property === 'salaryType')).toBe(true);
       });
     });
 
