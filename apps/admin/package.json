@@ -7,16 +7,19 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
-    "test": "node --test --experimental-strip-types src/api/auth-integration.spec.ts src/api/catalog-integration.spec.ts src/api/booking-integration.spec.ts"
+    "test": "node --test --experimental-strip-types src/schemas/auth.schema.spec.ts src/api/auth-integration.spec.ts src/api/catalog-integration.spec.ts src/api/booking-integration.spec.ts"
   },
   "dependencies": {
+    "@hookform/resolvers": "^5.9.1",
     "@tanstack/react-query": "^5.104.1",
     "clsx": "^2.1.1",
     "lucide-react": "^0.475.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
+    "react-hook-form": "^7.89.0",
     "react-router-dom": "^6.28.0",
     "tailwind-merge": "^2.5.5",
+    "zod": "^4.6.5",
     "zustand": "^5.0.15"
   },
   "devDependencies": {
