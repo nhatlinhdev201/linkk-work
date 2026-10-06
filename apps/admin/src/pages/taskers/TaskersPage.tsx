@@ -85,7 +85,7 @@ export const TaskersPage: React.FC = () => {
       t.name.toLowerCase().includes(q) ||
       t.phone.includes(q) ||
       (t.skills && t.skills.some((s) => s.toLowerCase().includes(q))) ||
-      (t.idCardNumber && t.idCardNumber.includes(q)) ||
+      (t.idCardNumber && t.idCardNumber.toLowerCase().includes(q)) ||
       t.id.toLowerCase().includes(q) ||
       (t.code && t.code.toLowerCase().includes(q));
 
@@ -98,6 +98,9 @@ export const TaskersPage: React.FC = () => {
     if (activeFilter === 'LOW_RATING') return (t.ratingScore ?? t.rating ?? 5.0) < 4.0;
     return true;
   });
+
+  const totalPages = Math.max(1, Math.ceil(filteredTaskers.length / pageSize));
+  const safePage = Math.min(currentPage, totalPages);
 
   // Action Handlers
   const handleToggleOnline = async (t: Tasker) => {
@@ -235,7 +238,7 @@ export const TaskersPage: React.FC = () => {
         <div className="space-y-5">
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
             {filteredTaskers
-              .slice((currentPage - 1) * pageSize, currentPage * pageSize)
+              .slice((safePage - 1) * pageSize, safePage * pageSize)
               .map((t) => {
                 const isLowDeposit = (t.depositBalance ?? 0) < 100000;
                 const ratingValue = (t.ratingScore ?? t.rating ?? 5.0).toFixed(1);
@@ -450,14 +453,24 @@ export const TaskersPage: React.FC = () => {
 
           {/* Pagination */}
           <Pagination
-            currentPage={currentPage}
-            totalPages={Math.ceil(filteredTaskers.length / pageSize)}
+            currentPage={safePage}
+            totalPages={totalPages}
             totalItems={filteredTaskers.length}
             pageSize={pageSize}
             onPageChange={setCurrentPage}
           />
         </div>
       )}
+
+      {/* 360-Degree Detail & Ledger Drawer (Rendered before modals so modals stack on top) */}
+      <TaskerDetailDrawer
+        isOpen={Boolean(detailTasker)}
+        onClose={() => setDetailTasker(null)}
+        tasker={detailTasker}
+        onOpenEditModal={(t) => setEditingTasker(t)}
+        onOpenWorkFloorModal={(t) => setWorkFloorTasker(t)}
+        onOpenDepositModal={(t) => setDepositTasker(t)}
+      />
 
       {/* Onboarding Modal (Add New Tasker) */}
       <TaskerModal
@@ -493,16 +506,6 @@ export const TaskersPage: React.FC = () => {
         onClose={() => setDepositTasker(null)}
         tasker={depositTasker}
         onSuccess={() => setDepositTasker(null)}
-      />
-
-      {/* 360-Degree Detail & Ledger Drawer */}
-      <TaskerDetailDrawer
-        isOpen={Boolean(detailTasker)}
-        onClose={() => setDetailTasker(null)}
-        tasker={detailTasker}
-        onOpenEditModal={(t) => setEditingTasker(t)}
-        onOpenWorkFloorModal={(t) => setWorkFloorTasker(t)}
-        onOpenDepositModal={(t) => setDepositTasker(t)}
       />
     </div>
   );
