@@ -42,6 +42,7 @@ import {
   DispatchStepper,
   CompletionModal,
   CancelBookingModal,
+  AuditTimeline,
   getStatusBadgeInfo,
 } from './components';
 
@@ -329,6 +330,32 @@ export const DispatchPage: React.FC = () => {
         bookingId: selectedBooking.id,
         status: 'EMERGENCY_REDISPATCH',
         note: 'Yêu cầu điều phối lại / đổi thợ tiếp nhận',
+      });
+    } catch {
+      // Handled in mutation onError
+    }
+  };
+
+  const handleRejectAcceptance = async () => {
+    if (!selectedBooking) return;
+    const confirmed = await confirm({
+      title: `Yêu cầu làm lại đơn "${selectedBooking.code}"?`,
+      message: (
+        <span>
+          Nghiệm thu chưa đạt yêu cầu? Đơn sẽ chuyển lại về trạng thái{' '}
+          <strong>Đang làm việc (IN_PROGRESS)</strong> để thợ tiếp tục xử lý và hoàn thiện dịch vụ.
+        </span>
+      ),
+      variant: 'warning',
+      confirmText: 'Yêu cầu làm lại',
+      cancelText: 'Hủy bỏ',
+    });
+    if (!confirmed) return;
+    try {
+      await transitionMutation.mutateAsync({
+        bookingId: selectedBooking.id,
+        status: 'IN_PROGRESS',
+        note: 'Quản trị viên yêu cầu thợ làm lại / khắc phục các hạng mục chưa đạt nghiệm thu',
       });
     } catch {
       // Handled in mutation onError
@@ -797,6 +824,15 @@ export const DispatchPage: React.FC = () => {
                           <Button
                             size="sm"
                             variant="outline"
+                            disabled={transitionMutation.isPending}
+                            onClick={handleRedispatch}
+                            leftIcon={<RotateCcw className="w-3.5 h-3.5" />}
+                          >
+                            Đổi thợ khẩn cấp
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
                             className="text-rose-600 hover:bg-rose-50 border-rose-200"
                             disabled={transitionMutation.isPending}
                             onClick={handleCancelBooking}
@@ -821,6 +857,25 @@ export const DispatchPage: React.FC = () => {
                           </Button>
                           <Button
                             size="sm"
+                            variant="primary"
+                            className="bg-emerald-600 hover:bg-emerald-700 text-white"
+                            disabled={transitionMutation.isPending}
+                            onClick={() => setIsCompleteModalOpen(true)}
+                            leftIcon={<CheckCircle2 className="w-3.5 h-3.5" />}
+                          >
+                            Nghiệm thu & Hoàn tất ngay
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            disabled={transitionMutation.isPending}
+                            onClick={handleRedispatch}
+                            leftIcon={<RotateCcw className="w-3.5 h-3.5" />}
+                          >
+                            Đổi thợ
+                          </Button>
+                          <Button
+                            size="sm"
                             variant="outline"
                             className="text-rose-600 hover:bg-rose-50 border-rose-200"
                             disabled={transitionMutation.isPending}
@@ -834,16 +889,38 @@ export const DispatchPage: React.FC = () => {
 
                       {/* PENDING_ACCEPTANCE */}
                       {selectedBooking.status === 'PENDING_ACCEPTANCE' && (
-                        <Button
-                          size="sm"
-                          variant="primary"
-                          className="bg-emerald-600 hover:bg-emerald-700 text-white"
-                          disabled={transitionMutation.isPending}
-                          onClick={() => setIsCompleteModalOpen(true)}
-                          leftIcon={<CheckCircle2 className="w-3.5 h-3.5" />}
-                        >
-                          Nghiệm thu & Hoàn thành đơn (COMPLETED)
-                        </Button>
+                        <>
+                          <Button
+                            size="sm"
+                            variant="primary"
+                            className="bg-emerald-600 hover:bg-emerald-700 text-white"
+                            disabled={transitionMutation.isPending}
+                            onClick={() => setIsCompleteModalOpen(true)}
+                            leftIcon={<CheckCircle2 className="w-3.5 h-3.5" />}
+                          >
+                            Nghiệm thu & Hoàn thành đơn (COMPLETED)
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="text-amber-700 hover:bg-amber-50 border-amber-300"
+                            disabled={transitionMutation.isPending}
+                            onClick={handleRejectAcceptance}
+                            leftIcon={<RotateCcw className="w-3.5 h-3.5" />}
+                          >
+                            Yêu cầu làm lại (IN_PROGRESS)
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="text-rose-600 hover:bg-rose-50 border-rose-200"
+                            disabled={transitionMutation.isPending}
+                            onClick={handleCancelBooking}
+                            leftIcon={<XCircle className="w-3.5 h-3.5" />}
+                          >
+                            Hủy đơn
+                          </Button>
+                        </>
                       )}
 
                       {/* COMPLETED / REVIEWED */}
@@ -856,6 +933,9 @@ export const DispatchPage: React.FC = () => {
                     </div>
                   </div>
                 </Card>
+
+                {/* Audit Timeline / Event Logs */}
+                <AuditTimeline events={selectedBooking.events} />
 
                 {/* Direct Assignment: Tasker List (Available when dispatchable) */}
                 {isDispatchable && (

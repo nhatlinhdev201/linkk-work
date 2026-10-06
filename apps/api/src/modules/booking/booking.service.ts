@@ -12,7 +12,7 @@ import { AssignTaskerDto } from './dto/assign-tasker.dto';
 import { TransitionStatusDto } from './dto/transition-status.dto';
 import { QueryBookingsDto } from './dto/query-bookings.dto';
 import { isValidBookingTransition } from './booking-state-machine';
-import { BookingStatus, UserRole, ServicePricingType } from '@linkkwork/shared-types';
+import { BookingStatus, UserRole, ServicePricingType, PaymentStatus } from '@linkkwork/shared-types';
 
 @Injectable()
 export class BookingService {
@@ -188,6 +188,9 @@ export class BookingService {
         include: {
           service: true,
           addons: true,
+          events: {
+            orderBy: { createdAt: 'asc' },
+          },
           originTenant: true,
           servicingTenant: true,
           assignedTasker: {
@@ -371,23 +374,31 @@ export class BookingService {
     const previousStatus = booking.status;
 
     return this.prisma.$transaction(async (tx) => {
-      const updatedBooking = await tx.booking.update({
-        where: { id: bookingId },
-        data: {
-          status: dto.status,
-          events: {
-            create: {
-              fromStatus: previousStatus,
-              toStatus: dto.status,
-              triggeredBy,
-              note: dto.note || `Chuyển trạng thái sang ${dto.status}`,
-            },
+      const updateData: Record<string, unknown> = {
+        status: dto.status,
+        events: {
+          create: {
+            fromStatus: previousStatus,
+            toStatus: dto.status,
+            triggeredBy,
+            note: dto.note || `Chuyển trạng thái sang ${dto.status}`,
           },
         },
+      };
+
+      if (dto.status === BookingStatus.COMPLETED) {
+        updateData.paymentStatus = PaymentStatus.RELEASED_TO_TASKER;
+      }
+
+      const updatedBooking = await tx.booking.update({
+        where: { id: bookingId },
+        data: updateData,
         include: {
           service: true,
           addons: true,
-          events: true,
+          events: {
+            orderBy: { createdAt: 'asc' },
+          },
           originTenant: true,
           servicingTenant: true,
           assignedTasker: {
@@ -395,6 +406,15 @@ export class BookingService {
           },
         },
       });
+
+      if (dto.status === BookingStatus.COMPLETED && booking.assignedTaskerId) {
+        await tx.taskerProfile.updateMany({
+          where: { userId: booking.assignedTaskerId },
+          data: {
+            completedJobsCount: { increment: 1 },
+          },
+        });
+      }
 
       // Cập nhật trạng thái Redis cho radar/worker
       await this.redis.set(`job:status:${bookingId}`, dto.status, 86400);

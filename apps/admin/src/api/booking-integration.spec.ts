@@ -221,5 +221,57 @@ test('Admin Booking & Dispatch Engine Integration Suite', async (t) => {
       assert.equal(cancelledBooking.status, 'CANCELLED');
     }
   );
+
+  await t.test(
+    '10. Admin rework rejection (PENDING_ACCEPTANCE -> IN_PROGRESS) and direct completion (IN_PROGRESS -> COMPLETED)',
+    async () => {
+      const reworkTarget = await api.createManualBooking(
+        partnerTenantId,
+        'Công ty Vệ Sinh Ánh Dương',
+        {
+          customerName: 'Hoàng Thị Thử Nghiệm',
+          customerPhone: '0918889999',
+          addressText: '12 Nguyễn Thị Minh Khai, Q1',
+          serviceName: 'Dọn dẹp nhà theo giờ',
+          pricingType: 'HOURLY',
+          scheduledAt: new Date(Date.now() + 86400000).toISOString(),
+          durationHours: 2,
+          totalAmount: 160000,
+        }
+      );
+      assert.ok(reworkTarget.id);
+
+      // Assign & advance to PENDING_ACCEPTANCE
+      await api.directAssignBooking(reworkTarget.id, availableTaskerId, partnerTenantId);
+      await api.transitionBookingStatus(reworkTarget.id, 'ARRIVING', 'Thợ xuất phát', partnerTenantId);
+      await api.transitionBookingStatus(reworkTarget.id, 'IN_PROGRESS', 'Thợ bắt đầu làm', partnerTenantId);
+      await api.transitionBookingStatus(reworkTarget.id, 'PENDING_ACCEPTANCE', 'Báo cáo nghiệm thu', partnerTenantId);
+
+      // Admin rejects acceptance: PENDING_ACCEPTANCE -> IN_PROGRESS
+      const reworkBooking = await api.transitionBookingStatus(
+        reworkTarget.id,
+        'IN_PROGRESS',
+        'Nghiệm thu chưa đạt, yêu cầu lau dọn lại phòng khách',
+        partnerTenantId
+      );
+      assert.equal(reworkBooking.status, 'IN_PROGRESS');
+
+      // Admin directly completes: IN_PROGRESS -> COMPLETED
+      const completedBooking = await api.transitionBookingStatus(
+        reworkTarget.id,
+        'COMPLETED',
+        'Nghiệm thu lại đạt chuẩn 5 sao',
+        partnerTenantId
+      );
+      assert.equal(completedBooking.status, 'COMPLETED');
+
+      // Fetch booking details to verify audit events
+      const detail = await api.getBookingById(reworkTarget.id);
+      assert.equal(detail.status, 'COMPLETED');
+      if (detail.events) {
+        assert.ok(detail.events.length >= 4, 'Should record all state change events');
+      }
+    }
+  );
 });
 

@@ -585,6 +585,72 @@ describe('Booking Engine & Dispatch Module E2E / Integration Tests', () => {
 
       expect(res.body.status).toBe(BookingStatus.CANCELLED);
     });
+
+    it('should allow admin to reject acceptance and return PENDING_ACCEPTANCE to IN_PROGRESS (rework flow)', async () => {
+      // Step to PENDING_ACCEPTANCE
+      await request(app.getHttpServer())
+        .post(`/api/v1/bookings/${lifecycleBookingId}/assign`)
+        .set('Authorization', `Bearer ${anhDuongAdminToken}`)
+        .send({ taskerId: anhDuongTaskerId });
+
+      await request(app.getHttpServer())
+        .patch(`/api/v1/bookings/${lifecycleBookingId}/status`)
+        .set('Authorization', `Bearer ${anhDuongAdminToken}`)
+        .send({ status: BookingStatus.ARRIVING });
+
+      await request(app.getHttpServer())
+        .patch(`/api/v1/bookings/${lifecycleBookingId}/status`)
+        .set('Authorization', `Bearer ${anhDuongAdminToken}`)
+        .send({ status: BookingStatus.IN_PROGRESS });
+
+      await request(app.getHttpServer())
+        .patch(`/api/v1/bookings/${lifecycleBookingId}/status`)
+        .set('Authorization', `Bearer ${anhDuongAdminToken}`)
+        .send({ status: BookingStatus.PENDING_ACCEPTANCE });
+
+      // Admin rejects acceptance report -> returns to IN_PROGRESS
+      const res = await request(app.getHttpServer())
+        .patch(`/api/v1/bookings/${lifecycleBookingId}/status`)
+        .set('Authorization', `Bearer ${anhDuongAdminToken}`)
+        .send({
+          status: BookingStatus.IN_PROGRESS,
+          note: 'Chưa lau dọn khu vực ban công, yêu cầu hoàn tất lại',
+        })
+        .expect(200);
+
+      expect(res.body.status).toBe(BookingStatus.IN_PROGRESS);
+    });
+
+    it('should allow direct completion from IN_PROGRESS and release escrow payment to tasker', async () => {
+      // Step to IN_PROGRESS
+      await request(app.getHttpServer())
+        .post(`/api/v1/bookings/${lifecycleBookingId}/assign`)
+        .set('Authorization', `Bearer ${anhDuongAdminToken}`)
+        .send({ taskerId: anhDuongTaskerId });
+
+      await request(app.getHttpServer())
+        .patch(`/api/v1/bookings/${lifecycleBookingId}/status`)
+        .set('Authorization', `Bearer ${anhDuongAdminToken}`)
+        .send({ status: BookingStatus.ARRIVING });
+
+      await request(app.getHttpServer())
+        .patch(`/api/v1/bookings/${lifecycleBookingId}/status`)
+        .set('Authorization', `Bearer ${anhDuongAdminToken}`)
+        .send({ status: BookingStatus.IN_PROGRESS });
+
+      // Direct completion from IN_PROGRESS
+      const res = await request(app.getHttpServer())
+        .patch(`/api/v1/bookings/${lifecycleBookingId}/status`)
+        .set('Authorization', `Bearer ${anhDuongAdminToken}`)
+        .send({
+          status: BookingStatus.COMPLETED,
+          note: 'Khách hàng thanh toán và nghiệm thu trực tiếp tại chỗ',
+        })
+        .expect(200);
+
+      expect(res.body.status).toBe(BookingStatus.COMPLETED);
+      expect(res.body.paymentStatus).toBe('RELEASED_TO_TASKER');
+    });
   });
 
   describe('6. Radar Broadcasting', () => {

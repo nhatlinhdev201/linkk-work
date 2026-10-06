@@ -33,6 +33,7 @@ import {
   CheckCircle,
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import { getStatusBadgeInfo } from '../dispatch/components';
 
 export const BookingsPage: React.FC = () => {
   const { currentTenantId, currentTenantName } = useAuth();
@@ -129,29 +130,32 @@ export const BookingsPage: React.FC = () => {
       b.addressText.toLowerCase().includes(searchQuery.toLowerCase()) ||
       b.serviceName.toLowerCase().includes(searchQuery.toLowerCase());
 
-    if (statusFilter === 'ALL') return matchSearch;
-    return matchSearch && b.status === statusFilter;
+    if (!matchSearch) return false;
+    if (statusFilter === 'ALL') return true;
+    if (statusFilter === 'PENDING_DISPATCH') {
+      return ['PENDING_DISPATCH', 'BROADCASTING', 'MATCHING', 'EMERGENCY_REDISPATCH'].includes(b.status);
+    }
+    if (statusFilter === 'ASSIGNED') {
+      return ['ASSIGNED', 'ARRIVING', 'ON_THE_WAY'].includes(b.status);
+    }
+    if (statusFilter === 'IN_PROGRESS') {
+      return b.status === 'IN_PROGRESS';
+    }
+    if (statusFilter === 'PENDING_ACCEPTANCE') {
+      return b.status === 'PENDING_ACCEPTANCE';
+    }
+    if (statusFilter === 'COMPLETED') {
+      return ['COMPLETED', 'REVIEWED'].includes(b.status);
+    }
+    if (statusFilter === 'CANCELLED') {
+      return ['CANCELLED', 'DISPATCH_FAILED'].includes(b.status);
+    }
+    return b.status === statusFilter;
   });
 
   const getStatusBadge = (status: Booking['status']) => {
-    switch (status) {
-      case 'PENDING_DISPATCH':
-        return <Badge variant="warning">Chờ điều phối</Badge>;
-      case 'MATCHING':
-      case 'BROADCASTING':
-        return <Badge variant="info">Đang bắn đơn nội bộ</Badge>;
-      case 'ASSIGNED':
-      case 'ON_THE_WAY':
-        return <Badge variant="brand">Đã nhận việc</Badge>;
-      case 'IN_PROGRESS':
-        return <Badge variant="warning">Đang làm việc</Badge>;
-      case 'COMPLETED':
-        return <Badge variant="success">Hoàn thành</Badge>;
-      case 'CANCELLED':
-        return <Badge variant="danger">Đã hủy</Badge>;
-      default:
-        return <Badge variant="neutral">{status}</Badge>;
-    }
+    const badgeInfo = getStatusBadgeInfo(status);
+    return <Badge variant={badgeInfo.variant}>{badgeInfo.label}</Badge>;
   };
 
   const filterTabs = [
@@ -159,27 +163,36 @@ export const BookingsPage: React.FC = () => {
     {
       id: 'PENDING_DISPATCH',
       label: 'Chờ điều phối',
-      count: bookings.filter((b) => b.status === 'PENDING_DISPATCH').length,
-    },
-    {
-      id: 'BROADCASTING',
-      label: 'Đang bắn đơn',
-      count: bookings.filter((b) => b.status === 'BROADCASTING').length,
+      count: bookings.filter((b) =>
+        ['PENDING_DISPATCH', 'BROADCASTING', 'MATCHING', 'EMERGENCY_REDISPATCH'].includes(b.status)
+      ).length,
     },
     {
       id: 'ASSIGNED',
-      label: 'Đã nhận việc',
-      count: bookings.filter((b) => b.status === 'ASSIGNED' || b.status === 'ON_THE_WAY').length,
+      label: 'Đang di chuyển / Đã gán',
+      count: bookings.filter((b) =>
+        ['ASSIGNED', 'ARRIVING', 'ON_THE_WAY'].includes(b.status)
+      ).length,
     },
     {
       id: 'IN_PROGRESS',
-      label: 'Đang làm',
+      label: 'Đang làm việc',
       count: bookings.filter((b) => b.status === 'IN_PROGRESS').length,
+    },
+    {
+      id: 'PENDING_ACCEPTANCE',
+      label: 'Chờ nghiệm thu',
+      count: bookings.filter((b) => b.status === 'PENDING_ACCEPTANCE').length,
     },
     {
       id: 'COMPLETED',
       label: 'Hoàn thành',
-      count: bookings.filter((b) => b.status === 'COMPLETED').length,
+      count: bookings.filter((b) => ['COMPLETED', 'REVIEWED'].includes(b.status)).length,
+    },
+    {
+      id: 'CANCELLED',
+      label: 'Đã hủy',
+      count: bookings.filter((b) => ['CANCELLED', 'DISPATCH_FAILED'].includes(b.status)).length,
     },
   ];
 
@@ -342,7 +355,7 @@ export const BookingsPage: React.FC = () => {
                       <TableCell align="center">{getStatusBadge(b.status)}</TableCell>
 
                       <TableCell align="right">
-                        {b.status === 'PENDING_DISPATCH' || b.status === 'BROADCASTING' ? (
+                        {['PENDING_DISPATCH', 'BROADCASTING', 'MATCHING', 'EMERGENCY_REDISPATCH'].includes(b.status) ? (
                           <Link
                             to={`/dispatch?bookingId=${b.id}`}
                             className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-brand-50 text-brand-600 hover:bg-brand-100 transition-colors"
@@ -350,12 +363,21 @@ export const BookingsPage: React.FC = () => {
                             Điều phối
                             <ArrowRight className="w-3 h-3" />
                           </Link>
+                        ) : ['ASSIGNED', 'ARRIVING', 'ON_THE_WAY', 'IN_PROGRESS', 'PENDING_ACCEPTANCE'].includes(b.status) ? (
+                          <Link
+                            to={`/dispatch?bookingId=${b.id}`}
+                            className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-brand-600 text-white hover:bg-brand-700 transition-colors shadow-xs"
+                          >
+                            Xử lý tiến trình
+                            <ArrowRight className="w-3 h-3" />
+                          </Link>
                         ) : (
                           <Link
                             to={`/dispatch?bookingId=${b.id}`}
-                            className="text-xs text-slate-400 hover:text-slate-700 font-medium"
+                            className="text-xs text-slate-500 hover:text-slate-800 font-medium inline-flex items-center gap-1"
                           >
                             Chi tiết
+                            <ArrowRight className="w-3 h-3" />
                           </Link>
                         )}
                       </TableCell>
@@ -420,9 +442,17 @@ export const BookingsPage: React.FC = () => {
 
                     <Link
                       to={`/dispatch?bookingId=${b.id}`}
-                      className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-semibold bg-brand-50 text-brand-600 hover:bg-brand-100 transition-colors"
+                      className={`inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
+                        ['ASSIGNED', 'ARRIVING', 'ON_THE_WAY', 'IN_PROGRESS', 'PENDING_ACCEPTANCE'].includes(b.status)
+                          ? 'bg-brand-600 text-white hover:bg-brand-700 shadow-xs'
+                          : 'bg-brand-50 text-brand-600 hover:bg-brand-100'
+                      }`}
                     >
-                      {b.status === 'PENDING_DISPATCH' || b.status === 'BROADCASTING' ? 'Điều phối ngay' : 'Chi tiết đơn'}
+                      {['PENDING_DISPATCH', 'BROADCASTING', 'MATCHING', 'EMERGENCY_REDISPATCH'].includes(b.status)
+                        ? 'Điều phối ngay'
+                        : ['ASSIGNED', 'ARRIVING', 'ON_THE_WAY', 'IN_PROGRESS', 'PENDING_ACCEPTANCE'].includes(b.status)
+                        ? 'Xử lý tiến trình'
+                        : 'Chi tiết đơn'}
                       <ArrowRight className="w-3.5 h-3.5" />
                     </Link>
                   </div>

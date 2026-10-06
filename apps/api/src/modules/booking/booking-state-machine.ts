@@ -34,14 +34,19 @@ export const VALID_BOOKING_TRANSITIONS: Record<BookingStatus, readonly BookingSt
   ],
   [BookingStatus.ARRIVING]: [
     BookingStatus.IN_PROGRESS,
+    BookingStatus.EMERGENCY_REDISPATCH,
     BookingStatus.CANCELLED,
   ],
   [BookingStatus.IN_PROGRESS]: [
     BookingStatus.PENDING_ACCEPTANCE,
+    BookingStatus.COMPLETED,
+    BookingStatus.EMERGENCY_REDISPATCH,
     BookingStatus.CANCELLED,
   ],
   [BookingStatus.PENDING_ACCEPTANCE]: [
     BookingStatus.COMPLETED,
+    BookingStatus.IN_PROGRESS,
+    BookingStatus.CANCELLED,
   ],
   [BookingStatus.COMPLETED]: [
     BookingStatus.REVIEWED,

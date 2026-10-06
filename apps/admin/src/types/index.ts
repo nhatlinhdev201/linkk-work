@@ -50,6 +50,15 @@ export type BookingStatus =
 
 export type PricingModel = 'HOURLY' | 'PER_UNIT' | 'BIDDING';
 
+export interface BookingEventItem {
+  id: string;
+  fromStatus?: BookingStatus | null;
+  toStatus: BookingStatus;
+  triggeredBy: string;
+  note?: string | null;
+  createdAt: string;
+}
+
 export interface Booking {
   id: string;
   code: string;
@@ -69,6 +78,7 @@ export interface Booking {
   assignedTaskerId: string | null;
   assignedTaskerName: string | null;
   assignedTaskerPhone: string | null;
+  events?: BookingEventItem[];
   createdAt: string;
 }
 

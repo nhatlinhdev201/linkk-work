@@ -297,6 +297,16 @@ export function mapBackendBookingToAdminBooking(b: BackendBookingResponse): Book
     assignedTaskerId: b.assignedTaskerId || (b.assignedTasker ? b.assignedTasker.id : null),
     assignedTaskerName: b.assignedTasker?.name || null,
     assignedTaskerPhone: b.assignedTasker?.phone || null,
+    events: b.events
+      ? b.events.map((e) => ({
+          id: e.id,
+          fromStatus: (e.fromStatus as BookingStatus) || null,
+          toStatus: e.toStatus as BookingStatus,
+          triggeredBy: e.triggeredBy,
+          note: e.note || null,
+          createdAt: e.createdAt,
+        }))
+      : undefined,
     createdAt: b.createdAt,
   };
 }
