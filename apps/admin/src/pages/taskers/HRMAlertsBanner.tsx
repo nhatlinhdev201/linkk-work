@@ -33,7 +33,7 @@ export const HRMAlertsBanner: React.FC<HRMAlertsBannerProps> = ({
   const pendingKycCount = taskers.filter((t) => !t.kycVerified).length;
 
   const lowRatingCount = taskers.filter(
-    (t) => (t.ratingScore || t.rating || 5.0) < 4.0
+    (t) => (t.ratingScore ?? t.rating ?? 5.0) < 4.0
   ).length;
 
   const totalAlerts = lowDepositCount + pendingKycCount + lowRatingCount;

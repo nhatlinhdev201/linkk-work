@@ -18,7 +18,6 @@ import {
   UserPlus,
   UserCheck,
   CreditCard,
-  Building2,
   Wrench,
   Compass,
   Plus,

@@ -1,13 +1,13 @@
 import React, { useEffect } from 'react';
 import type { Tasker, WalletTransaction } from '../../types';
 import {
+  useTaskerDetailQuery,
   useTaskerTransactionsQuery,
   useToggleTaskerStatusMutation,
   useUpdateKycMutation,
 } from '../../api/queries';
 import { useConfirm } from '../../components/feedback/ConfirmContext';
 import { Button } from '../../components/common/Button';
-import { Badge } from '../../components/common/Badge';
 import {
   X,
   Phone,
@@ -15,7 +15,6 @@ import {
   ShieldCheck,
   ShieldAlert,
   Star,
-  CheckCircle2,
   Wallet,
   CreditCard,
   Compass,
@@ -23,7 +22,6 @@ import {
   Edit,
   ArrowUpRight,
   ArrowDownLeft,
-  Calendar,
   Layers,
   FileText,
   Clock,
@@ -42,7 +40,7 @@ export interface TaskerDetailDrawerProps {
 export const TaskerDetailDrawer: React.FC<TaskerDetailDrawerProps> = ({
   isOpen,
   onClose,
-  tasker,
+  tasker: initialTasker,
   onOpenEditModal,
   onOpenWorkFloorModal,
   onOpenDepositModal,
@@ -50,6 +48,9 @@ export const TaskerDetailDrawer: React.FC<TaskerDetailDrawerProps> = ({
   const confirm = useConfirm();
   const toggleStatusMutation = useToggleTaskerStatusMutation();
   const updateKycMutation = useUpdateKycMutation();
+
+  const { data: liveTasker } = useTaskerDetailQuery(isOpen ? initialTasker?.id : null);
+  const tasker = liveTasker ?? initialTasker;
 
   const { data: transactions = [], isLoading: isLoadingTx } =
     useTaskerTransactionsQuery(tasker?.id);
@@ -187,7 +188,7 @@ export const TaskerDetailDrawer: React.FC<TaskerDetailDrawerProps> = ({
                 <span className="text-[10px] text-slate-400 block font-medium">Đánh giá</span>
                 <span className="text-sm font-bold text-amber-600 flex items-center justify-center gap-1 mt-0.5">
                   <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-500" />
-                  {(tasker.ratingScore || tasker.rating || 5.0).toFixed(1)}
+                  {(tasker.ratingScore ?? tasker.rating ?? 5.0).toFixed(1)}
                 </span>
               </div>
 
@@ -391,9 +392,12 @@ export const TaskerDetailDrawer: React.FC<TaskerDetailDrawerProps> = ({
                               {tx.code}
                             </span>
                           </div>
-                          <p className="text-[11px] text-slate-500 mt-0.5 line-clamp-1">
-                            {tx.notes || 'Không có ghi chú'}
-                          </p>
+                          <div className="flex items-center gap-1.5 mt-0.5 text-[11px] text-slate-500">
+                            <span className="line-clamp-1">{tx.notes || 'Không có ghi chú'}</span>
+                            <span className="text-[10px] text-slate-400 shrink-0">
+                              • {new Date(tx.createdAt).toLocaleString('vi-VN')}
+                            </span>
+                          </div>
                         </div>
                       </div>
 

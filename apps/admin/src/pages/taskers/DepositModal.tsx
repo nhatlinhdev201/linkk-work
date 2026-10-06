@@ -10,7 +10,6 @@ import {
   ArrowUpRight,
   ArrowDownLeft,
   AlertTriangle,
-  FileText,
   CheckCircle2,
 } from 'lucide-react';
 
@@ -238,21 +237,13 @@ export const DepositModal: React.FC<DepositModalProps> = ({
         </div>
 
         {/* Notes input */}
-        <div className="space-y-1.5">
-          <label className="block text-xs font-semibold text-slate-700">
-            Lý do ghi nhận vào Sổ cái <span className="text-rose-500 font-bold">*</span>
-          </label>
-          <div className="relative">
-            <input
-              type="text"
-              required
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              placeholder="Nhập lý do chi tiết..."
-              className="w-full px-3.5 py-2 text-xs bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-500"
-            />
-          </div>
-        </div>
+        <Input
+          label="Lý do ghi nhận vào Sổ cái"
+          required
+          value={notes}
+          onChange={(e) => setNotes(e.target.value)}
+          placeholder="Nhập lý do chi tiết..."
+        />
 
         {/* Projected Balance Preview Box */}
         <div
