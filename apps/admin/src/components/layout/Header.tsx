@@ -1,6 +1,7 @@
 import React from 'react';
 import { UserCheck, LogOut, ExternalLink, Menu } from 'lucide-react';
 import { useAuth } from '../../auth/AuthContext';
+import { useConfirm } from '../feedback/ConfirmContext';
 import { Link } from 'react-router-dom';
 
 export interface HeaderProps {
@@ -8,10 +9,40 @@ export interface HeaderProps {
 }
 
 export const Header: React.FC<HeaderProps> = ({ onToggleMobileMenu }) => {
-  const { user, loginAs, logout, isSuperAdmin, isImpersonating, stopImpersonation } = useAuth();
+  const { user, loginAs, logout, isSuperAdmin, isImpersonating, stopImpersonation, activeTenantName } = useAuth();
+  const confirm = useConfirm();
+
+  const handleLogout = async () => {
+    const confirmed = await confirm({
+      title: 'Xác nhận đăng xuất?',
+      message: 'Bạn có chắc chắn muốn kết thúc phiên làm việc trên hệ thống quản trị LinkkWork?',
+      variant: 'danger',
+      confirmText: 'Đăng xuất',
+      cancelText: 'Hủy bỏ',
+    });
+    if (!confirmed) return;
+    await logout();
+  };
+
+  const handleStopImpersonation = async () => {
+    const confirmed = await confirm({
+      title: 'Thoát chế độ đại diện đối tác?',
+      message: (
+        <span>
+          Bạn sẽ thoát khỏi vai trò đại diện cho <strong>&quot;{activeTenantName}&quot;</strong> và quay trở lại quyền hạn đầy đủ
+          của Super Admin trên toàn sàn LinkkWork.
+        </span>
+      ),
+      variant: 'info',
+      confirmText: 'Thoát đại diện',
+      cancelText: 'Ở lại',
+    });
+    if (!confirmed) return;
+    await stopImpersonation();
+  };
 
   return (
-    <header className="h-16 bg-white border-b border-slate-200/80 px-4 sm:px-6 flex items-center justify-between gap-3 sticky top-0 z-30 shadow-xs">
+    <header className="h-16 shrink-0 bg-white border-b border-slate-200/80 px-4 sm:px-6 flex items-center justify-between gap-3 z-30 shadow-xs">
       {/* Left section: Mobile menu hamburger button & Partner Register Link */}
       <div className="flex items-center gap-2.5">
         <button
@@ -76,7 +107,7 @@ export const Header: React.FC<HeaderProps> = ({ onToggleMobileMenu }) => {
         {/* Impersonation shortcut */}
         {isImpersonating && (
           <button
-            onClick={stopImpersonation}
+            onClick={handleStopImpersonation}
             className="text-xs bg-amber-100 hover:bg-amber-200 text-amber-900 font-bold px-2.5 py-1.5 rounded-lg border border-amber-300 transition flex items-center gap-1 shrink-0"
           >
             Thoát đại diện
@@ -92,8 +123,9 @@ export const Header: React.FC<HeaderProps> = ({ onToggleMobileMenu }) => {
             </p>
           </div>
           <button
-            onClick={logout}
+            onClick={handleLogout}
             title="Đăng xuất"
+            aria-label="Đăng xuất tài khoản"
             className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition"
           >
             <LogOut className="w-4 h-4" />

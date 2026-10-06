@@ -15,9 +15,11 @@ import {
   X,
   ChevronLeft,
   ChevronRight,
+  LogOut,
 } from 'lucide-react';
 import { useAuth } from '../../auth/AuthContext';
 import { useUIStore } from '../../stores/uiStore';
+import { useConfirm } from '../feedback/ConfirmContext';
 
 export interface SidebarProps {
   isMobileOpen?: boolean;
@@ -25,9 +27,22 @@ export interface SidebarProps {
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({ isMobileOpen = false, onMobileClose }) => {
-  const { user, isSuperAdmin, activeTenantName, isImpersonating } = useAuth();
+  const { user, isSuperAdmin, activeTenantName, isImpersonating, logout } = useAuth();
   const { isSidebarCollapsed, toggleSidebar } = useUIStore();
+  const confirm = useConfirm();
   const isCollapsed = isSidebarCollapsed;
+
+  const handleLogout = async () => {
+    const confirmed = await confirm({
+      title: 'Xác nhận đăng xuất?',
+      message: 'Bạn có chắc chắn muốn kết thúc phiên làm việc trên hệ thống quản trị LinkkWork?',
+      variant: 'danger',
+      confirmText: 'Đăng xuất',
+      cancelText: 'Hủy bỏ',
+    });
+    if (!confirmed) return;
+    await logout();
+  };
 
   const navItems = [
     {
@@ -101,7 +116,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isMobileOpen = false, onMobile
 
       {/* SINGLE LAYER RESPONSIVE ASIDE (Zero duplicated DOM nodes) */}
       <aside
-        className={`fixed inset-y-0 left-0 z-50 md:static md:z-20 bg-slate-900 text-slate-300 flex flex-col flex-shrink-0 border-r border-slate-800 transition-all duration-300 ease-in-out shadow-2xl md:shadow-none ${
+        className={`fixed inset-y-0 left-0 z-50 md:static md:z-20 bg-slate-900 text-slate-300 flex flex-col flex-shrink-0 border-r border-slate-800 transition-all duration-300 ease-in-out shadow-2xl md:shadow-none h-full ${
           /* Desktop width */
           isCollapsed ? 'md:w-20' : 'md:w-64'
         } ${
@@ -214,19 +229,31 @@ export const Sidebar: React.FC<SidebarProps> = ({ isMobileOpen = false, onMobile
             )}
           </div>
 
-          {/* Desktop Collapse Toggle Button */}
-          <button
-            onClick={toggleSidebar}
-            className="hidden md:flex p-1.5 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition"
-            title={isCollapsed ? 'Mở rộng sidebar' : 'Thu gọn sidebar'}
-            aria-label="Thu gọn/mở rộng sidebar"
-          >
-            {isCollapsed ? (
-              <ChevronRight className="w-4 h-4" />
-            ) : (
-              <ChevronLeft className="w-4 h-4" />
-            )}
-          </button>
+          <div className="flex items-center gap-1 shrink-0">
+            {/* Logout button */}
+            <button
+              onClick={handleLogout}
+              className="p-1.5 text-slate-400 hover:text-rose-400 hover:bg-slate-800 rounded-lg transition"
+              title="Đăng xuất"
+              aria-label="Đăng xuất"
+            >
+              <LogOut className="w-4 h-4" />
+            </button>
+
+            {/* Desktop Collapse Toggle Button */}
+            <button
+              onClick={toggleSidebar}
+              className="hidden md:flex p-1.5 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition"
+              title={isCollapsed ? 'Mở rộng sidebar' : 'Thu gọn sidebar'}
+              aria-label="Thu gọn/mở rộng sidebar"
+            >
+              {isCollapsed ? (
+                <ChevronRight className="w-4 h-4" />
+              ) : (
+                <ChevronLeft className="w-4 h-4" />
+              )}
+            </button>
+          </div>
         </div>
       </aside>
     </>

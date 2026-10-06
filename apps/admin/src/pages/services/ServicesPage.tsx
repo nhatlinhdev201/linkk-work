@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { ServiceItem, PricingModel } from '../../types';
 import { useAuth } from '../../auth/AuthContext';
 import { useToast } from '../../components/feedback/ToastContext';
+import { useConfirm } from '../../components/feedback/ConfirmContext';
 import {
   useServicesQuery,
   useServiceCategoriesQuery,
@@ -60,7 +61,30 @@ export const ServicesPage: React.FC = () => {
     addonPrice: 30000,
   });
 
+  const confirm = useConfirm();
+
   const handleToggleActive = async (service: ServiceItem) => {
+    const willDeactivate = service.isActive;
+    const confirmed = await confirm({
+      title: willDeactivate
+        ? `Tạm ngừng cung cấp dịch vụ "${service.name}"?`
+        : `Kích hoạt dịch vụ "${service.name}"?`,
+      message: willDeactivate ? (
+        <span>
+          Khách hàng sẽ không thể đặt lịch mới cho dịch vụ <strong>&quot;{service.name}&quot;</strong> trên hệ thống
+          cho đến khi bạn kích hoạt lại.
+        </span>
+      ) : (
+        <span>
+          Dịch vụ <strong>&quot;{service.name}&quot;</strong> sẽ được hiển thị công khai để khách hàng có thể đặt lịch.
+        </span>
+      ),
+      variant: willDeactivate ? 'warning' : 'primary',
+      confirmText: willDeactivate ? 'Tạm dừng dịch vụ' : 'Kích hoạt ngay',
+      cancelText: 'Hủy bỏ',
+    });
+    if (!confirmed) return;
+
     try {
       await toggleServiceMutation.mutateAsync({
         serviceId: service.id,

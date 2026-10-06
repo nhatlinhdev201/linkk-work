@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../auth/AuthContext';
+import { useConfirm } from '../../components/feedback/ConfirmContext';
 import {
   useBookingsQuery,
   useTaskersQuery,
@@ -59,8 +60,26 @@ export const DispatchPage: React.FC = () => {
 
   const selectedBooking = bookings.find((b) => b.id === selectedBookingId);
 
+  const confirm = useConfirm();
+
   const handleDirectAssign = async (taskerId: string, taskerName: string, taskerPhone: string) => {
     if (!selectedBooking) return;
+
+    const confirmed = await confirm({
+      title: `Chỉ định thợ "${taskerName}"?`,
+      message: (
+        <span>
+          Bạn có chắc chắn muốn chỉ định thợ <strong>{taskerName}</strong> ({taskerPhone}) tiếp nhận đơn hàng{' '}
+          <strong className="font-mono text-brand-600">{selectedBooking.code}</strong>? Đơn sẽ chuyển trạng thái sang{' '}
+          <strong>ASSIGNED</strong> và gửi thông báo công việc tới thợ.
+        </span>
+      ),
+      variant: 'primary',
+      confirmText: 'Chỉ định thợ ngay',
+      cancelText: 'Hủy bỏ',
+    });
+    if (!confirmed) return;
+
     try {
       setAssigningTaskId(taskerId);
       await assignMutation.mutateAsync({
@@ -79,6 +98,21 @@ export const DispatchPage: React.FC = () => {
 
   const handleBroadcast = async () => {
     if (!selectedBooking) return;
+
+    const confirmed = await confirm({
+      title: `Phát sóng đơn "${selectedBooking.code}" lên Radar?`,
+      message: (
+        <span>
+          Đơn hàng sẽ được phát sóng công khai (trạng thái <strong>BROADCASTING</strong>). Tất cả các thợ đủ điều kiện trong khu vực
+          sẽ nhận được tín hiệu và có thể bấm nhận việc (Fast-Finger Claiming).
+        </span>
+      ),
+      variant: 'warning',
+      confirmText: 'Phát sóng ngay',
+      cancelText: 'Hủy bỏ',
+    });
+    if (!confirmed) return;
+
     try {
       await broadcastMutation.mutateAsync(selectedBooking.id);
     } catch {

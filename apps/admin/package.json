@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
-    "test": "node --test --experimental-strip-types src/schemas/auth.schema.spec.ts src/api/auth-integration.spec.ts src/api/catalog-integration.spec.ts src/api/booking-integration.spec.ts"
+    "test": "node --test --experimental-strip-types src/schemas/auth.schema.spec.ts src/components/feedback/confirm-integration.spec.ts src/api/auth-integration.spec.ts src/api/catalog-integration.spec.ts src/api/booking-integration.spec.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.9.1",

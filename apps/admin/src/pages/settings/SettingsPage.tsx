@@ -88,7 +88,7 @@ export const SettingsPage: React.FC = () => {
   };
 
   return (
-    <div className="space-y-6 max-w-4xl mx-auto">
+    <div className="space-y-6 w-full max-w-5xl">
       {/* Top Header */}
       <div>
         <h1 className="text-2xl font-bold text-slate-900 tracking-tight flex items-center gap-2.5">

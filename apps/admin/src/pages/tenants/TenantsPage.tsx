@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useAuth } from '../../auth/AuthContext';
 import { useToast } from '../../components/feedback/ToastContext';
+import { useConfirm } from '../../components/feedback/ConfirmContext';
 import {
   useTenantsQuery,
   usePartnerApplicationsQuery,
@@ -40,6 +41,7 @@ import { useNavigate } from 'react-router-dom';
 export const TenantsPage: React.FC = () => {
   const { user, impersonatedTenantId, setImpersonatedTenant } = useAuth();
   const { toast } = useToast();
+  const confirm = useConfirm();
   const navigate = useNavigate();
 
   const [activeTab, setActiveTab] = useState<string>('tenants');
@@ -64,6 +66,23 @@ export const TenantsPage: React.FC = () => {
   const [rejectionError, setRejectionError] = useState<string | null>(null);
 
   const handleApprove = async (appId: string) => {
+    const targetApp = applications.find((a) => a.id === appId);
+    const targetName = targetApp ? targetApp.businessName : 'đối tác này';
+
+    const confirmed = await confirm({
+      title: 'Xác nhận phê duyệt đối tác?',
+      message: (
+        <span>
+          Bạn có chắc chắn muốn phê duyệt đối tác <strong>&quot;{targetName}&quot;</strong> gia nhập nền tảng LinkkWork?
+          Tài khoản quản trị sẽ được kích hoạt trạng thái <strong>ACTIVE</strong> và bắt đầu tiếp nhận điều phối đơn hàng.
+        </span>
+      ),
+      variant: 'primary',
+      confirmText: 'Phê duyệt đối tác',
+      cancelText: 'Hủy bỏ',
+    });
+    if (!confirmed) return;
+
     try {
       await approveMutation.mutateAsync(appId);
     } catch {
@@ -89,6 +108,20 @@ export const TenantsPage: React.FC = () => {
   };
 
   const handleImpersonate = async (tenantId: string, tenantName: string) => {
+    const confirmed = await confirm({
+      title: 'Chuyển sang chế độ đại diện đối tác?',
+      message: (
+        <span>
+          Bạn sắp chuyển quyền đại diện sang <strong>&quot;{tenantName}&quot;</strong>. Toàn bộ đơn hàng, thợ và bảng giá hiển thị
+          trên trang quản trị sẽ được giới hạn trong phạm vi hoạt động của đối tác này.
+        </span>
+      ),
+      variant: 'warning',
+      confirmText: 'Bắt đầu đại diện',
+      cancelText: 'Quay lại',
+    });
+    if (!confirmed) return;
+
     try {
       await setImpersonatedTenant(tenantId);
       toast({
