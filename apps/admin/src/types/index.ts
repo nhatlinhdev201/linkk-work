@@ -129,6 +129,7 @@ export interface ServiceAddon {
   name: string;
   price: number;
   description?: string;
+  isActive?: boolean;
 }
 
 export interface ServiceCategory {
@@ -138,6 +139,10 @@ export interface ServiceCategory {
   description: string;
   iconName: string;
   displayOrder: number;
+  defaultPricingType?: PricingModel;
+  defaultBasePrice?: number;
+  defaultUnitLabel?: string;
+  isActive?: boolean;
 }
 
 export interface ServiceItem {

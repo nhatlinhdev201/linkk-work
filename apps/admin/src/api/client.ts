@@ -20,6 +20,8 @@ import type {
   CronJobItem,
   ServiceCategory,
   ServiceItem,
+  ServiceAddon,
+  PricingModel,
   WalletTransaction,
   FinancialSummary,
   TenantSettings,
@@ -95,9 +97,25 @@ export interface BackendCategoryResponse {
   name: string;
   slug: string;
   icon?: string | null;
+  description?: string | null;
+  defaultPricingType?: PricingModel | null;
+  defaultBasePrice?: number | null;
+  defaultUnitLabel?: string | null;
   isActive: boolean;
   displayOrder: number;
   createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface BackendAddonResponse {
+  id: string;
+  serviceId?: string;
+  name: string;
+  price: number;
+  description?: string | null;
+  isActive: boolean;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface BackendServiceResponse {
@@ -109,6 +127,8 @@ export interface BackendServiceResponse {
   pricingType: 'HOURLY' | 'PER_UNIT' | 'BIDDING';
   baseUnitPrice: number;
   durationHours?: number | null;
+  unitLabel?: string | null;
+  minHours?: number | null;
   description?: string | null;
   isActive: boolean;
   createdAt: string;
@@ -118,12 +138,7 @@ export interface BackendServiceResponse {
     name: string;
     slug: string;
   };
-  addons?: Array<{
-    id: string;
-    name: string;
-    price: number;
-    isActive: boolean;
-  }>;
+  addons?: Array<BackendAddonResponse>;
 }
 
 export interface PricingCalculationInput {
@@ -151,9 +166,13 @@ function mapBackendCategoryToServiceCategory(c: BackendCategoryResponse): Servic
     id: c.id,
     name: c.name,
     slug: c.slug,
-    description: c.name,
+    description: c.description || c.name,
     iconName: c.icon || 'Sparkles',
     displayOrder: c.displayOrder ?? 0,
+    defaultPricingType: c.defaultPricingType || undefined,
+    defaultBasePrice: c.defaultBasePrice != null ? Number(c.defaultBasePrice) : undefined,
+    defaultUnitLabel: c.defaultUnitLabel || undefined,
+    isActive: c.isActive,
   };
 }
 
@@ -168,15 +187,17 @@ function mapBackendServiceToServiceItem(s: BackendServiceResponse): ServiceItem 
     pricingModel: s.pricingType,
     basePrice: s.baseUnitPrice,
     unitLabel:
-      s.pricingType === 'HOURLY' ? 'giờ' : s.pricingType === 'PER_UNIT' ? 'thiết bị' : 'báo giá',
-    minHours: s.durationHours ?? undefined,
+      s.unitLabel ||
+      (s.pricingType === 'HOURLY' ? 'giờ' : s.pricingType === 'PER_UNIT' ? 'thiết bị' : 'báo giá'),
+    minHours: s.durationHours ?? s.minHours ?? undefined,
     isActive: s.isActive,
     tenantId: s.tenantId || undefined,
     addons: (s.addons || []).map((a) => ({
       id: a.id,
       name: a.name,
       price: a.price,
-      description: a.name,
+      description: a.description || undefined,
+      isActive: a.isActive,
     })),
     createdAt: s.createdAt,
   };
@@ -1240,10 +1261,12 @@ export class ApiClient {
   }
 
   // --- DỊCH VỤ & BẢNG GIÁ (SERVICE CATALOG) ---
-  async getServiceCategories(): Promise<ServiceCategory[]> {
+  // --- DỊCH VỤ & BẢNG GIÁ (SERVICE CATALOG) ---
+  async getServiceCategories(all?: boolean): Promise<ServiceCategory[]> {
+    const endpoint = `/catalog/categories${all ? '?all=true' : ''}`;
     try {
       const items = await this.fetchWithAuth<BackendCategoryResponse[]>(
-        '/catalog/categories',
+        endpoint,
         { method: 'GET' },
         false
       );
@@ -1258,10 +1281,180 @@ export class ApiClient {
         err instanceof Error ? err.message : String(err)
       );
     }
-    return loadData<ServiceCategory[]>(
+    const cached = loadData<ServiceCategory[]>(
       STORAGE_KEYS.CATEGORIES,
       INITIAL_SERVICE_CATEGORIES
     );
+    if (all) return cached;
+    return cached.filter((c) => c.isActive !== false);
+  }
+
+  async createCategory(data: {
+    name: string;
+    slug?: string;
+    icon?: string;
+    description?: string;
+    defaultPricingType?: PricingModel;
+    defaultBasePrice?: number;
+    defaultUnitLabel?: string;
+    displayOrder?: number;
+  }): Promise<ServiceCategory> {
+    const payload = {
+      name: data.name,
+      slug: data.slug || undefined,
+      icon: data.icon || undefined,
+      description: data.description || undefined,
+      defaultPricingType: data.defaultPricingType,
+      defaultBasePrice: data.defaultBasePrice,
+      defaultUnitLabel: data.defaultUnitLabel,
+      displayOrder: data.displayOrder,
+    };
+
+    try {
+      const res = await this.fetchWithAuth<BackendCategoryResponse>(
+        '/catalog/categories',
+        {
+          method: 'POST',
+          body: JSON.stringify(payload),
+        },
+        false
+      );
+      const mapped = mapBackendCategoryToServiceCategory(res);
+      const categories = loadData<ServiceCategory[]>(
+        STORAGE_KEYS.CATEGORIES,
+        INITIAL_SERVICE_CATEGORIES
+      );
+      const updated = [mapped, ...categories.filter((c) => c.id !== mapped.id)];
+      saveData(STORAGE_KEYS.CATEGORIES, updated);
+      return mapped;
+    } catch (err: unknown) {
+      const isNetworkError =
+        err instanceof TypeError &&
+        (err.message.toLowerCase().includes('fetch') ||
+          err.message.toLowerCase().includes('failed to fetch'));
+
+      if (!isNetworkError) {
+        throw err;
+      }
+      await sleep(150);
+      const categories = loadData<ServiceCategory[]>(
+        STORAGE_KEYS.CATEGORIES,
+        INITIAL_SERVICE_CATEGORIES
+      );
+      const newCategory: ServiceCategory = {
+        id: `cat-${Date.now()}`,
+        name: data.name,
+        slug:
+          data.slug ||
+          data.name.toLowerCase().replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-'),
+        description: data.description || data.name,
+        iconName: data.icon || 'Sparkles',
+        displayOrder: data.displayOrder ?? categories.length + 1,
+        defaultPricingType: data.defaultPricingType || 'HOURLY',
+        defaultBasePrice: data.defaultBasePrice ?? 80000,
+        defaultUnitLabel: data.defaultUnitLabel || 'giờ',
+        isActive: true,
+      };
+      categories.unshift(newCategory);
+      saveData(STORAGE_KEYS.CATEGORIES, categories);
+      return newCategory;
+    }
+  }
+
+  async updateCategory(
+    id: string,
+    data: Partial<ServiceCategory>
+  ): Promise<ServiceCategory> {
+    const payload = {
+      name: data.name,
+      slug: data.slug,
+      icon: data.iconName,
+      description: data.description,
+      defaultPricingType: data.defaultPricingType,
+      defaultBasePrice: data.defaultBasePrice,
+      defaultUnitLabel: data.defaultUnitLabel,
+      displayOrder: data.displayOrder,
+      isActive: data.isActive,
+    };
+
+    try {
+      const res = await this.fetchWithAuth<BackendCategoryResponse>(
+        `/catalog/categories/${id}`,
+        {
+          method: 'PATCH',
+          body: JSON.stringify(payload),
+        },
+        false
+      );
+      const mapped = mapBackendCategoryToServiceCategory(res);
+      const categories = loadData<ServiceCategory[]>(
+        STORAGE_KEYS.CATEGORIES,
+        INITIAL_SERVICE_CATEGORIES
+      );
+      const idx = categories.findIndex((c) => c.id === id);
+      if (idx >= 0) {
+        categories[idx] = mapped;
+      } else {
+        categories.unshift(mapped);
+      }
+      saveData(STORAGE_KEYS.CATEGORIES, categories);
+      return mapped;
+    } catch (err: unknown) {
+      const isNetworkError =
+        err instanceof TypeError &&
+        (err.message.toLowerCase().includes('fetch') ||
+          err.message.toLowerCase().includes('failed to fetch'));
+
+      if (!isNetworkError) {
+        throw err;
+      }
+      await sleep(150);
+      const categories = loadData<ServiceCategory[]>(
+        STORAGE_KEYS.CATEGORIES,
+        INITIAL_SERVICE_CATEGORIES
+      );
+      const cat = categories.find((c) => c.id === id);
+      if (!cat) throw new Error(`Không tìm thấy nhóm dịch vụ với ID ${id}`);
+      const updated: ServiceCategory = { ...cat, ...data };
+      const idx = categories.findIndex((c) => c.id === id);
+      categories[idx] = updated;
+      saveData(STORAGE_KEYS.CATEGORIES, categories);
+      return updated;
+    }
+  }
+
+  async deleteCategory(id: string): Promise<void> {
+    try {
+      await this.fetchWithAuth<{ id: string }>(
+        `/catalog/categories/${id}`,
+        {
+          method: 'DELETE',
+        },
+        false
+      );
+      const categories = loadData<ServiceCategory[]>(
+        STORAGE_KEYS.CATEGORIES,
+        INITIAL_SERVICE_CATEGORIES
+      );
+      const filtered = categories.filter((c) => c.id !== id);
+      saveData(STORAGE_KEYS.CATEGORIES, filtered);
+    } catch (err: unknown) {
+      const isNetworkError =
+        err instanceof TypeError &&
+        (err.message.toLowerCase().includes('fetch') ||
+          err.message.toLowerCase().includes('failed to fetch'));
+
+      if (!isNetworkError) {
+        throw err;
+      }
+      await sleep(150);
+      const categories = loadData<ServiceCategory[]>(
+        STORAGE_KEYS.CATEGORIES,
+        INITIAL_SERVICE_CATEGORIES
+      );
+      const filtered = categories.filter((c) => c.id !== id);
+      saveData(STORAGE_KEYS.CATEGORIES, filtered);
+    }
   }
 
   async getServices(tenantId?: string | null): Promise<ServiceItem[]> {
@@ -1361,6 +1554,7 @@ export class ApiClient {
         pricingType: newServiceData.pricingModel,
         baseUnitPrice: newServiceData.basePrice,
         durationHours: newServiceData.minHours || undefined,
+        unitLabel: newServiceData.unitLabel || undefined,
         description: newServiceData.description || undefined,
       };
 
@@ -1405,6 +1599,264 @@ export class ApiClient {
     services.unshift(service);
     saveData(STORAGE_KEYS.SERVICES, services);
     return service;
+  }
+
+  async updateService(
+    id: string,
+    data: Partial<ServiceItem>
+  ): Promise<ServiceItem> {
+    const payload = {
+      name: data.name,
+      slug: data.slug,
+      categoryId: data.categoryId,
+      pricingType: data.pricingModel,
+      baseUnitPrice: data.basePrice,
+      durationHours: data.minHours,
+      unitLabel: data.unitLabel,
+      minHours: data.minHours,
+      description: data.description,
+      isActive: data.isActive,
+    };
+
+    try {
+      const res = await this.fetchWithAuth<BackendServiceResponse>(
+        `/catalog/services/${id}`,
+        {
+          method: 'PATCH',
+          body: JSON.stringify(payload),
+        },
+        true
+      );
+      const mapped = mapBackendServiceToServiceItem(res);
+      const services = loadData<ServiceItem[]>(
+        STORAGE_KEYS.SERVICES,
+        INITIAL_SERVICES
+      );
+      const idx = services.findIndex((s) => s.id === id);
+      if (idx >= 0) {
+        services[idx] = mapped;
+      } else {
+        services.unshift(mapped);
+      }
+      saveData(STORAGE_KEYS.SERVICES, services);
+      return mapped;
+    } catch (err: unknown) {
+      const isNetworkError =
+        err instanceof TypeError &&
+        (err.message.toLowerCase().includes('fetch') ||
+          err.message.toLowerCase().includes('failed to fetch'));
+
+      if (!isNetworkError) {
+        throw err;
+      }
+      await sleep(150);
+      const services = await this.getServices();
+      const srv = services.find((s) => s.id === id);
+      if (!srv) throw new Error(`Không tìm thấy dịch vụ với ID ${id}`);
+      const updated: ServiceItem = { ...srv, ...data };
+      const idx = services.findIndex((s) => s.id === id);
+      services[idx] = updated;
+      saveData(STORAGE_KEYS.SERVICES, services);
+      return updated;
+    }
+  }
+
+  async deleteService(id: string): Promise<void> {
+    try {
+      await this.fetchWithAuth<{ id: string }>(
+        `/catalog/services/${id}`,
+        {
+          method: 'DELETE',
+        },
+        true
+      );
+      const services = loadData<ServiceItem[]>(
+        STORAGE_KEYS.SERVICES,
+        INITIAL_SERVICES
+      );
+      const filtered = services.filter((s) => s.id !== id);
+      saveData(STORAGE_KEYS.SERVICES, filtered);
+    } catch (err: unknown) {
+      const isNetworkError =
+        err instanceof TypeError &&
+        (err.message.toLowerCase().includes('fetch') ||
+          err.message.toLowerCase().includes('failed to fetch'));
+
+      if (!isNetworkError) {
+        throw err;
+      }
+      await sleep(150);
+      const services = loadData<ServiceItem[]>(
+        STORAGE_KEYS.SERVICES,
+        INITIAL_SERVICES
+      );
+      const filtered = services.filter((s) => s.id !== id);
+      saveData(STORAGE_KEYS.SERVICES, filtered);
+    }
+  }
+
+  async createAddon(
+    serviceId: string,
+    data: { name: string; price: number; description?: string }
+  ): Promise<ServiceAddon> {
+    try {
+      const res = await this.fetchWithAuth<BackendAddonResponse>(
+        `/catalog/services/${serviceId}/addons`,
+        {
+          method: 'POST',
+          body: JSON.stringify(data),
+        },
+        true
+      );
+      const mappedAddon: ServiceAddon = {
+        id: res.id,
+        name: res.name,
+        price: res.price,
+        description: res.description || undefined,
+        isActive: res.isActive,
+      };
+
+      const services = loadData<ServiceItem[]>(
+        STORAGE_KEYS.SERVICES,
+        INITIAL_SERVICES
+      );
+      const srv = services.find((s) => s.id === serviceId);
+      if (srv) {
+        srv.addons = srv.addons ? [...srv.addons, mappedAddon] : [mappedAddon];
+        saveData(STORAGE_KEYS.SERVICES, services);
+      }
+      return mappedAddon;
+    } catch (err: unknown) {
+      const isNetworkError =
+        err instanceof TypeError &&
+        (err.message.toLowerCase().includes('fetch') ||
+          err.message.toLowerCase().includes('failed to fetch'));
+
+      if (!isNetworkError) {
+        throw err;
+      }
+      await sleep(150);
+      const mappedAddon: ServiceAddon = {
+        id: `add-${Date.now()}`,
+        name: data.name,
+        price: data.price,
+        description: data.description,
+        isActive: true,
+      };
+      const services = loadData<ServiceItem[]>(
+        STORAGE_KEYS.SERVICES,
+        INITIAL_SERVICES
+      );
+      const srv = services.find((s) => s.id === serviceId);
+      if (srv) {
+        srv.addons = srv.addons ? [...srv.addons, mappedAddon] : [mappedAddon];
+        saveData(STORAGE_KEYS.SERVICES, services);
+      }
+      return mappedAddon;
+    }
+  }
+
+  async updateAddon(
+    addonId: string,
+    data: { name?: string; price?: number; description?: string; isActive?: boolean }
+  ): Promise<ServiceAddon> {
+    try {
+      const res = await this.fetchWithAuth<BackendAddonResponse>(
+        `/catalog/addons/${addonId}`,
+        {
+          method: 'PATCH',
+          body: JSON.stringify(data),
+        },
+        true
+      );
+      const mappedAddon: ServiceAddon = {
+        id: res.id,
+        name: res.name,
+        price: res.price,
+        description: res.description || undefined,
+        isActive: res.isActive,
+      };
+
+      const services = loadData<ServiceItem[]>(
+        STORAGE_KEYS.SERVICES,
+        INITIAL_SERVICES
+      );
+      for (const srv of services) {
+        const idx = srv.addons.findIndex((a) => a.id === addonId);
+        if (idx >= 0) {
+          srv.addons[idx] = mappedAddon;
+          break;
+        }
+      }
+      saveData(STORAGE_KEYS.SERVICES, services);
+      return mappedAddon;
+    } catch (err: unknown) {
+      const isNetworkError =
+        err instanceof TypeError &&
+        (err.message.toLowerCase().includes('fetch') ||
+          err.message.toLowerCase().includes('failed to fetch'));
+
+      if (!isNetworkError) {
+        throw err;
+      }
+      await sleep(150);
+      const services = loadData<ServiceItem[]>(
+        STORAGE_KEYS.SERVICES,
+        INITIAL_SERVICES
+      );
+      let updated: ServiceAddon | null = null;
+      for (const srv of services) {
+        const idx = srv.addons.findIndex((a) => a.id === addonId);
+        if (idx >= 0) {
+          srv.addons[idx] = { ...srv.addons[idx], ...data };
+          updated = srv.addons[idx];
+          break;
+        }
+      }
+      saveData(STORAGE_KEYS.SERVICES, services);
+      if (!updated) {
+        throw new Error(`Không tìm thấy phụ phí với ID ${addonId}`);
+      }
+      return updated;
+    }
+  }
+
+  async deleteAddon(addonId: string): Promise<void> {
+    try {
+      await this.fetchWithAuth<{ id: string }>(
+        `/catalog/addons/${addonId}`,
+        {
+          method: 'DELETE',
+        },
+        true
+      );
+      const services = loadData<ServiceItem[]>(
+        STORAGE_KEYS.SERVICES,
+        INITIAL_SERVICES
+      );
+      for (const srv of services) {
+        srv.addons = srv.addons.filter((a) => a.id !== addonId);
+      }
+      saveData(STORAGE_KEYS.SERVICES, services);
+    } catch (err: unknown) {
+      const isNetworkError =
+        err instanceof TypeError &&
+        (err.message.toLowerCase().includes('fetch') ||
+          err.message.toLowerCase().includes('failed to fetch'));
+
+      if (!isNetworkError) {
+        throw err;
+      }
+      await sleep(150);
+      const services = loadData<ServiceItem[]>(
+        STORAGE_KEYS.SERVICES,
+        INITIAL_SERVICES
+      );
+      for (const srv of services) {
+        srv.addons = srv.addons.filter((a) => a.id !== addonId);
+      }
+      saveData(STORAGE_KEYS.SERVICES, services);
+    }
   }
 
   async calculatePrice(input: PricingCalculationInput): Promise<PricingCalculationResult> {

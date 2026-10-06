@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ServiceItem, PricingModel } from '../../types';
+import type { ServiceItem, PricingModel } from '../../types';
 import { useAuth } from '../../auth/AuthContext';
 import { useToast } from '../../components/feedback/ToastContext';
 import { useConfirm } from '../../components/feedback/ConfirmContext';
@@ -8,6 +8,8 @@ import {
   useServiceCategoriesQuery,
   useToggleServiceMutation,
   useCreateServiceMutation,
+  useUpdateServiceMutation,
+  useDeleteServiceMutation,
 } from '../../api/queries';
 import { Card, CardHeader, CardTitle, CardContent } from '../../components/common/Card';
 import { Button } from '../../components/common/Button';
@@ -20,34 +22,45 @@ import { Tabs } from '../../components/common/Tabs';
 import { EmptyState } from '../../components/common/EmptyState';
 import { SkeletonCardGrid } from '../../components/common/Skeleton';
 import { Pagination } from '../../components/common/Pagination';
+import { serviceSchema } from '../../schemas/catalog.schema';
+import { CategoryModal } from './CategoryModal';
+import { AddonModal } from './AddonModal';
 import {
   Sparkles,
   PlusCircle,
-  Clock,
   Layers,
-  CheckCircle,
   Tag,
-  DollarSign,
   Search,
+  FolderTree,
+  Edit2,
+  Trash2,
 } from 'lucide-react';
 
 export const ServicesPage: React.FC = () => {
   const { currentTenantId, currentTenantName, isSuperAdmin } = useAuth();
   const { toast } = useToast();
+  const confirm = useConfirm();
 
-  const { data: categories = [], isLoading: isLoadingCategories } = useServiceCategoriesQuery();
+  const { data: categories = [], isLoading: isLoadingCategories } = useServiceCategoriesQuery(true);
   const { data: services = [], isLoading: isLoadingServices } = useServicesQuery(currentTenantId);
 
   const toggleServiceMutation = useToggleServiceMutation(currentTenantId);
   const createServiceMutation = useCreateServiceMutation(currentTenantId);
+  const updateServiceMutation = useUpdateServiceMutation(currentTenantId);
+  const deleteServiceMutation = useDeleteServiceMutation(currentTenantId);
 
   const [selectedCategory, setSelectedCategory] = useState<string>('ALL');
   const [searchQuery, setSearchQuery] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const pageSize = 6;
 
-  // Create Service Modal
-  const [isModalOpen, setIsModalOpen] = useState(false);
+  // Category & Addon Modal States
+  const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
+  const [selectedServiceForAddons, setSelectedServiceForAddons] = useState<ServiceItem | null>(null);
+
+  // Service Create/Edit Modal State
+  const [isServiceModalOpen, setIsServiceModalOpen] = useState(false);
+  const [editingService, setEditingService] = useState<ServiceItem | null>(null);
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
   const [form, setForm] = useState({
     name: '',
@@ -61,7 +74,68 @@ export const ServicesPage: React.FC = () => {
     addonPrice: 30000,
   });
 
-  const confirm = useConfirm();
+  // Open Create Service Modal with smart default from category
+  const handleOpenCreateService = () => {
+    setEditingService(null);
+    const defaultCat = categories.find((c) => c.id === 'cat-cleaning') || categories[0];
+    const categoryId = defaultCat?.id || 'cat-cleaning';
+
+    setForm({
+      name: '',
+      categoryId,
+      description: '',
+      pricingModel: defaultCat?.defaultPricingType || 'HOURLY',
+      basePrice: defaultCat?.defaultBasePrice ?? 85000,
+      unitLabel: defaultCat?.defaultUnitLabel || (defaultCat?.defaultPricingType === 'HOURLY' ? 'giờ' : 'lần'),
+      minHours: 2,
+      addonName: '',
+      addonPrice: 30000,
+    });
+    setFormErrors({});
+    setIsServiceModalOpen(true);
+  };
+
+  // Open Edit Service Modal
+  const handleOpenEditService = (service: ServiceItem) => {
+    setEditingService(service);
+    setForm({
+      name: service.name,
+      categoryId: service.categoryId,
+      description: service.description || '',
+      pricingModel: service.pricingModel,
+      basePrice: service.basePrice,
+      unitLabel: service.unitLabel || 'giờ',
+      minHours: service.minHours ?? 2,
+      addonName: '',
+      addonPrice: 30000,
+    });
+    setFormErrors({});
+    setIsServiceModalOpen(true);
+  };
+
+  // Smart pricing inheritance when category selection changes in Service modal
+  const handleCategoryChange = (newCatId: string) => {
+    const targetCat = categories.find((c) => c.id === newCatId);
+
+    if (targetCat) {
+      // Auto pre-fill / inherit pricing configuration from the chosen category
+      setForm((prev) => ({
+        ...prev,
+        categoryId: newCatId,
+        pricingModel: targetCat.defaultPricingType || prev.pricingModel,
+        basePrice: targetCat.defaultBasePrice ?? prev.basePrice,
+        unitLabel:
+          targetCat.defaultUnitLabel ||
+          (targetCat.defaultPricingType === 'HOURLY'
+            ? 'giờ'
+            : targetCat.defaultPricingType === 'PER_UNIT'
+            ? 'thiết bị'
+            : 'lần'),
+      }));
+    } else {
+      setForm((prev) => ({ ...prev, categoryId: newCatId }));
+    }
+  };
 
   const handleToggleActive = async (service: ServiceItem) => {
     const willDeactivate = service.isActive;
@@ -95,21 +169,51 @@ export const ServicesPage: React.FC = () => {
     }
   };
 
-  const validateForm = (): boolean => {
-    const errors: Record<string, string> = {};
-    if (!form.name.trim() || form.name.trim().length < 2) {
-      errors.name = 'Tên dịch vụ phải có ít nhất 2 ký tự';
+  const handleDeleteService = async (service: ServiceItem) => {
+    const confirmed = await confirm({
+      title: `Xóa dịch vụ "${service.name}"?`,
+      message: (
+        <span>
+          Bạn có chắc chắn muốn xóa vĩnh viễn dịch vụ <strong>&quot;{service.name}&quot;</strong>?
+          Thao tác này chỉ áp dụng cho dịch vụ chưa có đơn hàng đặt chỗ.
+        </span>
+      ),
+      variant: 'danger',
+      confirmText: 'Xóa dịch vụ',
+      cancelText: 'Hủy bỏ',
+    });
+    if (!confirmed) return;
+
+    try {
+      await deleteServiceMutation.mutateAsync(service.id);
+    } catch {
+      // Handled in mutation onError
     }
-    if (form.pricingModel !== 'BIDDING' && form.basePrice <= 0) {
-      errors.basePrice = 'Đơn giá cơ bản phải lớn hơn 0 đ';
-    }
-    setFormErrors(errors);
-    return Object.keys(errors).length === 0;
   };
 
-  const handleCreateService = async (e: React.FormEvent) => {
+  const handleSaveService = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!validateForm()) {
+
+    const parseResult = serviceSchema.safeParse({
+      name: form.name.trim(),
+      categoryId: form.categoryId,
+      pricingModel: form.pricingModel,
+      basePrice: Number(form.basePrice),
+      durationHours: form.pricingModel === 'HOURLY' ? Number(form.minHours) : undefined,
+      unitLabel: form.unitLabel.trim() || undefined,
+      minHours: form.pricingModel === 'HOURLY' ? Number(form.minHours) : undefined,
+      description: form.description.trim() || undefined,
+    });
+
+    if (!parseResult.success) {
+      const errMap: Record<string, string> = {};
+      for (const issue of parseResult.error.issues) {
+        const key = issue.path[0];
+        if (key && typeof key === 'string') {
+          errMap[key] = issue.message;
+        }
+      }
+      setFormErrors(errMap);
       toast({
         type: 'warning',
         title: 'Dữ liệu chưa hợp lệ',
@@ -122,46 +226,56 @@ export const ServicesPage: React.FC = () => {
       const cat = categories.find((c) => c.id === form.categoryId);
       const categoryName = cat ? cat.name : 'Dịch vụ chung';
 
-      const addons = form.addonName.trim()
-        ? [
-            {
-              id: `add-${Date.now()}`,
-              name: form.addonName.trim(),
-              price: Number(form.addonPrice),
-            },
-          ]
-        : [];
+      if (editingService) {
+        // Update existing service
+        await updateServiceMutation.mutateAsync({
+          id: editingService.id,
+          data: {
+            name: form.name.trim(),
+            categoryId: form.categoryId,
+            categoryName,
+            description: form.description.trim() || 'Dịch vụ chuyên nghiệp chất lượng cao',
+            pricingModel: form.pricingModel,
+            basePrice: Number(form.basePrice),
+            unitLabel: form.unitLabel.trim() || undefined,
+            minHours: form.pricingModel === 'HOURLY' ? Number(form.minHours) : undefined,
+          },
+        });
+      } else {
+        // Create new service
+        const addons = form.addonName.trim()
+          ? [
+              {
+                id: `add-${Date.now()}`,
+                name: form.addonName.trim(),
+                price: Number(form.addonPrice),
+                description: form.addonName.trim(),
+                isActive: true,
+              },
+            ]
+          : [];
 
-      await createServiceMutation.mutateAsync({
-        name: form.name.trim(),
-        slug: form.name
-          .toLowerCase()
-          .replace(/[^a-z0-9]/g, '-')
-          .replace(/-+/g, '-'),
-        categoryId: form.categoryId,
-        categoryName,
-        description: form.description.trim() || 'Dịch vụ chuyên nghiệp chất lượng cao',
-        pricingModel: form.pricingModel,
-        basePrice: Number(form.basePrice),
-        unitLabel: form.unitLabel,
-        minHours: form.pricingModel === 'HOURLY' ? Number(form.minHours) : undefined,
-        isActive: true,
-        tenantId: isSuperAdmin ? undefined : currentTenantId,
-        addons,
-      });
+        await createServiceMutation.mutateAsync({
+          name: form.name.trim(),
+          slug: form.name
+            .toLowerCase()
+            .replace(/[^a-z0-9]/g, '-')
+            .replace(/-+/g, '-'),
+          categoryId: form.categoryId,
+          categoryName,
+          description: form.description.trim() || 'Dịch vụ chuyên nghiệp chất lượng cao',
+          pricingModel: form.pricingModel,
+          basePrice: Number(form.basePrice),
+          unitLabel: form.unitLabel,
+          minHours: form.pricingModel === 'HOURLY' ? Number(form.minHours) : undefined,
+          isActive: true,
+          tenantId: isSuperAdmin ? undefined : currentTenantId,
+          addons,
+        });
+      }
 
-      setIsModalOpen(false);
-      setForm({
-        name: '',
-        categoryId: 'cat-cleaning',
-        description: '',
-        pricingModel: 'HOURLY',
-        basePrice: 85000,
-        unitLabel: 'giờ',
-        minHours: 2,
-        addonName: '',
-        addonPrice: 30000,
-      });
+      setIsServiceModalOpen(false);
+      setEditingService(null);
     } catch {
       // Handled in mutation onError
     }
@@ -185,6 +299,8 @@ export const ServicesPage: React.FC = () => {
     })),
   ];
 
+  const isSavingService = createServiceMutation.isPending || updateServiceMutation.isPending;
+
   return (
     <div className="space-y-6">
       {/* Top Header */}
@@ -201,13 +317,23 @@ export const ServicesPage: React.FC = () => {
           </p>
         </div>
 
-        <Button
-          variant="primary"
-          onClick={() => setIsModalOpen(true)}
-          leftIcon={<PlusCircle className="w-4 h-4" />}
-        >
-          Thêm dịch vụ mới
-        </Button>
+        <div className="flex items-center gap-2.5">
+          <Button
+            variant="outline"
+            onClick={() => setIsCategoryModalOpen(true)}
+            leftIcon={<FolderTree className="w-4 h-4 text-brand-600" />}
+          >
+            Quản lý nhóm dịch vụ
+          </Button>
+
+          <Button
+            variant="primary"
+            onClick={handleOpenCreateService}
+            leftIcon={<PlusCircle className="w-4 h-4" />}
+          >
+            Thêm dịch vụ mới
+          </Button>
+        </div>
       </div>
 
       {/* Filter and Tabs */}
@@ -244,7 +370,7 @@ export const ServicesPage: React.FC = () => {
           action={
             <Button
               variant="secondary"
-              onClick={() => setIsModalOpen(true)}
+              onClick={handleOpenCreateService}
               leftIcon={<PlusCircle className="w-4 h-4" />}
             >
               Thêm dịch vụ
@@ -259,105 +385,151 @@ export const ServicesPage: React.FC = () => {
               .map((service) => {
                 const isHourly = service.pricingModel === 'HOURLY';
                 const isBidding = service.pricingModel === 'BIDDING';
+                const addonCount = service.addons?.length || 0;
 
                 return (
                   <Card
                     key={service.id}
-                    className={`relative overflow-hidden transition-all duration-150 ${
+                    className={`relative overflow-hidden transition-all duration-150 flex flex-col justify-between ${
                       service.isActive
                         ? 'border-slate-200'
                         : 'border-slate-200 bg-slate-50/70 opacity-80'
                     }`}
                   >
-                    <div
-                      className={`absolute top-0 left-0 right-0 h-1.5 ${
-                        service.isActive ? 'bg-brand-500' : 'bg-slate-300'
-                      }`}
-                    />
-
-                    <CardHeader className="flex flex-row items-start justify-between pb-2 gap-2">
-                      <div className="space-y-1">
-                        <span className="text-[10px] font-bold uppercase tracking-wider text-brand-600 bg-brand-50 px-2 py-0.5 rounded-full inline-block">
-                          {service.categoryName}
-                        </span>
-                        <CardTitle className="text-base font-bold text-slate-900 leading-snug">
-                          {service.name}
-                        </CardTitle>
-                      </div>
-
-                      <Switch
-                        checked={service.isActive}
-                        onChange={() => handleToggleActive(service)}
+                    <div>
+                      <div
+                        className={`absolute top-0 left-0 right-0 h-1.5 ${
+                          service.isActive ? 'bg-brand-500' : 'bg-slate-300'
+                        }`}
                       />
-                    </CardHeader>
 
-                    <CardContent className="space-y-3.5 pt-1 text-xs">
-                      <p className="text-slate-500 leading-relaxed line-clamp-2">
-                        {service.description}
-                      </p>
-
-                      {/* Pricing Box */}
-                      <div className="p-3 bg-slate-50 rounded-xl flex items-center justify-between border border-slate-100">
-                        <div>
-                          <span className="text-[10px] text-slate-400 block font-medium">
-                            Cơ chế định giá:
+                      <CardHeader className="flex flex-row items-start justify-between pb-2 gap-2">
+                        <div className="space-y-1">
+                          <span className="text-[10px] font-bold uppercase tracking-wider text-brand-600 bg-brand-50 px-2 py-0.5 rounded-full inline-block">
+                            {service.categoryName}
                           </span>
-                          <Badge
-                            variant={isHourly ? 'brand' : isBidding ? 'warning' : 'info'}
-                            size="sm"
-                          >
-                            {isHourly
-                              ? 'Theo giờ làm việc'
-                              : isBidding
-                              ? 'Đấu thầu báo giá'
-                              : 'Theo đơn vị cố định'}
-                          </Badge>
+                          <CardTitle className="text-base font-bold text-slate-900 leading-snug">
+                            {service.name}
+                          </CardTitle>
                         </div>
 
-                        <div className="text-right">
-                          <span className="text-[10px] text-slate-400 block font-medium">
-                            Mức giá cơ bản:
-                          </span>
-                          <span className="text-base font-black text-slate-900">
-                            {isBidding
-                              ? 'Khảo sát báo giá'
-                              : `${service.basePrice.toLocaleString('vi-VN')} đ / ${
-                                  service.unitLabel || 'lần'
-                                }`}
-                          </span>
-                        </div>
-                      </div>
+                        <Switch
+                          checked={service.isActive}
+                          onChange={() => handleToggleActive(service)}
+                        />
+                      </CardHeader>
 
-                      {/* Add-ons list */}
-                      {service.addons && service.addons.length > 0 && (
-                        <div className="space-y-1.5">
-                          <span className="text-[11px] font-semibold text-slate-700 flex items-center gap-1">
-                            <Tag className="w-3 h-3 text-brand-500" />
-                            Dịch vụ & Dụng cụ bán kèm (+Add-ons):
-                          </span>
-                          <div className="space-y-1">
-                            {service.addons.map((addon) => (
-                              <div
-                                key={addon.id}
-                                className="flex items-center justify-between py-1 px-2 rounded-lg bg-orange-50/50 text-[11px] text-slate-700"
-                              >
-                                <span className="truncate max-w-[190px]">{addon.name}</span>
-                                <span className="font-bold text-brand-700 shrink-0">
-                                  +{addon.price.toLocaleString('vi-VN')} đ
-                                </span>
-                              </div>
-                            ))}
+                      <CardContent className="space-y-3.5 pt-1 text-xs">
+                        <p className="text-slate-500 leading-relaxed line-clamp-2">
+                          {service.description}
+                        </p>
+
+                        {/* Pricing Box */}
+                        <div className="p-3 bg-slate-50 rounded-xl flex items-center justify-between border border-slate-100">
+                          <div>
+                            <span className="text-[10px] text-slate-400 block font-medium">
+                              Cơ chế định giá:
+                            </span>
+                            <Badge
+                              variant={isHourly ? 'brand' : isBidding ? 'warning' : 'info'}
+                              size="sm"
+                            >
+                              {isHourly
+                                ? 'Theo giờ làm việc'
+                                : isBidding
+                                ? 'Đấu thầu báo giá'
+                                : 'Theo đơn vị cố định'}
+                            </Badge>
+                          </div>
+
+                          <div className="text-right">
+                            <span className="text-[10px] text-slate-400 block font-medium">
+                              Mức giá cơ bản:
+                            </span>
+                            <span className="text-base font-black text-slate-900">
+                              {isBidding
+                                ? 'Khảo sát báo giá'
+                                : `${service.basePrice.toLocaleString('vi-VN')} đ / ${
+                                    service.unitLabel || 'lần'
+                                  }`}
+                            </span>
                           </div>
                         </div>
-                      )}
 
-                      <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-400">
-                        <span>Mã: {service.id}</span>
-                        <span className="font-medium text-slate-600">
-                          {service.tenantId ? 'Dịch vụ riêng' : 'Toàn sàn LinkkWork'}
-                        </span>
+                        {/* Add-ons Preview */}
+                        {addonCount > 0 && (
+                          <div className="space-y-1.5">
+                            <span className="text-[11px] font-semibold text-slate-700 flex items-center gap-1">
+                              <Tag className="w-3 h-3 text-brand-500" />
+                              Dịch vụ bán kèm (+{addonCount} Add-ons):
+                            </span>
+                            <div className="space-y-1 max-h-20 overflow-y-auto">
+                              {service.addons.map((addon) => (
+                                <div
+                                  key={addon.id}
+                                  className="flex items-center justify-between py-1 px-2 rounded-lg bg-orange-50/50 text-[11px] text-slate-700"
+                                >
+                                  <span className="truncate max-w-[190px]">{addon.name}</span>
+                                  <span className="font-bold text-brand-700 shrink-0">
+                                    +{addon.price.toLocaleString('vi-VN')} đ
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-400">
+                          <span>Mã: {service.id}</span>
+                          <span className="font-medium text-slate-600">
+                            {service.tenantId ? 'Dịch vụ riêng' : 'Toàn sàn LinkkWork'}
+                          </span>
+                        </div>
+                      </CardContent>
+                    </div>
+
+                    {/* Card Actions Footer */}
+                    <div className="p-3 pt-2 bg-slate-50/70 border-t border-slate-100 flex items-center justify-between gap-1.5">
+                      <div className="flex items-center gap-1.5">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleOpenEditService(service)}
+                          className="px-2.5 py-1 text-xs"
+                          leftIcon={<Edit2 className="w-3.5 h-3.5 text-slate-600" />}
+                        >
+                          Chỉnh sửa
+                        </Button>
+
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          onClick={() => setSelectedServiceForAddons(service)}
+                          className="px-2.5 py-1 text-xs font-semibold"
+                          leftIcon={<Tag className="w-3.5 h-3.5" />}
+                        >
+                          <span>Quản lý phụ phí</span>
+                          <Badge
+                            variant="brand"
+                            size="sm"
+                            className="ml-1 px-1.5 py-0 text-[10px]"
+                          >
+                            {addonCount}
+                          </Badge>
+                        </Button>
                       </div>
-                    </CardContent>
+
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleDeleteService(service)}
+                        className="px-2 py-1 text-xs text-rose-600 hover:bg-rose-50 hover:text-rose-700"
+                        title="Xóa dịch vụ"
+                        disabled={deleteServiceMutation.isPending}
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </Button>
+                    </div>
                   </Card>
                 );
               })}
@@ -374,40 +546,67 @@ export const ServicesPage: React.FC = () => {
         </div>
       )}
 
-      {/* Create Service Modal */}
+      {/* Category Management Modal */}
+      <CategoryModal
+        isOpen={isCategoryModalOpen}
+        onClose={() => setIsCategoryModalOpen(false)}
+      />
+
+      {/* Addons Management Modal */}
+      <AddonModal
+        service={
+          // Keep live sync of selected service with updated addons array
+          selectedServiceForAddons
+            ? services.find((s) => s.id === selectedServiceForAddons.id) || selectedServiceForAddons
+            : null
+        }
+        isOpen={!!selectedServiceForAddons}
+        onClose={() => setSelectedServiceForAddons(null)}
+        tenantId={currentTenantId}
+      />
+
+      {/* Create / Edit Service Modal */}
       <Modal
-        isOpen={isModalOpen}
+        isOpen={isServiceModalOpen}
         onClose={() => {
-          setIsModalOpen(false);
+          setIsServiceModalOpen(false);
+          setEditingService(null);
           setFormErrors({});
         }}
-        title="Thêm Dịch Vụ Mới Vào Danh Mục"
+        title={editingService ? `Chỉnh Sửa Dịch Vụ: "${editingService.name}"` : 'Thêm Dịch Vụ Mới Vào Danh Mục'}
+        subtitle={
+          editingService
+            ? 'Cập nhật đơn giá, cơ chế tính phí hoặc số giờ làm việc tối thiểu.'
+            : 'Khởi tạo dịch vụ với giá kế thừa tự động từ nhóm ngành hoặc định giá tùy chỉnh.'
+        }
         maxWidth="lg"
         footer={
           <div className="flex justify-end gap-2">
             <Button
               variant="outline"
               onClick={() => {
-                setIsModalOpen(false);
+                setIsServiceModalOpen(false);
+                setEditingService(null);
                 setFormErrors({});
               }}
-              disabled={createServiceMutation.isPending}
+              disabled={isSavingService}
             >
               Hủy
             </Button>
             <Button
               variant="primary"
-              onClick={handleCreateService}
-              disabled={createServiceMutation.isPending}
+              onClick={handleSaveService}
+              disabled={isSavingService}
+              isLoading={isSavingService}
             >
-              {createServiceMutation.isPending ? 'Đang khởi tạo...' : 'Lưu & Bật Cung Cấp'}
+              {editingService ? 'Lưu thay đổi' : 'Tạo & Bật Cung Cấp'}
             </Button>
           </div>
         }
       >
-        <form onSubmit={handleCreateService} className="space-y-4">
+        <form onSubmit={handleSaveService} className="space-y-4">
           <Input
-            label="Tên dịch vụ"
+            label="Tên dịch vụ *"
             placeholder="Ví dụ: Vệ sinh máy giặt lồng đứng"
             value={form.name}
             onChange={(e) => {
@@ -419,15 +618,20 @@ export const ServicesPage: React.FC = () => {
           />
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <Select
-              label="Nhóm ngành danh mục"
-              value={form.categoryId}
-              onChange={(e) => setForm({ ...form, categoryId: e.target.value })}
-              options={categories.map((c) => ({ value: c.id, label: c.name }))}
-            />
+            <div>
+              <Select
+                label="Nhóm ngành danh mục *"
+                value={form.categoryId}
+                onChange={(e) => handleCategoryChange(e.target.value)}
+                options={categories.map((c) => ({ value: c.id, label: c.name }))}
+              />
+              <span className="text-[11px] text-brand-600 block mt-1 font-medium">
+                💡 Tự động kế thừa giá &amp; đơn vị từ cấu hình của nhóm ngành.
+              </span>
+            </div>
 
             <Select
-              label="Phương thức định giá"
+              label="Phương thức định giá *"
               value={form.pricingModel}
               onChange={(e) =>
                 setForm({ ...form, pricingModel: e.target.value as PricingModel })
@@ -446,11 +650,12 @@ export const ServicesPage: React.FC = () => {
               type="number"
               value={form.basePrice}
               onChange={(e) => setForm({ ...form, basePrice: Number(e.target.value) })}
+              error={formErrors.basePrice}
               required
             />
             <Input
               label="Đơn vị tính"
-              placeholder="giờ / cái / bộ"
+              placeholder="giờ / máy / căn"
               value={form.unitLabel}
               onChange={(e) => setForm({ ...form, unitLabel: e.target.value })}
             />
@@ -459,9 +664,10 @@ export const ServicesPage: React.FC = () => {
                 label="Số giờ tối thiểu"
                 type="number"
                 min={1}
-                max={8}
+                max={12}
                 value={form.minHours}
                 onChange={(e) => setForm({ ...form, minHours: Number(e.target.value) })}
+                error={formErrors.minHours}
               />
             )}
           </div>
@@ -477,24 +683,26 @@ export const ServicesPage: React.FC = () => {
             />
           </div>
 
-          <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-2">
-            <span className="text-xs font-bold text-slate-800 block">
-              Dịch vụ bán kèm ban đầu (+Addon):
-            </span>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <Input
-                placeholder="Tên dụng cụ / yêu cầu thêm..."
-                value={form.addonName}
-                onChange={(e) => setForm({ ...form, addonName: e.target.value })}
-              />
-              <Input
-                type="number"
-                placeholder="Giá phụ thu (VNĐ)"
-                value={form.addonPrice}
-                onChange={(e) => setForm({ ...form, addonPrice: Number(e.target.value) })}
-              />
+          {!editingService && (
+            <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-2">
+              <span className="text-xs font-bold text-slate-800 block">
+                Dịch vụ bán kèm ban đầu (+Addon, tùy chọn):
+              </span>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <Input
+                  placeholder="Tên dụng cụ / yêu cầu thêm..."
+                  value={form.addonName}
+                  onChange={(e) => setForm({ ...form, addonName: e.target.value })}
+                />
+                <Input
+                  type="number"
+                  placeholder="Giá phụ thu (VNĐ)"
+                  value={form.addonPrice}
+                  onChange={(e) => setForm({ ...form, addonPrice: Number(e.target.value) })}
+                />
+              </div>
             </div>
-          </div>
+          )}
         </form>
       </Modal>
     </div>
