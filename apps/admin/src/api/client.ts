@@ -27,6 +27,12 @@ import type {
   FinancialSummary,
   TenantSettings,
 } from '../types/index.ts';
+import type {
+  CreateTaskerInput,
+  UpdateTaskerInput,
+  WorkFloorInput,
+  DepositInput,
+} from '../schemas/tasker.schema.ts';
 
 export const STORAGE_KEYS = {
   ACCESS_TOKEN: 'linkkwork_admin_access_token',
@@ -308,6 +314,98 @@ export function mapBackendBookingToAdminBooking(b: BackendBookingResponse): Book
         }))
       : undefined,
     createdAt: b.createdAt,
+  };
+}
+
+export interface BackendTaskerResponse {
+  id: string;
+  name: string;
+  phone: string;
+  email: string;
+  avatarUrl?: string | null;
+  tenantId: string;
+  status?: string;
+  createdAt?: string;
+  taskerProfile?: {
+    id: string;
+    rating: number;
+    completedJobsCount: number;
+    isOnline: boolean;
+    currentStatus: 'IDLE' | 'ARRIVING' | 'IN_PROGRESS' | 'RESTRICTED';
+    skills: string[];
+    idCardNumber?: string | null;
+    kycVerified: boolean;
+    depositBalance: number;
+    walletBalance: number;
+    maxDistanceKm: number;
+    autoRadarEnabled: boolean;
+    salaryType: string;
+    bankName?: string | null;
+    bankAccountNumber?: string | null;
+    bankAccountHolder?: string | null;
+  } | null;
+  tenant?: {
+    id: string;
+    name: string;
+  } | null;
+}
+
+export interface BackendPaginatedTaskersResponse {
+  taskers: BackendTaskerResponse[];
+  total: number;
+  page: number;
+  limit: number;
+}
+
+export interface TaskerQueryParams {
+  search?: string;
+  onlineOnly?: boolean;
+  kycPendingOnly?: boolean;
+  lowDepositOnly?: boolean;
+}
+
+export interface TaskerDepositResult {
+  taskerProfile: {
+    id: string;
+    userId: string;
+    depositBalance: number;
+    kycVerified: boolean;
+    maxDistanceKm: number;
+    autoRadarEnabled: boolean;
+  };
+  transaction: WalletTransaction;
+}
+
+export function mapBackendTaskerToAdminTasker(raw: BackendTaskerResponse): Tasker {
+  const profile = raw.taskerProfile;
+  const rating = profile?.rating ?? 5.0;
+  return {
+    id: raw.id,
+    code: `TSK-${raw.id.slice(0, 6).toUpperCase()}`,
+    name: raw.name,
+    phone: raw.phone,
+    email: raw.email || undefined,
+    avatarUrl: raw.avatarUrl || undefined,
+    tenantId: raw.tenantId,
+    tenantName: raw.tenant?.name || 'Đội ngũ thợ đối tác',
+    rating,
+    ratingScore: rating,
+    completedJobs: profile?.completedJobsCount ?? 0,
+    isOnline: profile?.isOnline ?? false,
+    walletBalance: profile?.walletBalance ?? 0,
+    depositBalance: profile?.depositBalance ?? 0,
+    softHoldBalance: 0,
+    currentStatus: profile?.currentStatus ?? 'IDLE',
+    kycVerified: profile?.kycVerified ?? false,
+    idCardNumber: profile?.idCardNumber || undefined,
+    skills: profile?.skills || [],
+    maxDistanceKm: profile?.maxDistanceKm ?? 15,
+    autoRadarEnabled: profile?.autoRadarEnabled ?? true,
+    salaryType: (profile?.salaryType as 'COMMISSION' | 'FIXED_SALARY') || 'COMMISSION',
+    bankName: profile?.bankName || undefined,
+    bankAccountNumber: profile?.bankAccountNumber || undefined,
+    bankAccountHolder: profile?.bankAccountHolder || undefined,
+    createdAt: raw.createdAt,
   };
 }
 
@@ -1217,62 +1315,465 @@ export class ApiClient {
     return booking;
   }
 
-  // --- TASKERS (SCOPED BY TENANT) ---
-  async getTaskers(tenantId?: string | null): Promise<Tasker[]> {
+  // --- TASKERS (SCOPED BY TENANT & HRM OPERATIONS) ---
+  async getTaskers(
+    tenantId?: string | null,
+    params?: TaskerQueryParams
+  ): Promise<Tasker[]> {
     const storage = getStorage();
     const token = storage.getItem(STORAGE_KEYS.ACCESS_TOKEN);
+
     if (token) {
       try {
-        const rawList = await this.fetchWithAuth<
-          Array<{
-            id: string;
-            name: string;
-            phone: string;
-            email: string;
-            avatarUrl?: string | null;
-            tenantId: string;
-            taskerProfile?: {
-              rating?: number;
-              completedJobsCount?: number;
-              isOnline?: boolean;
-            } | null;
-          }>
-        >('/bookings/taskers/available', { method: 'GET' }, true);
+        const query = new URLSearchParams();
+        if (tenantId) query.set('tenantId', tenantId);
+        if (params?.search) query.set('search', params.search);
+        if (params?.onlineOnly !== undefined) query.set('isOnline', String(params.onlineOnly));
+        if (params?.kycPendingOnly !== undefined) query.set('kycVerified', 'false');
+        if (params?.lowDepositOnly !== undefined) query.set('lowDepositOnly', 'true');
+        query.set('limit', '100');
 
-        if (Array.isArray(rawList)) {
-          const mapped: Tasker[] = rawList.map((t) => ({
-            id: t.id,
-            code: `TSK-${t.id.slice(0, 6).toUpperCase()}`,
-            name: t.name,
-            phone: t.phone,
-            avatarUrl: t.avatarUrl || undefined,
-            tenantId: t.tenantId,
-            tenantName: 'Đội ngũ thợ đối tác',
-            rating: t.taskerProfile?.rating ?? 5.0,
-            ratingScore: t.taskerProfile?.rating ?? 5.0,
-            completedJobs: t.taskerProfile?.completedJobsCount ?? 0,
-            isOnline: t.taskerProfile?.isOnline ?? true,
-            walletBalance: 1000000,
-            depositBalance: 500000,
-            softHoldBalance: 0,
-            currentStatus: 'IDLE',
-            kycVerified: true,
-            skills: ['Dọn dẹp nhà', 'Vệ sinh máy lạnh'],
-          }));
+        const endpoint = `/taskers${query.toString() ? `?${query.toString()}` : ''}`;
+        const res = await this.fetchWithAuth<
+          BackendPaginatedTaskersResponse | BackendTaskerResponse[]
+        >(endpoint, { method: 'GET' }, true);
+
+        const rawList = Array.isArray(res) ? res : res.taskers || [];
+        const mapped = rawList.map(mapBackendTaskerToAdminTasker);
+
+        if (mapped.length > 0) {
           saveData(STORAGE_KEYS.TASKERS, mapped);
-          return mapped;
         }
+        return mapped;
       } catch (err: unknown) {
         console.warn(
-          'Network error fetching available taskers, fallback to cache:',
+          'Network error fetching taskers, fallback to cache:',
           err instanceof Error ? err.message : String(err)
         );
       }
     }
 
     const taskers = loadData<Tasker[]>(STORAGE_KEYS.TASKERS, INITIAL_TASKERS);
-    if (!tenantId) return taskers;
-    return taskers.filter((t) => t.tenantId === tenantId);
+    let filtered = taskers;
+    if (tenantId) {
+      filtered = filtered.filter((t) => t.tenantId === tenantId);
+    }
+    if (params?.search) {
+      const q = params.search.toLowerCase();
+      filtered = filtered.filter(
+        (t) =>
+          t.name.toLowerCase().includes(q) ||
+          t.phone.includes(q) ||
+          t.skills.some((s) => s.toLowerCase().includes(q))
+      );
+    }
+    if (params?.onlineOnly !== undefined) {
+      filtered = filtered.filter((t) => t.isOnline === params.onlineOnly);
+    }
+    if (params?.kycPendingOnly) {
+      filtered = filtered.filter((t) => !t.kycVerified);
+    }
+    if (params?.lowDepositOnly) {
+      filtered = filtered.filter((t) => (t.depositBalance ?? 0) < 100000);
+    }
+    return filtered;
+  }
+
+  async getTaskerById(id: string): Promise<Tasker | undefined> {
+    const storage = getStorage();
+    const token = storage.getItem(STORAGE_KEYS.ACCESS_TOKEN);
+
+    if (token) {
+      try {
+        const raw = await this.fetchWithAuth<BackendTaskerResponse>(
+          `/taskers/${id}`,
+          { method: 'GET' },
+          true
+        );
+        if (raw && raw.id) {
+          return mapBackendTaskerToAdminTasker(raw);
+        }
+      } catch (err: unknown) {
+        console.warn(
+          `Error fetching tasker ${id}:`,
+          err instanceof Error ? err.message : String(err)
+        );
+      }
+    }
+
+    const taskers = await this.getTaskers();
+    return taskers.find((t) => t.id === id);
+  }
+
+  async createTasker(data: CreateTaskerInput, tenantId?: string): Promise<Tasker> {
+    const payload: Record<string, unknown> = {
+      name: data.name,
+      phone: data.phone,
+      email: data.email,
+      skills: data.skills,
+      depositBalance: data.depositBalance ?? 500000,
+      maxDistanceKm: data.maxDistanceKm ?? 15,
+      autoRadarEnabled: data.autoRadarEnabled ?? true,
+    };
+    if (tenantId || data.tenantId) payload.tenantId = tenantId || data.tenantId;
+    if (data.password) payload.password = data.password;
+    if (data.idCardNumber) payload.idCardNumber = data.idCardNumber;
+    if (data.bankName) payload.bankName = data.bankName;
+    if (data.bankAccountNumber) payload.bankAccountNumber = data.bankAccountNumber;
+    if (data.bankAccountHolder) payload.bankAccountHolder = data.bankAccountHolder;
+
+    const storage = getStorage();
+    const token = storage.getItem(STORAGE_KEYS.ACCESS_TOKEN);
+
+    if (token) {
+      try {
+        const raw = await this.fetchWithAuth<BackendTaskerResponse>(
+          '/taskers',
+          {
+            method: 'POST',
+            body: JSON.stringify(payload),
+          },
+          true
+        );
+        const tasker = mapBackendTaskerToAdminTasker(raw);
+        const list = loadData<Tasker[]>(STORAGE_KEYS.TASKERS, INITIAL_TASKERS);
+        saveData(STORAGE_KEYS.TASKERS, [tasker, ...list.filter((t) => t.id !== tasker.id)]);
+        return tasker;
+      } catch (err: unknown) {
+        console.warn('Network error creating tasker:', err instanceof Error ? err.message : String(err));
+        throw err;
+      }
+    }
+
+    await sleep(200);
+    const newId = `tsk-mock-${Date.now()}`;
+    const newTasker: Tasker = {
+      id: newId,
+      code: `TSK-${newId.slice(-4).toUpperCase()}`,
+      name: data.name,
+      phone: data.phone,
+      email: data.email,
+      tenantId: tenantId || data.tenantId || 'tenant-anh-duong',
+      tenantName: 'Đội ngũ thợ đối tác',
+      rating: 5.0,
+      ratingScore: 5.0,
+      completedJobs: 0,
+      isOnline: false,
+      walletBalance: 0,
+      depositBalance: data.depositBalance ?? 500000,
+      softHoldBalance: 0,
+      currentStatus: 'IDLE',
+      kycVerified: false,
+      idCardNumber: data.idCardNumber || undefined,
+      skills: data.skills,
+      maxDistanceKm: data.maxDistanceKm ?? 15,
+      autoRadarEnabled: data.autoRadarEnabled ?? true,
+      salaryType: 'COMMISSION',
+      bankName: data.bankName || undefined,
+      bankAccountNumber: data.bankAccountNumber || undefined,
+      bankAccountHolder: data.bankAccountHolder || undefined,
+      createdAt: new Date().toISOString(),
+    };
+    const list = loadData<Tasker[]>(STORAGE_KEYS.TASKERS, INITIAL_TASKERS);
+    saveData(STORAGE_KEYS.TASKERS, [newTasker, ...list]);
+    return newTasker;
+  }
+
+  async updateTasker(id: string, data: UpdateTaskerInput): Promise<Tasker> {
+    const storage = getStorage();
+    const token = storage.getItem(STORAGE_KEYS.ACCESS_TOKEN);
+
+    if (token) {
+      try {
+        const raw = await this.fetchWithAuth<BackendTaskerResponse>(
+          `/taskers/${id}`,
+          {
+            method: 'PATCH',
+            body: JSON.stringify(data),
+          },
+          true
+        );
+        const updated = mapBackendTaskerToAdminTasker(raw);
+        const list = loadData<Tasker[]>(STORAGE_KEYS.TASKERS, INITIAL_TASKERS);
+        const updatedList = list.map((t) => (t.id === id ? updated : t));
+        saveData(STORAGE_KEYS.TASKERS, updatedList);
+        return updated;
+      } catch (err: unknown) {
+        console.warn(`Error updating tasker ${id}:`, err instanceof Error ? err.message : String(err));
+        throw err;
+      }
+    }
+
+    await sleep(200);
+    const list = loadData<Tasker[]>(STORAGE_KEYS.TASKERS, INITIAL_TASKERS);
+    const item = list.find((t) => t.id === id);
+    if (!item) throw new Error('Không tìm thấy thợ');
+
+    if (data.name !== undefined) item.name = data.name;
+    if (data.phone !== undefined) item.phone = data.phone;
+    if (data.idCardNumber !== undefined) item.idCardNumber = data.idCardNumber;
+    if (data.skills !== undefined) item.skills = data.skills;
+    if (data.bankName !== undefined) item.bankName = data.bankName;
+    if (data.bankAccountNumber !== undefined) item.bankAccountNumber = data.bankAccountNumber;
+    if (data.bankAccountHolder !== undefined) item.bankAccountHolder = data.bankAccountHolder;
+    if (data.salaryType !== undefined) item.salaryType = data.salaryType;
+
+    saveData(STORAGE_KEYS.TASKERS, list);
+    return item;
+  }
+
+  async updateWorkFloor(
+    id: string,
+    data: WorkFloorInput
+  ): Promise<{ maxDistanceKm: number; autoRadarEnabled: boolean; isOnline?: boolean }> {
+    const storage = getStorage();
+    const token = storage.getItem(STORAGE_KEYS.ACCESS_TOKEN);
+
+    if (token) {
+      try {
+        const res = await this.fetchWithAuth<{
+          maxDistanceKm: number;
+          autoRadarEnabled: boolean;
+          isOnline: boolean;
+        }>(
+          `/taskers/${id}/work-floor`,
+          {
+            method: 'PATCH',
+            body: JSON.stringify(data),
+          },
+          true
+        );
+        const list = loadData<Tasker[]>(STORAGE_KEYS.TASKERS, INITIAL_TASKERS);
+        const item = list.find((t) => t.id === id);
+        if (item) {
+          item.maxDistanceKm = res.maxDistanceKm;
+          item.autoRadarEnabled = res.autoRadarEnabled;
+          if (res.isOnline !== undefined) item.isOnline = res.isOnline;
+          saveData(STORAGE_KEYS.TASKERS, list);
+        }
+        return res;
+      } catch (err: unknown) {
+        console.warn(`Error updating work floor for tasker ${id}:`, err instanceof Error ? err.message : String(err));
+        throw err;
+      }
+    }
+
+    await sleep(200);
+    const list = loadData<Tasker[]>(STORAGE_KEYS.TASKERS, INITIAL_TASKERS);
+    const item = list.find((t) => t.id === id);
+    if (!item) throw new Error('Không tìm thấy thợ');
+
+    if (data.maxDistanceKm !== undefined) item.maxDistanceKm = data.maxDistanceKm;
+    if (data.autoRadarEnabled !== undefined) item.autoRadarEnabled = data.autoRadarEnabled;
+    if (data.isOnline !== undefined) item.isOnline = data.isOnline;
+
+    saveData(STORAGE_KEYS.TASKERS, list);
+    return {
+      maxDistanceKm: item.maxDistanceKm ?? 15,
+      autoRadarEnabled: item.autoRadarEnabled ?? true,
+      isOnline: item.isOnline,
+    };
+  }
+
+  async toggleTaskerStatus(id: string): Promise<{ isOnline: boolean }> {
+    const storage = getStorage();
+    const token = storage.getItem(STORAGE_KEYS.ACCESS_TOKEN);
+
+    if (token) {
+      try {
+        const res = await this.fetchWithAuth<{ isOnline: boolean }>(
+          `/taskers/${id}/toggle-status`,
+          {
+            method: 'PATCH',
+          },
+          true
+        );
+        const list = loadData<Tasker[]>(STORAGE_KEYS.TASKERS, INITIAL_TASKERS);
+        const item = list.find((t) => t.id === id);
+        if (item) {
+          item.isOnline = res.isOnline;
+          saveData(STORAGE_KEYS.TASKERS, list);
+        }
+        return res;
+      } catch (err: unknown) {
+        console.warn(`Error toggling status for tasker ${id}:`, err instanceof Error ? err.message : String(err));
+        throw err;
+      }
+    }
+
+    await sleep(200);
+    const list = loadData<Tasker[]>(STORAGE_KEYS.TASKERS, INITIAL_TASKERS);
+    const item = list.find((t) => t.id === id);
+    if (!item) throw new Error('Không tìm thấy thợ');
+
+    item.isOnline = !item.isOnline;
+    saveData(STORAGE_KEYS.TASKERS, list);
+    return { isOnline: item.isOnline };
+  }
+
+  async adjustTaskerDeposit(
+    id: string,
+    data: { amount: number; notes: string }
+  ): Promise<TaskerDepositResult> {
+    const storage = getStorage();
+    const token = storage.getItem(STORAGE_KEYS.ACCESS_TOKEN);
+
+    if (token) {
+      try {
+        const res = await this.fetchWithAuth<TaskerDepositResult>(
+          `/taskers/${id}/deposit`,
+          {
+            method: 'POST',
+            body: JSON.stringify(data),
+          },
+          true
+        );
+        const list = loadData<Tasker[]>(STORAGE_KEYS.TASKERS, INITIAL_TASKERS);
+        const item = list.find((t) => t.id === id);
+        if (item && res.taskerProfile?.depositBalance !== undefined) {
+          item.depositBalance = res.taskerProfile.depositBalance;
+          saveData(STORAGE_KEYS.TASKERS, list);
+        }
+        if (res.transaction) {
+          const txList = loadData<WalletTransaction[]>(
+            STORAGE_KEYS.FINANCIAL_TX,
+            INITIAL_FINANCIAL_TRANSACTIONS
+          );
+          saveData(STORAGE_KEYS.FINANCIAL_TX, [res.transaction, ...txList]);
+        }
+        return res;
+      } catch (err: unknown) {
+        console.warn(`Error adjusting deposit for tasker ${id}:`, err instanceof Error ? err.message : String(err));
+        throw err;
+      }
+    }
+
+    await sleep(200);
+    const list = loadData<Tasker[]>(STORAGE_KEYS.TASKERS, INITIAL_TASKERS);
+    const item = list.find((t) => t.id === id);
+    if (!item) throw new Error('Không tìm thấy thợ');
+
+    const balanceBefore = item.depositBalance ?? 0;
+    const balanceAfter = balanceBefore + data.amount;
+    if (balanceAfter < 0) {
+      throw new Error('Số dư ký quỹ không thể âm');
+    }
+
+    item.depositBalance = balanceAfter;
+    saveData(STORAGE_KEYS.TASKERS, list);
+
+    const tx: WalletTransaction = {
+      id: `tx-${Date.now()}`,
+      code: `TX-${Date.now().toString().slice(-6)}`,
+      tenantId: item.tenantId,
+      tenantName: item.tenantName,
+      taskerId: item.id,
+      taskerName: item.name,
+      type: data.amount > 0 ? 'TOP_UP_DEPOSIT' : 'WITHDRAW_DEPOSIT',
+      amount: Math.abs(data.amount),
+      direction: data.amount > 0 ? 'IN' : 'OUT',
+      balanceBefore,
+      balanceAfter,
+      status: 'COMPLETED',
+      notes: data.notes,
+      createdAt: new Date().toISOString(),
+    };
+
+    const txList = loadData<WalletTransaction[]>(
+      STORAGE_KEYS.FINANCIAL_TX,
+      INITIAL_FINANCIAL_TRANSACTIONS
+    );
+    saveData(STORAGE_KEYS.FINANCIAL_TX, [tx, ...txList]);
+
+    return {
+      taskerProfile: {
+        id: `profile-${item.id}`,
+        userId: item.id,
+        depositBalance: balanceAfter,
+        kycVerified: item.kycVerified,
+        maxDistanceKm: item.maxDistanceKm ?? 15,
+        autoRadarEnabled: item.autoRadarEnabled ?? true,
+      },
+      transaction: tx,
+    };
+  }
+
+  async updateTaskerKyc(
+    id: string,
+    data: { kycVerified: boolean; idCardNumber?: string; notes?: string }
+  ): Promise<{ kycVerified: boolean; idCardNumber?: string | null }> {
+    const storage = getStorage();
+    const token = storage.getItem(STORAGE_KEYS.ACCESS_TOKEN);
+
+    if (token) {
+      try {
+        const res = await this.fetchWithAuth<{
+          kycVerified: boolean;
+          idCardNumber?: string | null;
+        }>(
+          `/taskers/${id}/kyc`,
+          {
+            method: 'PATCH',
+            body: JSON.stringify(data),
+          },
+          true
+        );
+        const list = loadData<Tasker[]>(STORAGE_KEYS.TASKERS, INITIAL_TASKERS);
+        const item = list.find((t) => t.id === id);
+        if (item) {
+          item.kycVerified = res.kycVerified;
+          if (res.idCardNumber !== undefined) item.idCardNumber = res.idCardNumber || undefined;
+          saveData(STORAGE_KEYS.TASKERS, list);
+        }
+        return res;
+      } catch (err: unknown) {
+        console.warn(`Error updating KYC for tasker ${id}:`, err instanceof Error ? err.message : String(err));
+        throw err;
+      }
+    }
+
+    await sleep(200);
+    const list = loadData<Tasker[]>(STORAGE_KEYS.TASKERS, INITIAL_TASKERS);
+    const item = list.find((t) => t.id === id);
+    if (!item) throw new Error('Không tìm thấy thợ');
+
+    item.kycVerified = data.kycVerified;
+    if (data.idCardNumber !== undefined) item.idCardNumber = data.idCardNumber;
+
+    saveData(STORAGE_KEYS.TASKERS, list);
+    return {
+      kycVerified: item.kycVerified,
+      idCardNumber: item.idCardNumber,
+    };
+  }
+
+  async getTaskerTransactions(id: string): Promise<WalletTransaction[]> {
+    const storage = getStorage();
+    const token = storage.getItem(STORAGE_KEYS.ACCESS_TOKEN);
+
+    if (token) {
+      try {
+        const list = await this.fetchWithAuth<WalletTransaction[]>(
+          `/taskers/${id}/transactions`,
+          { method: 'GET' },
+          true
+        );
+        if (Array.isArray(list)) {
+          return list;
+        }
+      } catch (err: unknown) {
+        console.warn(
+          `Error fetching transactions for tasker ${id}:`,
+          err instanceof Error ? err.message : String(err)
+        );
+      }
+    }
+
+    const allTx = loadData<WalletTransaction[]>(
+      STORAGE_KEYS.FINANCIAL_TX,
+      INITIAL_FINANCIAL_TRANSACTIONS
+    );
+    return allTx.filter((tx) => tx.taskerId === id);
   }
 
   // --- CRON & WORKER CONTROL CENTER ---

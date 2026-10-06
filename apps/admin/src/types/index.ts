@@ -87,6 +87,7 @@ export interface Tasker {
   code: string;
   name: string;
   phone: string;
+  email?: string;
   avatarUrl?: string;
   tenantId: string;
   tenantName: string;
@@ -97,9 +98,17 @@ export interface Tasker {
   walletBalance: number;
   depositBalance: number;
   softHoldBalance: number;
-  currentStatus: 'IDLE' | 'ARRIVING' | 'IN_PROGRESS';
+  currentStatus: 'IDLE' | 'ARRIVING' | 'IN_PROGRESS' | 'RESTRICTED';
   kycVerified: boolean;
+  idCardNumber?: string;
   skills: string[];
+  maxDistanceKm?: number;
+  autoRadarEnabled?: boolean;
+  salaryType?: 'COMMISSION' | 'FIXED_SALARY';
+  bankName?: string;
+  bankAccountNumber?: string;
+  bankAccountHolder?: string;
+  createdAt?: string;
 }
 
 export interface PartnerApplication {
@@ -176,28 +185,35 @@ export interface ServiceItem {
 // --- TÀI CHÍNH & VÍ KÝ QUỸ (FINANCIAL & LEDGER) ---
 export type TransactionType =
   | 'TOP_UP_DEPOSIT' // Nạp tiền ví ký quỹ
+  | 'WITHDRAW_DEPOSIT' // Khấu trừ/rút ký quỹ
   | 'SOFT_HOLD' // Tạm khóa cọc khi nhận việc
   | 'HOLD_RELEASE' // Trả cọc sau khi hoàn tất
   | 'COMMISSION_FEE' // Thu phí hoa hồng sàn (15%)
   | 'SUBSCRIPTION_FEE' // Phí gói tháng Tenant
-  | 'ORDER_PAYOUT'; // Quyết toán tiền về ví thu nhập
+  | 'ORDER_PAYOUT' // Quyết toán tiền về ví thu nhập
+  | 'PENALTY_DEDUCTION'; // Phạt vi phạm
 
-export type TransactionStatus = 'COMPLETED' | 'PENDING' | 'FAILED';
+export type TransactionStatus = 'COMPLETED' | 'PENDING' | 'FAILED' | 'REJECTED';
 
 export interface WalletTransaction {
   id: string;
   code: string;
   tenantId: string;
-  tenantName: string;
+  tenantName?: string;
   taskerId?: string;
   taskerName?: string;
+  bookingId?: string;
   bookingCode?: string;
   type: TransactionType;
   amount: number;
-  direction: 'IN' | 'OUT'; // Dòng tiền vào hay ra
+  direction: 'IN' | 'OUT';
+  balanceBefore: number;
   balanceAfter: number;
   status: TransactionStatus;
-  notes: string;
+  bankName?: string;
+  bankAccount?: string;
+  notes?: string;
+  triggeredBy?: string;
   createdAt: string;
 }
 
