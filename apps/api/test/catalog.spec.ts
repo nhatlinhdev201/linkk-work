@@ -235,12 +235,6 @@ describe('Catalog Module E2E / Integration Tests', () => {
         })
         .expect(201);
 
-      // baseTotal: 3 * 100,000 = 300,000
-      // subtotal: 300,000 + 20,000 + 30,000 = 350,000
-      // surgeAmount: round(350,000 * 0.2) = 70,000
-      // preDiscount: 420,000
-      // discount: 40,000
-      // finalTotal: 380,000
       expect(res.body.baseTotal).toBe(300000);
       expect(res.body.subtotal).toBe(350000);
       expect(res.body.surgeMultiplier).toBe(1.2);
@@ -259,4 +253,154 @@ describe('Catalog Module E2E / Integration Tests', () => {
         .expect(400);
     });
   });
+
+  describe('Category CRUD Expansion', () => {
+    let createdCatId: string;
+
+    it('should create category with default pricing fields and retrieve by ID', async () => {
+      const res = await request(app.getHttpServer())
+        .post('/api/v1/catalog/categories')
+        .set('Authorization', `Bearer ${superAdminToken}`)
+        .send({
+          name: `Category E2E ${Date.now()}`,
+          description: 'E2E test description',
+          defaultPricingType: ServicePricingType.HOURLY,
+          defaultBasePrice: 85000,
+          defaultUnitLabel: 'giờ',
+        })
+        .expect(201);
+
+      createdCatId = res.body.id;
+      expect(res.body.defaultBasePrice).toBe(85000);
+      expect(res.body.defaultUnitLabel).toBe('giờ');
+
+      const getRes = await request(app.getHttpServer())
+        .get(`/api/v1/catalog/categories/${createdCatId}`)
+        .expect(200);
+
+      expect(getRes.body.id).toBe(createdCatId);
+      expect(getRes.body.description).toBe('E2E test description');
+    });
+
+    it('should update category via PATCH /api/v1/catalog/categories/:id', async () => {
+      const updateRes = await request(app.getHttpServer())
+        .patch(`/api/v1/catalog/categories/${createdCatId}`)
+        .set('Authorization', `Bearer ${superAdminToken}`)
+        .send({
+          description: 'Updated E2E description',
+          defaultBasePrice: 95000,
+        })
+        .expect(200);
+
+      expect(updateRes.body.description).toBe('Updated E2E description');
+      expect(updateRes.body.defaultBasePrice).toBe(95000);
+    });
+
+    it('should reject deleting category if it has services', async () => {
+      // cleaningCategoryId has services
+      await request(app.getHttpServer())
+        .delete(`/api/v1/catalog/categories/${cleaningCategoryId}`)
+        .set('Authorization', `Bearer ${superAdminToken}`)
+        .expect(400);
+    });
+
+    it('should delete empty category via DELETE /api/v1/catalog/categories/:id', async () => {
+      await request(app.getHttpServer())
+        .delete(`/api/v1/catalog/categories/${createdCatId}`)
+        .set('Authorization', `Bearer ${superAdminToken}`)
+        .expect(200);
+
+      await request(app.getHttpServer())
+        .get(`/api/v1/catalog/categories/${createdCatId}`)
+        .expect(404);
+    });
+  });
+
+  describe('Service & Addon CRUD Expansion', () => {
+    let serviceId: string;
+    let addonId: string;
+
+    it('should update service via PATCH /api/v1/catalog/services/:id', async () => {
+      // Create a service first
+      const createRes = await request(app.getHttpServer())
+        .post('/api/v1/catalog/services')
+        .set('Authorization', `Bearer ${superAdminToken}`)
+        .send({
+          name: `Service For Addons ${Date.now()}`,
+          categoryId: cleaningCategoryId,
+          pricingType: ServicePricingType.HOURLY,
+          baseUnitPrice: 80000,
+          unitLabel: 'giờ',
+          minHours: 2.0,
+        })
+        .expect(201);
+
+      serviceId = createRes.body.id;
+      expect(createRes.body.unitLabel).toBe('giờ');
+      expect(createRes.body.minHours).toBe(2.0);
+
+      const updateRes = await request(app.getHttpServer())
+        .patch(`/api/v1/catalog/services/${serviceId}`)
+        .set('Authorization', `Bearer ${superAdminToken}`)
+        .send({
+          baseUnitPrice: 88000,
+          minHours: 1.5,
+        })
+        .expect(200);
+
+      expect(updateRes.body.baseUnitPrice).toBe(88000);
+      expect(updateRes.body.minHours).toBe(1.5);
+    });
+
+    it('should create addon via POST /api/v1/catalog/services/:id/addons', async () => {
+      const res = await request(app.getHttpServer())
+        .post(`/api/v1/catalog/services/${serviceId}/addons`)
+        .set('Authorization', `Bearer ${superAdminToken}`)
+        .send({
+          name: 'Extra Nano Disinfection',
+          price: 45000,
+          description: 'Special disinfection add-on',
+        })
+        .expect(201);
+
+      addonId = res.body.id;
+      expect(res.body.name).toBe('Extra Nano Disinfection');
+      expect(res.body.price).toBe(45000);
+      expect(res.body.serviceId).toBe(serviceId);
+    });
+
+    it('should update addon via PATCH /api/v1/catalog/addons/:id', async () => {
+      const res = await request(app.getHttpServer())
+        .patch(`/api/v1/catalog/addons/${addonId}`)
+        .set('Authorization', `Bearer ${superAdminToken}`)
+        .send({
+          price: 50000,
+          description: 'Updated nano disinfection',
+        })
+        .expect(200);
+
+      expect(res.body.price).toBe(50000);
+      expect(res.body.description).toBe('Updated nano disinfection');
+    });
+
+    it('should delete addon via DELETE /api/v1/catalog/addons/:id', async () => {
+      await request(app.getHttpServer())
+        .delete(`/api/v1/catalog/addons/${addonId}`)
+        .set('Authorization', `Bearer ${superAdminToken}`)
+        .expect(200);
+    });
+
+    it('should delete service without bookings via DELETE /api/v1/catalog/services/:id', async () => {
+      await request(app.getHttpServer())
+        .delete(`/api/v1/catalog/services/${serviceId}`)
+        .set('Authorization', `Bearer ${superAdminToken}`)
+        .expect(200);
+
+      await request(app.getHttpServer())
+        .get(`/api/v1/catalog/services/${serviceId}`)
+        .set('Authorization', `Bearer ${superAdminToken}`)
+        .expect(404);
+    });
+  });
 });
+

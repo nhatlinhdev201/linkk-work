@@ -1,14 +1,14 @@
-import { IsEnum, IsNotEmpty, IsNumber, IsOptional, IsString, Min } from 'class-validator';
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { IsBoolean, IsEnum, IsNumber, IsOptional, IsString, Min } from 'class-validator';
+import { ApiPropertyOptional } from '@nestjs/swagger';
 import { ServicePricingType } from '@linkkwork/shared-types';
 
-export class CreateCategoryDto {
-  @ApiProperty({ example: 'Dọn dẹp vệ sinh' })
+export class UpdateCategoryDto {
+  @ApiPropertyOptional({ example: 'Dọn dẹp vệ sinh cao cấp' })
+  @IsOptional()
   @IsString()
-  @IsNotEmpty()
-  name!: string;
+  name?: string;
 
-  @ApiPropertyOptional({ example: 'don-dep-ve-sinh' })
+  @ApiPropertyOptional({ example: 'don-dep-ve-sinh-cao-cap' })
   @IsOptional()
   @IsString()
   slug?: string;
@@ -18,7 +18,7 @@ export class CreateCategoryDto {
   @IsString()
   icon?: string;
 
-  @ApiPropertyOptional({ example: 'Dịch vụ dọn dẹp vệ sinh tiện ích' })
+  @ApiPropertyOptional({ example: 'Dịch vụ vệ sinh cao cấp theo tiêu chuẩn 5 sao' })
   @IsOptional()
   @IsString()
   description?: string;
@@ -28,7 +28,7 @@ export class CreateCategoryDto {
   @IsEnum(ServicePricingType)
   defaultPricingType?: ServicePricingType;
 
-  @ApiPropertyOptional({ example: 80000 })
+  @ApiPropertyOptional({ example: 100000 })
   @IsOptional()
   @IsNumber()
   @Min(0)
@@ -44,5 +44,9 @@ export class CreateCategoryDto {
   @IsNumber()
   @Min(0)
   displayOrder?: number;
-}
 
+  @ApiPropertyOptional({ example: true })
+  @IsOptional()
+  @IsBoolean()
+  isActive?: boolean;
+}

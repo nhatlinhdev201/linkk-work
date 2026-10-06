@@ -33,8 +33,20 @@ export class CreateServiceDto {
   @Min(0.1)
   durationHours?: number;
 
+  @ApiPropertyOptional({ example: 'giờ' })
+  @IsOptional()
+  @IsString()
+  unitLabel?: string;
+
+  @ApiPropertyOptional({ example: 1.0 })
+  @IsOptional()
+  @IsNumber()
+  @Min(0.1)
+  minHours?: number;
+
   @ApiPropertyOptional({ example: 'Dịch vụ dọn dẹp vệ sinh nhà ở chuyên nghiệp' })
   @IsOptional()
   @IsString()
   description?: string;
 }
+

@@ -3,18 +3,26 @@ import {
   Get,
   Post,
   Patch,
+  Delete,
   Param,
   Body,
+  Query,
   UseGuards,
   Req,
 } from '@nestjs/common';
-import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
+import { ApiTags, ApiBearerAuth, ApiOperation, ApiQuery } from '@nestjs/swagger';
 import { Request } from 'express';
 import { CatalogService } from './catalog.service';
-import { CreateCategoryDto } from './dto/create-category.dto';
-import { CreateServiceDto } from './dto/create-service.dto';
-import { ToggleServiceDto } from './dto/toggle-service.dto';
-import { CalculatePriceDto } from './dto/calculate-price.dto';
+import {
+  CreateCategoryDto,
+  UpdateCategoryDto,
+  CreateServiceDto,
+  UpdateServiceDto,
+  CreateAddonDto,
+  UpdateAddonDto,
+  ToggleServiceDto,
+  CalculatePriceDto,
+} from './dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { TenantContextGuard } from '../auth/guards/tenant-context.guard';
@@ -34,9 +42,17 @@ export class CatalogController {
   constructor(private readonly catalogService: CatalogService) {}
 
   @Get('categories')
-  @ApiOperation({ summary: 'List all active service categories' })
-  async getCategories() {
-    return this.catalogService.getCategories();
+  @ApiOperation({ summary: 'List service categories' })
+  @ApiQuery({ name: 'all', required: false, type: Boolean, description: 'Set true to include inactive categories' })
+  async getCategories(@Query('all') all?: string) {
+    const includeInactive = all === 'true';
+    return this.catalogService.getCategories(includeInactive);
+  }
+
+  @Get('categories/:id')
+  @ApiOperation({ summary: 'Get category details by ID' })
+  async getCategoryById(@Param('id') id: string) {
+    return this.catalogService.getCategoryById(id);
   }
 
   @Post('categories')
@@ -46,6 +62,24 @@ export class CatalogController {
   @ApiOperation({ summary: 'Create a new service category (Super Admin only)' })
   async createCategory(@Body() dto: CreateCategoryDto) {
     return this.catalogService.createCategory(dto);
+  }
+
+  @Patch('categories/:id')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.SUPER_ADMIN)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Update a service category (Super Admin only)' })
+  async updateCategory(@Param('id') id: string, @Body() dto: UpdateCategoryDto) {
+    return this.catalogService.updateCategory(id, dto);
+  }
+
+  @Delete('categories/:id')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.SUPER_ADMIN)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Delete a service category (Super Admin only)' })
+  async deleteCategory(@Param('id') id: string) {
+    return this.catalogService.deleteCategory(id);
   }
 
   @Get('services')
@@ -83,6 +117,79 @@ export class CatalogController {
     return this.catalogService.createService(dto, effectiveTenantId);
   }
 
+  @Patch('services/:id')
+  @UseGuards(JwtAuthGuard, TenantContextGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Update a service' })
+  async updateService(
+    @Param('id') id: string,
+    @Body() dto: UpdateServiceDto,
+    @CurrentUser() user: AuthenticatedUser,
+    @Req() req: RequestWithTenant,
+  ) {
+    const isSuperAdmin = user?.isSuperAdmin === true || user?.role === UserRole.SUPER_ADMIN;
+    const currentTenantId = req.tenantId ?? user?.tenantId ?? null;
+    return this.catalogService.updateService(id, dto, currentTenantId, isSuperAdmin);
+  }
+
+  @Delete('services/:id')
+  @UseGuards(JwtAuthGuard, TenantContextGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Delete a service' })
+  async deleteService(
+    @Param('id') id: string,
+    @CurrentUser() user: AuthenticatedUser,
+    @Req() req: RequestWithTenant,
+  ) {
+    const isSuperAdmin = user?.isSuperAdmin === true || user?.role === UserRole.SUPER_ADMIN;
+    const currentTenantId = req.tenantId ?? user?.tenantId ?? null;
+    return this.catalogService.deleteService(id, currentTenantId, isSuperAdmin);
+  }
+
+  @Post('services/:id/addons')
+  @UseGuards(JwtAuthGuard, TenantContextGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Create an addon for a service' })
+  async createAddon(
+    @Param('id') serviceId: string,
+    @Body() dto: CreateAddonDto,
+    @CurrentUser() user: AuthenticatedUser,
+    @Req() req: RequestWithTenant,
+  ) {
+    const isSuperAdmin = user?.isSuperAdmin === true || user?.role === UserRole.SUPER_ADMIN;
+    const currentTenantId = req.tenantId ?? user?.tenantId ?? null;
+    return this.catalogService.createAddon(serviceId, dto, currentTenantId, isSuperAdmin);
+  }
+
+  @Patch('addons/:id')
+  @UseGuards(JwtAuthGuard, TenantContextGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Update an addon' })
+  async updateAddon(
+    @Param('id') id: string,
+    @Body() dto: UpdateAddonDto,
+    @CurrentUser() user: AuthenticatedUser,
+    @Req() req: RequestWithTenant,
+  ) {
+    const isSuperAdmin = user?.isSuperAdmin === true || user?.role === UserRole.SUPER_ADMIN;
+    const currentTenantId = req.tenantId ?? user?.tenantId ?? null;
+    return this.catalogService.updateAddon(id, dto, currentTenantId, isSuperAdmin);
+  }
+
+  @Delete('addons/:id')
+  @UseGuards(JwtAuthGuard, TenantContextGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Delete an addon' })
+  async deleteAddon(
+    @Param('id') id: string,
+    @CurrentUser() user: AuthenticatedUser,
+    @Req() req: RequestWithTenant,
+  ) {
+    const isSuperAdmin = user?.isSuperAdmin === true || user?.role === UserRole.SUPER_ADMIN;
+    const currentTenantId = req.tenantId ?? user?.tenantId ?? null;
+    return this.catalogService.deleteAddon(id, currentTenantId, isSuperAdmin);
+  }
+
   @Patch('services/:id/toggle')
   @UseGuards(JwtAuthGuard, TenantContextGuard)
   @ApiBearerAuth()
@@ -104,3 +211,4 @@ export class CatalogController {
     return this.catalogService.calculatePrice(dto);
   }
 }
+

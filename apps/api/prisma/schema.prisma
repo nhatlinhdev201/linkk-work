@@ -138,15 +138,19 @@ model AuditLog {
 }
 
 model Category {
-  id           String    @id @default(uuid())
-  name         String
-  slug         String    @unique
-  icon         String?
-  isActive     Boolean   @default(true)
-  displayOrder Int       @default(0)
-  createdAt    DateTime  @default(now())
+  id                 String              @id @default(uuid())
+  name               String
+  slug               String              @unique
+  icon               String?
+  description        String?
+  defaultPricingType ServicePricingType? @default(HOURLY)
+  defaultBasePrice   Float?              @default(80000)
+  defaultUnitLabel   String?             @default("giờ")
+  isActive           Boolean             @default(true)
+  displayOrder       Int                 @default(0)
+  createdAt          DateTime            @default(now())
 
-  services     Service[]
+  services           Service[]
 
   @@map("categories")
 }
@@ -160,6 +164,8 @@ model Service {
   pricingType   ServicePricingType
   baseUnitPrice Float
   durationHours Float?
+  unitLabel     String?            @default("giờ")
+  minHours      Float?             @default(1.0)
   description   String?
   isActive      Boolean            @default(true)
   createdAt     DateTime           @default(now())
@@ -176,14 +182,15 @@ model Service {
 }
 
 model Addon {
-  id        String   @id @default(uuid())
-  serviceId String
-  name      String
-  price     Float
-  isActive  Boolean  @default(true)
-  createdAt DateTime @default(now())
+  id          String   @id @default(uuid())
+  serviceId   String
+  name        String
+  price       Float
+  description String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
 
-  service   Service        @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  service     Service        @relation(fields: [serviceId], references: [id], onDelete: Cascade)
   bookingAddons BookingAddon[]
 
   @@index([serviceId])

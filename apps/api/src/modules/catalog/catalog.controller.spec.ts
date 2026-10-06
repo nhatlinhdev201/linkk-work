@@ -11,10 +11,18 @@ describe('CatalogController', () => {
   let controller: CatalogController;
   let catalogService: {
     getCategories: jest.Mock;
+    getCategoryById: jest.Mock;
     createCategory: jest.Mock;
+    updateCategory: jest.Mock;
+    deleteCategory: jest.Mock;
     getServices: jest.Mock;
     getServiceById: jest.Mock;
     createService: jest.Mock;
+    updateService: jest.Mock;
+    deleteService: jest.Mock;
+    createAddon: jest.Mock;
+    updateAddon: jest.Mock;
+    deleteAddon: jest.Mock;
     toggleServiceActive: jest.Mock;
     calculatePrice: jest.Mock;
   };
@@ -22,10 +30,18 @@ describe('CatalogController', () => {
   beforeEach(async () => {
     catalogService = {
       getCategories: jest.fn(),
+      getCategoryById: jest.fn(),
       createCategory: jest.fn(),
+      updateCategory: jest.fn(),
+      deleteCategory: jest.fn(),
       getServices: jest.fn(),
       getServiceById: jest.fn(),
       createService: jest.fn(),
+      updateService: jest.fn(),
+      deleteService: jest.fn(),
+      createAddon: jest.fn(),
+      updateAddon: jest.fn(),
+      deleteAddon: jest.fn(),
       toggleServiceActive: jest.fn(),
       calculatePrice: jest.fn(),
     };
@@ -49,11 +65,30 @@ describe('CatalogController', () => {
   });
 
   describe('getCategories', () => {
-    it('should return categories from service', async () => {
+    it('should return active categories when all is not true', async () => {
       catalogService.getCategories.mockResolvedValue([{ id: 'cat-1', name: 'Cleaning' }]);
       const res = await controller.getCategories();
       expect(res).toEqual([{ id: 'cat-1', name: 'Cleaning' }]);
-      expect(catalogService.getCategories).toHaveBeenCalled();
+      expect(catalogService.getCategories).toHaveBeenCalledWith(false);
+    });
+
+    it('should return all categories when all is true', async () => {
+      catalogService.getCategories.mockResolvedValue([
+        { id: 'cat-1', name: 'Cleaning' },
+        { id: 'cat-2', name: 'Inactive' },
+      ]);
+      const res = await controller.getCategories('true');
+      expect(res).toHaveLength(2);
+      expect(catalogService.getCategories).toHaveBeenCalledWith(true);
+    });
+  });
+
+  describe('getCategoryById', () => {
+    it('should return category by ID', async () => {
+      catalogService.getCategoryById.mockResolvedValue({ id: 'cat-1', name: 'Cleaning' });
+      const res = await controller.getCategoryById('cat-1');
+      expect(res).toEqual({ id: 'cat-1', name: 'Cleaning' });
+      expect(catalogService.getCategoryById).toHaveBeenCalledWith('cat-1');
     });
   });
 
@@ -63,6 +98,24 @@ describe('CatalogController', () => {
       const res = await controller.createCategory({ name: 'Cleaning' });
       expect(res).toEqual({ id: 'cat-1', name: 'Cleaning' });
       expect(catalogService.createCategory).toHaveBeenCalledWith({ name: 'Cleaning' });
+    });
+  });
+
+  describe('updateCategory', () => {
+    it('should update category', async () => {
+      catalogService.updateCategory.mockResolvedValue({ id: 'cat-1', name: 'Cleaning Pro' });
+      const res = await controller.updateCategory('cat-1', { name: 'Cleaning Pro' });
+      expect(res).toEqual({ id: 'cat-1', name: 'Cleaning Pro' });
+      expect(catalogService.updateCategory).toHaveBeenCalledWith('cat-1', { name: 'Cleaning Pro' });
+    });
+  });
+
+  describe('deleteCategory', () => {
+    it('should delete category', async () => {
+      catalogService.deleteCategory.mockResolvedValue({ id: 'cat-1' });
+      const res = await controller.deleteCategory('cat-1');
+      expect(res).toEqual({ id: 'cat-1' });
+      expect(catalogService.deleteCategory).toHaveBeenCalledWith('cat-1');
     });
   });
 
@@ -125,6 +178,97 @@ describe('CatalogController', () => {
     });
   });
 
+  describe('updateService', () => {
+    it('should call service.updateService with effective context', async () => {
+      catalogService.updateService.mockResolvedValue({ id: 'srv-1', name: 'Updated' });
+      const user = { id: 'usr-1', isSuperAdmin: false, role: UserRole.TENANT_ADMIN, tenantId: 'tenant-1' };
+      const req = { tenantId: 'tenant-1' };
+      const dto = { name: 'Updated' };
+
+      const res = await controller.updateService(
+        'srv-1',
+        dto,
+        user as unknown as Parameters<typeof controller.updateService>[2],
+        req as unknown as Parameters<typeof controller.updateService>[3],
+      );
+
+      expect(res).toEqual({ id: 'srv-1', name: 'Updated' });
+      expect(catalogService.updateService).toHaveBeenCalledWith('srv-1', dto, 'tenant-1', false);
+    });
+  });
+
+  describe('deleteService', () => {
+    it('should call service.deleteService with effective context', async () => {
+      catalogService.deleteService.mockResolvedValue({ id: 'srv-1' });
+      const user = { id: 'usr-1', isSuperAdmin: true, role: UserRole.SUPER_ADMIN, tenantId: 'tenant-1' };
+      const req = { tenantId: 'tenant-1' };
+
+      const res = await controller.deleteService(
+        'srv-1',
+        user as unknown as Parameters<typeof controller.deleteService>[1],
+        req as unknown as Parameters<typeof controller.deleteService>[2],
+      );
+
+      expect(res).toEqual({ id: 'srv-1' });
+      expect(catalogService.deleteService).toHaveBeenCalledWith('srv-1', 'tenant-1', true);
+    });
+  });
+
+  describe('createAddon', () => {
+    it('should call service.createAddon with dto and context', async () => {
+      catalogService.createAddon.mockResolvedValue({ id: 'add-1' });
+      const user = { id: 'usr-1', isSuperAdmin: false, role: UserRole.TENANT_ADMIN, tenantId: 'tenant-1' };
+      const req = { tenantId: 'tenant-1' };
+      const dto = { name: 'Spray', price: 50000 };
+
+      const res = await controller.createAddon(
+        'srv-1',
+        dto,
+        user as unknown as Parameters<typeof controller.createAddon>[2],
+        req as unknown as Parameters<typeof controller.createAddon>[3],
+      );
+
+      expect(res).toEqual({ id: 'add-1' });
+      expect(catalogService.createAddon).toHaveBeenCalledWith('srv-1', dto, 'tenant-1', false);
+    });
+  });
+
+  describe('updateAddon', () => {
+    it('should call service.updateAddon with dto and context', async () => {
+      catalogService.updateAddon.mockResolvedValue({ id: 'add-1', price: 60000 });
+      const user = { id: 'usr-1', isSuperAdmin: false, role: UserRole.TENANT_ADMIN, tenantId: 'tenant-1' };
+      const req = { tenantId: 'tenant-1' };
+      const dto = { price: 60000 };
+
+      const res = await controller.updateAddon(
+        'add-1',
+        dto,
+        user as unknown as Parameters<typeof controller.updateAddon>[2],
+        req as unknown as Parameters<typeof controller.updateAddon>[3],
+      );
+
+      expect(res).toEqual({ id: 'add-1', price: 60000 });
+      expect(catalogService.updateAddon).toHaveBeenCalledWith('add-1', dto, 'tenant-1', false);
+    });
+  });
+
+  describe('deleteAddon', () => {
+    it('should call service.deleteAddon with context', async () => {
+      catalogService.deleteAddon.mockResolvedValue({ id: 'add-1' });
+      const user = { id: 'usr-1', isSuperAdmin: true, role: UserRole.SUPER_ADMIN, tenantId: null };
+      const req = { tenantId: null };
+
+      const res = await controller.deleteAddon(
+        'add-1',
+        user as unknown as Parameters<typeof controller.deleteAddon>[1],
+        req as unknown as Parameters<typeof controller.deleteAddon>[2],
+      );
+
+      expect(res).toEqual({ id: 'add-1' });
+      expect(catalogService.deleteAddon).toHaveBeenCalledWith('add-1', null, true);
+    });
+  });
+
   describe('toggleServiceActive', () => {
     it('should call service.toggleServiceActive with user context', async () => {
       catalogService.toggleServiceActive.mockResolvedValue({ id: 'srv-1', isActive: false });
@@ -165,3 +309,4 @@ describe('CatalogController', () => {
     });
   });
 });
+
