@@ -9,6 +9,7 @@ import {
   Query,
   UseGuards,
   Req,
+  ForbiddenException,
 } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation, ApiQuery } from '@nestjs/swagger';
 import { Request } from 'express';
@@ -99,7 +100,8 @@ export class CatalogController {
   }
 
   @Post('services')
-  @UseGuards(JwtAuthGuard, TenantContextGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard, TenantContextGuard)
+  @Roles(UserRole.SUPER_ADMIN, UserRole.TENANT_ADMIN)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Create a new service for tenant or platform' })
   async createService(
@@ -114,11 +116,16 @@ export class CatalogController {
         ? null
         : (req.tenantId ?? user?.tenantId ?? null);
 
+    if (!isSuperAdmin && !effectiveTenantId) {
+      throw new ForbiddenException('Tenant context is required to create a service');
+    }
+
     return this.catalogService.createService(dto, effectiveTenantId);
   }
 
   @Patch('services/:id')
-  @UseGuards(JwtAuthGuard, TenantContextGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard, TenantContextGuard)
+  @Roles(UserRole.SUPER_ADMIN, UserRole.TENANT_ADMIN)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Update a service' })
   async updateService(
@@ -133,7 +140,8 @@ export class CatalogController {
   }
 
   @Delete('services/:id')
-  @UseGuards(JwtAuthGuard, TenantContextGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard, TenantContextGuard)
+  @Roles(UserRole.SUPER_ADMIN, UserRole.TENANT_ADMIN)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Delete a service' })
   async deleteService(
@@ -147,7 +155,8 @@ export class CatalogController {
   }
 
   @Post('services/:id/addons')
-  @UseGuards(JwtAuthGuard, TenantContextGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard, TenantContextGuard)
+  @Roles(UserRole.SUPER_ADMIN, UserRole.TENANT_ADMIN)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Create an addon for a service' })
   async createAddon(
@@ -162,7 +171,8 @@ export class CatalogController {
   }
 
   @Patch('addons/:id')
-  @UseGuards(JwtAuthGuard, TenantContextGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard, TenantContextGuard)
+  @Roles(UserRole.SUPER_ADMIN, UserRole.TENANT_ADMIN)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Update an addon' })
   async updateAddon(
@@ -177,7 +187,8 @@ export class CatalogController {
   }
 
   @Delete('addons/:id')
-  @UseGuards(JwtAuthGuard, TenantContextGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard, TenantContextGuard)
+  @Roles(UserRole.SUPER_ADMIN, UserRole.TENANT_ADMIN)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Delete an addon' })
   async deleteAddon(
@@ -191,7 +202,8 @@ export class CatalogController {
   }
 
   @Patch('services/:id/toggle')
-  @UseGuards(JwtAuthGuard, TenantContextGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard, TenantContextGuard)
+  @Roles(UserRole.SUPER_ADMIN, UserRole.TENANT_ADMIN)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Toggle service active status' })
   async toggleServiceActive(

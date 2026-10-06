@@ -10,6 +10,7 @@ import {
   useCreateServiceMutation,
   useUpdateServiceMutation,
   useDeleteServiceMutation,
+  useCreateAddonMutation,
 } from '../../api/queries';
 import { Card, CardHeader, CardTitle, CardContent } from '../../components/common/Card';
 import { Button } from '../../components/common/Button';
@@ -48,6 +49,7 @@ export const ServicesPage: React.FC = () => {
   const createServiceMutation = useCreateServiceMutation(currentTenantId);
   const updateServiceMutation = useUpdateServiceMutation(currentTenantId);
   const deleteServiceMutation = useDeleteServiceMutation(currentTenantId);
+  const createAddonMutation = useCreateAddonMutation(currentTenantId);
 
   const [selectedCategory, setSelectedCategory] = useState<string>('ALL');
   const [searchQuery, setSearchQuery] = useState('');
@@ -69,6 +71,7 @@ export const ServicesPage: React.FC = () => {
     pricingModel: 'HOURLY' as PricingModel,
     basePrice: 85000,
     unitLabel: 'giờ',
+    durationHours: 2,
     minHours: 2,
     addonName: '',
     addonPrice: 30000,
@@ -87,6 +90,7 @@ export const ServicesPage: React.FC = () => {
       pricingModel: defaultCat?.defaultPricingType || 'HOURLY',
       basePrice: defaultCat?.defaultBasePrice ?? 85000,
       unitLabel: defaultCat?.defaultUnitLabel || (defaultCat?.defaultPricingType === 'HOURLY' ? 'giờ' : 'lần'),
+      durationHours: 2,
       minHours: 2,
       addonName: '',
       addonPrice: 30000,
@@ -105,6 +109,7 @@ export const ServicesPage: React.FC = () => {
       pricingModel: service.pricingModel,
       basePrice: service.basePrice,
       unitLabel: service.unitLabel || 'giờ',
+      durationHours: service.durationHours ?? service.minHours ?? 2,
       minHours: service.minHours ?? 2,
       addonName: '',
       addonPrice: 30000,
@@ -138,6 +143,16 @@ export const ServicesPage: React.FC = () => {
   };
 
   const handleToggleActive = async (service: ServiceItem) => {
+    const canModify = isSuperAdmin || (Boolean(service.tenantId) && service.tenantId === currentTenantId);
+    if (!canModify) {
+      toast({
+        type: 'warning',
+        title: 'Thao tác không được phép',
+        message: 'Chỉ Super Admin mới có quyền bật/tắt dịch vụ toàn sàn.',
+      });
+      return;
+    }
+
     const willDeactivate = service.isActive;
     const confirmed = await confirm({
       title: willDeactivate
@@ -170,6 +185,16 @@ export const ServicesPage: React.FC = () => {
   };
 
   const handleDeleteService = async (service: ServiceItem) => {
+    const canModify = isSuperAdmin || (Boolean(service.tenantId) && service.tenantId === currentTenantId);
+    if (!canModify) {
+      toast({
+        type: 'warning',
+        title: 'Thao tác không được phép',
+        message: 'Chỉ Super Admin mới có quyền xóa dịch vụ toàn sàn.',
+      });
+      return;
+    }
+
     const confirmed = await confirm({
       title: `Xóa dịch vụ "${service.name}"?`,
       message: (
@@ -199,7 +224,7 @@ export const ServicesPage: React.FC = () => {
       categoryId: form.categoryId,
       pricingModel: form.pricingModel,
       basePrice: Number(form.basePrice),
-      durationHours: form.pricingModel === 'HOURLY' ? Number(form.minHours) : undefined,
+      durationHours: form.pricingModel === 'HOURLY' ? Number(form.durationHours) : undefined,
       unitLabel: form.unitLabel.trim() || undefined,
       minHours: form.pricingModel === 'HOURLY' ? Number(form.minHours) : undefined,
       description: form.description.trim() || undefined,
@@ -238,24 +263,13 @@ export const ServicesPage: React.FC = () => {
             pricingModel: form.pricingModel,
             basePrice: Number(form.basePrice),
             unitLabel: form.unitLabel.trim() || undefined,
+            durationHours: form.pricingModel === 'HOURLY' ? Number(form.durationHours) : undefined,
             minHours: form.pricingModel === 'HOURLY' ? Number(form.minHours) : undefined,
           },
         });
       } else {
         // Create new service
-        const addons = form.addonName.trim()
-          ? [
-              {
-                id: `add-${Date.now()}`,
-                name: form.addonName.trim(),
-                price: Number(form.addonPrice),
-                description: form.addonName.trim(),
-                isActive: true,
-              },
-            ]
-          : [];
-
-        await createServiceMutation.mutateAsync({
+        const createdService = await createServiceMutation.mutateAsync({
           name: form.name.trim(),
           slug: form.name
             .toLowerCase()
@@ -267,11 +281,28 @@ export const ServicesPage: React.FC = () => {
           pricingModel: form.pricingModel,
           basePrice: Number(form.basePrice),
           unitLabel: form.unitLabel,
+          durationHours: form.pricingModel === 'HOURLY' ? Number(form.durationHours) : undefined,
           minHours: form.pricingModel === 'HOURLY' ? Number(form.minHours) : undefined,
           isActive: true,
           tenantId: isSuperAdmin ? undefined : currentTenantId,
-          addons,
+          addons: [],
         });
+
+        // Initial Add-on Creation: Automatically call createAddonMutation so it is not discarded
+        if (form.addonName.trim() && createdService?.id) {
+          try {
+            await createAddonMutation.mutateAsync({
+              serviceId: createdService.id,
+              data: {
+                name: form.addonName.trim(),
+                price: Number(form.addonPrice),
+                description: form.addonName.trim(),
+              },
+            });
+          } catch (addonErr) {
+            console.warn('Failed to auto-create initial addon:', addonErr);
+          }
+        }
       }
 
       setIsServiceModalOpen(false);
@@ -299,7 +330,10 @@ export const ServicesPage: React.FC = () => {
     })),
   ];
 
-  const isSavingService = createServiceMutation.isPending || updateServiceMutation.isPending;
+  const isSavingService =
+    createServiceMutation.isPending ||
+    updateServiceMutation.isPending ||
+    createAddonMutation.isPending;
 
   return (
     <div className="space-y-6">
@@ -386,6 +420,7 @@ export const ServicesPage: React.FC = () => {
                 const isHourly = service.pricingModel === 'HOURLY';
                 const isBidding = service.pricingModel === 'BIDDING';
                 const addonCount = service.addons?.length || 0;
+                const canModify = isSuperAdmin || (Boolean(service.tenantId) && service.tenantId === currentTenantId);
 
                 return (
                   <Card
@@ -416,6 +451,14 @@ export const ServicesPage: React.FC = () => {
                         <Switch
                           checked={service.isActive}
                           onChange={() => handleToggleActive(service)}
+                          disabled={!canModify || toggleServiceMutation.isPending}
+                          title={
+                            !canModify
+                              ? 'Chỉ Super Admin mới có quyền bật/tắt dịch vụ toàn sàn'
+                              : service.isActive
+                              ? 'Tạm ngừng dịch vụ'
+                              : 'Kích hoạt dịch vụ'
+                          }
                         />
                       </CardHeader>
 
@@ -491,15 +534,25 @@ export const ServicesPage: React.FC = () => {
                     {/* Card Actions Footer */}
                     <div className="p-3 pt-2 bg-slate-50/70 border-t border-slate-100 flex items-center justify-between gap-1.5">
                       <div className="flex items-center gap-1.5">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => handleOpenEditService(service)}
-                          className="px-2.5 py-1 text-xs"
-                          leftIcon={<Edit2 className="w-3.5 h-3.5 text-slate-600" />}
-                        >
-                          Chỉnh sửa
-                        </Button>
+                        {canModify ? (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleOpenEditService(service)}
+                            className="px-2.5 py-1 text-xs"
+                            leftIcon={<Edit2 className="w-3.5 h-3.5 text-slate-600" />}
+                          >
+                            Chỉnh sửa
+                          </Button>
+                        ) : (
+                          <Badge
+                            variant="neutral"
+                            size="sm"
+                            className="px-2.5 py-1 text-xs font-medium text-slate-500 bg-slate-100"
+                          >
+                            Chỉ xem
+                          </Badge>
+                        )}
 
                         <Button
                           variant="secondary"
@@ -519,16 +572,18 @@ export const ServicesPage: React.FC = () => {
                         </Button>
                       </div>
 
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleDeleteService(service)}
-                        className="px-2 py-1 text-xs text-rose-600 hover:bg-rose-50 hover:text-rose-700"
-                        title="Xóa dịch vụ"
-                        disabled={deleteServiceMutation.isPending}
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </Button>
+                      {canModify && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleDeleteService(service)}
+                          className="px-2 py-1 text-xs text-rose-600 hover:bg-rose-50 hover:text-rose-700"
+                          title="Xóa dịch vụ"
+                          disabled={deleteServiceMutation.isPending}
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </Button>
+                      )}
                     </div>
                   </Card>
                 );
@@ -550,6 +605,7 @@ export const ServicesPage: React.FC = () => {
       <CategoryModal
         isOpen={isCategoryModalOpen}
         onClose={() => setIsCategoryModalOpen(false)}
+        isSuperAdmin={isSuperAdmin}
       />
 
       {/* Addons Management Modal */}
@@ -644,12 +700,15 @@ export const ServicesPage: React.FC = () => {
             />
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <Input
               label="Đơn giá cơ bản (VNĐ) *"
               type="number"
               value={form.basePrice}
-              onChange={(e) => setForm({ ...form, basePrice: Number(e.target.value) })}
+              onChange={(e) => {
+                setForm({ ...form, basePrice: Number(e.target.value) });
+                if (formErrors.basePrice) setFormErrors({ ...formErrors, basePrice: '' });
+              }}
               error={formErrors.basePrice}
               required
             />
@@ -659,18 +718,40 @@ export const ServicesPage: React.FC = () => {
               value={form.unitLabel}
               onChange={(e) => setForm({ ...form, unitLabel: e.target.value })}
             />
-            {form.pricingModel === 'HOURLY' && (
+          </div>
+
+          {form.pricingModel === 'HOURLY' && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <Input
-                label="Số giờ tối thiểu"
+                label="Thời lượng ước tính (giờ) *"
+                type="number"
+                min={0.1}
+                step={0.5}
+                placeholder="Ví dụ: 2"
+                value={form.durationHours}
+                onChange={(e) => {
+                  setForm({ ...form, durationHours: Number(e.target.value) });
+                  if (formErrors.durationHours) setFormErrors({ ...formErrors, durationHours: '' });
+                }}
+                error={formErrors.durationHours}
+                helperText="Thời lượng dự kiến hoàn thành (ví dụ: 2 giờ)"
+              />
+              <Input
+                label="Số giờ tối thiểu (giờ) *"
                 type="number"
                 min={1}
                 max={12}
+                placeholder="Ví dụ: 2"
                 value={form.minHours}
-                onChange={(e) => setForm({ ...form, minHours: Number(e.target.value) })}
+                onChange={(e) => {
+                  setForm({ ...form, minHours: Number(e.target.value) });
+                  if (formErrors.minHours) setFormErrors({ ...formErrors, minHours: '' });
+                }}
                 error={formErrors.minHours}
+                helperText="Số giờ làm việc tối thiểu tính công (ví dụ: 2 giờ)"
               />
-            )}
-          </div>
+            </div>
+          )}
 
           <div className="space-y-1">
             <label className="text-xs font-semibold text-slate-700">Mô tả chi tiết</label>

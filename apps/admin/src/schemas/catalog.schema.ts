@@ -77,6 +77,7 @@ export const addonSchema = z.object({
     .number()
     .min(0, 'Đơn giá phụ phí không được âm'),
   description: z.string().trim().optional(),
+  isActive: z.boolean().optional(),
 });
 
 export type AddonFormData = z.infer<typeof addonSchema>;

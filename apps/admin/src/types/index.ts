@@ -155,6 +155,7 @@ export interface ServiceItem {
   pricingModel: PricingModel;
   basePrice: number; // Giá cơ bản hoặc giá theo giờ
   unitLabel?: string; // e.g. "giờ", "máy", "bộ"
+  durationHours?: number;
   minHours?: number;
   isActive: boolean;
   tenantId?: string; // null nếu là dịch vụ chung toàn sàn

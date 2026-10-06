@@ -139,8 +139,12 @@ test('Catalog Validation Schemas (Zod)', async (t) => {
         name: 'Mang theo máy hút bụi mini',
         price: 30000,
         description: 'Máy hút bụi không dây 120W',
+        isActive: false,
       });
       assert.equal(result.success, true);
+      if (result.success) {
+        assert.equal(result.data.isActive, false);
+      }
     });
   });
 });

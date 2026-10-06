@@ -14,6 +14,7 @@ import { Select } from '../../components/common/Select';
 import { Badge } from '../../components/common/Badge';
 import { Switch } from '../../components/common/Switch';
 import { categorySchema } from '../../schemas/catalog.schema';
+import { useAuth } from '../../auth/AuthContext';
 import {
   FolderTree,
   Plus,
@@ -27,9 +28,16 @@ import {
 export interface CategoryModalProps {
   isOpen: boolean;
   onClose: () => void;
+  isSuperAdmin?: boolean;
 }
 
-export const CategoryModal: React.FC<CategoryModalProps> = ({ isOpen, onClose }) => {
+export const CategoryModal: React.FC<CategoryModalProps> = ({
+  isOpen,
+  onClose,
+  isSuperAdmin: isSuperAdminProp,
+}) => {
+  const auth = useAuth();
+  const isSuperAdmin = isSuperAdminProp !== undefined ? isSuperAdminProp : auth.isSuperAdmin;
   const { data: categories = [], isLoading } = useServiceCategoriesQuery(true);
   const createMutation = useCreateCategoryMutation();
   const updateMutation = useUpdateCategoryMutation();
@@ -191,7 +199,9 @@ export const CategoryModal: React.FC<CategoryModalProps> = ({ isOpen, onClose })
       }
       subtitle={
         mode === 'list'
-          ? 'Cấu hình nhóm ngành cùng cơ chế định giá & đơn giá mặc định áp dụng cho dịch vụ con.'
+          ? isSuperAdmin
+            ? 'Cấu hình nhóm ngành cùng cơ chế định giá & đơn giá mặc định áp dụng cho dịch vụ con.'
+            : 'Chế độ chỉ xem — Chỉ Quản trị viên Toàn sàn (Super Admin) mới có quyền tạo mới, chỉnh sửa hoặc xóa nhóm danh mục.'
           : undefined
       }
       maxWidth="lg"
@@ -232,15 +242,22 @@ export const CategoryModal: React.FC<CategoryModalProps> = ({ isOpen, onClose })
             <div className="text-xs text-slate-500">
               Tổng số:{' '}
               <span className="font-bold text-slate-800">{categories.length}</span> nhóm danh mục
+              {!isSuperAdmin && (
+                <span className="ml-2 font-medium text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full text-[11px]">
+                  Chỉ xem
+                </span>
+              )}
             </div>
-            <Button
-              variant="primary"
-              size="sm"
-              onClick={handleOpenCreate}
-              leftIcon={<Plus className="w-3.5 h-3.5" />}
-            >
-              Thêm nhóm mới
-            </Button>
+            {isSuperAdmin && (
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={handleOpenCreate}
+                leftIcon={<Plus className="w-3.5 h-3.5" />}
+              >
+                Thêm nhóm mới
+              </Button>
+            )}
           </div>
 
           {isLoading ? (
@@ -297,27 +314,35 @@ export const CategoryModal: React.FC<CategoryModalProps> = ({ isOpen, onClose })
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-1.5 shrink-0">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => handleOpenEdit(cat)}
-                      className="px-2.5 py-1 text-xs"
-                      leftIcon={<Edit2 className="w-3.5 h-3.5 text-slate-600" />}
-                    >
-                      Sửa
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => handleDelete(cat)}
-                      className="px-2.5 py-1 text-xs text-rose-600 hover:bg-rose-50 border-rose-200"
-                      leftIcon={<Trash2 className="w-3.5 h-3.5" />}
-                      disabled={deleteMutation.isPending}
-                    >
-                      Xóa
-                    </Button>
-                  </div>
+                  {isSuperAdmin ? (
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleOpenEdit(cat)}
+                        className="px-2.5 py-1 text-xs"
+                        leftIcon={<Edit2 className="w-3.5 h-3.5 text-slate-600" />}
+                      >
+                        Sửa
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleDelete(cat)}
+                        className="px-2.5 py-1 text-xs text-rose-600 hover:bg-rose-50 border-rose-200"
+                        leftIcon={<Trash2 className="w-3.5 h-3.5" />}
+                        disabled={deleteMutation.isPending}
+                      >
+                        Xóa
+                      </Button>
+                    </div>
+                  ) : (
+                    <div className="shrink-0">
+                      <Badge variant="neutral" size="sm" className="text-slate-400">
+                        Chỉ xem
+                      </Badge>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>

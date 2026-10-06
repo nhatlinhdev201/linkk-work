@@ -189,7 +189,8 @@ function mapBackendServiceToServiceItem(s: BackendServiceResponse): ServiceItem 
     unitLabel:
       s.unitLabel ||
       (s.pricingType === 'HOURLY' ? 'giờ' : s.pricingType === 'PER_UNIT' ? 'thiết bị' : 'báo giá'),
-    minHours: s.durationHours ?? s.minHours ?? undefined,
+    durationHours: s.durationHours != null ? s.durationHours : undefined,
+    minHours: s.minHours != null ? s.minHours : (s.durationHours ?? undefined),
     isActive: s.isActive,
     tenantId: s.tenantId || undefined,
     addons: (s.addons || []).map((a) => ({
@@ -1553,7 +1554,8 @@ export class ApiClient {
         categoryId: newServiceData.categoryId,
         pricingType: newServiceData.pricingModel,
         baseUnitPrice: newServiceData.basePrice,
-        durationHours: newServiceData.minHours || undefined,
+        minHours: newServiceData.minHours || undefined,
+        durationHours: newServiceData.durationHours || undefined,
         unitLabel: newServiceData.unitLabel || undefined,
         description: newServiceData.description || undefined,
       };
@@ -1611,9 +1613,9 @@ export class ApiClient {
       categoryId: data.categoryId,
       pricingType: data.pricingModel,
       baseUnitPrice: data.basePrice,
-      durationHours: data.minHours,
+      durationHours: data.durationHours || undefined,
+      minHours: data.minHours || undefined,
       unitLabel: data.unitLabel,
-      minHours: data.minHours,
       description: data.description,
       isActive: data.isActive,
     };

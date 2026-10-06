@@ -1,4 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import { ForbiddenException } from '@nestjs/common';
 import { CatalogController } from './catalog.controller';
 import { CatalogService } from './catalog.service';
 import { ServicePricingType, UserRole } from '@linkkwork/shared-types';
@@ -175,6 +176,25 @@ describe('CatalogController', () => {
         req as unknown as Parameters<typeof controller.createService>[2],
       );
       expect(catalogService.createService).toHaveBeenCalledWith(dto, 'tenant-456');
+    });
+
+    it('should throw ForbiddenException if user is not superadmin and has no effective tenant context', async () => {
+      const user = { id: 'usr-3', isSuperAdmin: false, role: UserRole.TENANT_ADMIN, tenantId: null };
+      const req = { tenantId: null, isImpersonating: false };
+      const dto = {
+        name: 'Plumbing',
+        categoryId: 'cat-1',
+        pricingType: ServicePricingType.HOURLY,
+        baseUnitPrice: 100000,
+      };
+
+      await expect(
+        controller.createService(
+          dto,
+          user as unknown as Parameters<typeof controller.createService>[1],
+          req as unknown as Parameters<typeof controller.createService>[2],
+        ),
+      ).rejects.toThrow(ForbiddenException);
     });
   });
 

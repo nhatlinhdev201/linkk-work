@@ -2,14 +2,17 @@ import React, { useState } from 'react';
 import type { ServiceItem, ServiceAddon } from '../../types';
 import {
   useCreateAddonMutation,
+  useUpdateAddonMutation,
   useDeleteAddonMutation,
 } from '../../api/queries';
 import { useConfirm } from '../../components/feedback/ConfirmContext';
 import { Modal } from '../../components/common/Modal';
 import { Button } from '../../components/common/Button';
 import { Input } from '../../components/common/Input';
+import { Badge } from '../../components/common/Badge';
+import { Switch } from '../../components/common/Switch';
 import { addonSchema } from '../../schemas/catalog.schema';
-import { Tag, Plus, Trash2, Layers } from 'lucide-react';
+import { Tag, Plus, Trash2, Layers, Edit2, X, Check } from 'lucide-react';
 
 export interface AddonModalProps {
   service: ServiceItem | null;
@@ -25,23 +28,56 @@ export const AddonModal: React.FC<AddonModalProps> = ({
   tenantId,
 }) => {
   const createAddonMutation = useCreateAddonMutation(tenantId);
+  const updateAddonMutation = useUpdateAddonMutation(tenantId);
   const deleteAddonMutation = useDeleteAddonMutation(tenantId);
   const confirm = useConfirm();
 
+  const [editingAddonId, setEditingAddonId] = useState<string | null>(null);
   const [name, setName] = useState('');
   const [price, setPrice] = useState<number>(30000);
   const [description, setDescription] = useState('');
+  const [isActive, setIsActive] = useState<boolean>(true);
   const [errors, setErrors] = useState<Record<string, string>>({});
 
   if (!service) return null;
 
-  const handleAddAddon = async (e: React.FormEvent) => {
+  const handleStartEdit = (addon: ServiceAddon) => {
+    setEditingAddonId(addon.id);
+    setName(addon.name);
+    setPrice(addon.price);
+    setDescription(addon.description || '');
+    setIsActive(addon.isActive !== false);
+    setErrors({});
+  };
+
+  const handleCancelEdit = () => {
+    setEditingAddonId(null);
+    setName('');
+    setPrice(30000);
+    setDescription('');
+    setIsActive(true);
+    setErrors({});
+  };
+
+  const handleToggleAddonActive = async (addon: ServiceAddon, nextActive: boolean) => {
+    try {
+      await updateAddonMutation.mutateAsync({
+        addonId: addon.id,
+        data: { isActive: nextActive },
+      });
+    } catch {
+      // Handled in mutation onError toast
+    }
+  };
+
+  const handleSubmitAddon = async (e: React.FormEvent) => {
     e.preventDefault();
 
     const parseResult = addonSchema.safeParse({
       name: name.trim(),
       price: Number(price),
       description: description.trim() || undefined,
+      isActive,
     });
 
     if (!parseResult.success) {
@@ -57,19 +93,33 @@ export const AddonModal: React.FC<AddonModalProps> = ({
     }
 
     try {
-      await createAddonMutation.mutateAsync({
-        serviceId: service.id,
-        data: {
-          name: name.trim(),
-          price: Number(price),
-          description: description.trim() || undefined,
-        },
-      });
+      if (editingAddonId) {
+        await updateAddonMutation.mutateAsync({
+          addonId: editingAddonId,
+          data: {
+            name: name.trim(),
+            price: Number(price),
+            description: description.trim() || undefined,
+            isActive,
+          },
+        });
+        handleCancelEdit();
+      } else {
+        await createAddonMutation.mutateAsync({
+          serviceId: service.id,
+          data: {
+            name: name.trim(),
+            price: Number(price),
+            description: description.trim() || undefined,
+          },
+        });
 
-      setName('');
-      setPrice(30000);
-      setDescription('');
-      setErrors({});
+        setName('');
+        setPrice(30000);
+        setDescription('');
+        setIsActive(true);
+        setErrors({});
+      }
     } catch {
       // Handled in mutation onError toast
     }
@@ -93,22 +143,35 @@ export const AddonModal: React.FC<AddonModalProps> = ({
 
     try {
       await deleteAddonMutation.mutateAsync(addon.id);
+      if (editingAddonId === addon.id) {
+        handleCancelEdit();
+      }
     } catch {
       // Handled in mutation onError toast
     }
   };
 
   const addons = service.addons || [];
+  const isSubmitting = createAddonMutation.isPending || updateAddonMutation.isPending;
 
   return (
     <Modal
       isOpen={isOpen}
-      onClose={onClose}
+      onClose={() => {
+        handleCancelEdit();
+        onClose();
+      }}
       title="Quản Lý Phụ Phí & Bán Kèm (+Add-ons)"
       subtitle={`Dịch vụ: "${service.name}" (${service.categoryName})`}
       maxWidth="lg"
       footer={
-        <Button variant="outline" onClick={onClose}>
+        <Button
+          variant="outline"
+          onClick={() => {
+            handleCancelEdit();
+            onClose();
+          }}
+        >
           Hoàn tất
         </Button>
       }
@@ -135,10 +198,25 @@ export const AddonModal: React.FC<AddonModalProps> = ({
               {addons.map((addon) => (
                 <div
                   key={addon.id}
-                  className="flex items-center justify-between p-3 bg-slate-50/70 border border-slate-200/90 rounded-xl text-xs"
+                  className={`flex items-center justify-between p-3 border rounded-xl text-xs transition ${
+                    addon.isActive !== false
+                      ? 'bg-slate-50/70 border-slate-200/90'
+                      : 'bg-slate-100/60 border-slate-200 opacity-70'
+                  }`}
                 >
                   <div className="space-y-0.5 flex-1 min-w-0 pr-3">
-                    <div className="font-semibold text-slate-900 truncate">{addon.name}</div>
+                    <div className="flex items-center gap-2">
+                      <span className="font-semibold text-slate-900 truncate">{addon.name}</span>
+                      {addon.isActive === false ? (
+                        <Badge variant="neutral" size="sm">
+                          Tạm tắt
+                        </Badge>
+                      ) : (
+                        <Badge variant="success" size="sm">
+                          Kích hoạt
+                        </Badge>
+                      )}
+                    </div>
                     {addon.description && (
                       <p className="text-[11px] text-slate-500 line-clamp-1">
                         {addon.description}
@@ -146,10 +224,28 @@ export const AddonModal: React.FC<AddonModalProps> = ({
                     )}
                   </div>
 
-                  <div className="flex items-center gap-3 shrink-0">
+                  <div className="flex items-center gap-2 sm:gap-3 shrink-0">
                     <span className="font-bold text-brand-600 bg-brand-50 border border-brand-100 px-2.5 py-1 rounded-lg">
                       +{addon.price.toLocaleString('vi-VN')} đ
                     </span>
+
+                    <Switch
+                      checked={addon.isActive !== false}
+                      onChange={(checked) => handleToggleAddonActive(addon, checked)}
+                      disabled={updateAddonMutation.isPending}
+                      title={addon.isActive !== false ? 'Tắt phụ phí' : 'Bật phụ phí'}
+                    />
+
+                    <button
+                      type="button"
+                      onClick={() => handleStartEdit(addon)}
+                      disabled={updateAddonMutation.isPending || deleteAddonMutation.isPending}
+                      className="p-1 text-slate-400 hover:text-brand-600 hover:bg-brand-50 rounded-lg transition disabled:opacity-50"
+                      title="Chỉnh sửa phụ phí"
+                    >
+                      <Edit2 className="w-4 h-4" />
+                    </button>
+
                     <button
                       type="button"
                       onClick={() => handleDeleteAddon(addon)}
@@ -166,15 +262,39 @@ export const AddonModal: React.FC<AddonModalProps> = ({
           )}
         </div>
 
-        {/* Add New Addon Form */}
+        {/* Add New / Edit Addon Form */}
         <form
-          onSubmit={handleAddAddon}
-          className="p-4 bg-orange-50/40 border border-orange-100 rounded-2xl space-y-3"
+          onSubmit={handleSubmitAddon}
+          className={`p-4 rounded-2xl space-y-3 transition border ${
+            editingAddonId
+              ? 'bg-blue-50/40 border-blue-200'
+              : 'bg-orange-50/40 border-orange-100'
+          }`}
         >
-          <span className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
-            <Plus className="w-3.5 h-3.5 text-brand-600" />
-            Thêm phụ thu mới cho dịch vụ này
-          </span>
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
+              {editingAddonId ? (
+                <>
+                  <Edit2 className="w-3.5 h-3.5 text-blue-600" />
+                  Chỉnh sửa phụ phí: &quot;{name || 'Phụ phí'}&quot;
+                </>
+              ) : (
+                <>
+                  <Plus className="w-3.5 h-3.5 text-brand-600" />
+                  Thêm phụ thu mới cho dịch vụ này
+                </>
+              )}
+            </span>
+            {editingAddonId && (
+              <button
+                type="button"
+                onClick={handleCancelEdit}
+                className="text-xs text-slate-500 hover:text-slate-800 flex items-center gap-1"
+              >
+                <X className="w-3.5 h-3.5" /> Hủy sửa
+              </button>
+            )}
+          </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <Input
@@ -204,23 +324,52 @@ export const AddonModal: React.FC<AddonModalProps> = ({
             />
           </div>
 
-          <Input
-            label="Mô tả / ghi chú phụ thu (tùy chọn)"
-            placeholder="Quy chuẩn dụng cụ, điều kiện áp dụng..."
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-          />
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-end">
+            <Input
+              label="Mô tả / ghi chú phụ thu (tùy chọn)"
+              placeholder="Quy chuẩn dụng cụ, điều kiện áp dụng..."
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+            />
 
-          <div className="flex justify-end pt-1">
+            {editingAddonId && (
+              <div className="pb-1.5 flex items-center justify-between px-3 py-2 bg-white rounded-lg border border-slate-200">
+                <span className="text-xs font-medium text-slate-700">Trạng thái kích hoạt:</span>
+                <Switch
+                  checked={isActive}
+                  onChange={setIsActive}
+                  title={isActive ? 'Đang kích hoạt' : 'Tạm tắt'}
+                />
+              </div>
+            )}
+          </div>
+
+          <div className="flex justify-end gap-2 pt-1">
+            {editingAddonId && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={handleCancelEdit}
+              >
+                Hủy bỏ
+              </Button>
+            )}
             <Button
               type="submit"
-              variant="primary"
+              variant={editingAddonId ? 'secondary' : 'primary'}
               size="sm"
-              disabled={createAddonMutation.isPending}
-              isLoading={createAddonMutation.isPending}
-              leftIcon={<Plus className="w-3.5 h-3.5" />}
+              disabled={isSubmitting}
+              isLoading={isSubmitting}
+              leftIcon={
+                editingAddonId ? (
+                  <Check className="w-3.5 h-3.5" />
+                ) : (
+                  <Plus className="w-3.5 h-3.5" />
+                )
+              }
             >
-              Thêm phụ phí
+              {editingAddonId ? 'Cập nhật phụ phí' : 'Thêm phụ phí'}
             </Button>
           </div>
         </form>
