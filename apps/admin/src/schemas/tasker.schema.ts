@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-const phoneRegex = /^(0|\+84)[3|5|7|8|9][0-9]{8}$/;
+const phoneRegex = /^(\+?84|0)[35789][0-9]{8}$/;
 
 export const createTaskerSchema = z.object({
   name: z.string().trim().min(2, 'Họ và tên tối thiểu 2 ký tự'),
@@ -44,7 +44,10 @@ export const workFloorSchema = z.object({
 export type WorkFloorInput = z.infer<typeof workFloorSchema>;
 
 export const depositSchema = z.object({
-  amount: z.number().refine((val) => val !== 0, 'Số tiền không được bằng 0'),
+  amount: z
+    .number()
+    .int('Số tiền phải là số nguyên (VNĐ)')
+    .refine((val) => val !== 0, 'Số tiền không được bằng 0'),
   notes: z.string().trim().min(3, 'Vui lòng nhập lý do nạp/rút ký quỹ'),
 });
 

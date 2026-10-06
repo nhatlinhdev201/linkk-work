@@ -13,7 +13,7 @@ export const useTaskersQuery = (
   params?: TaskerQueryParams
 ) => {
   return useQuery<Tasker[]>({
-    queryKey: ['taskers', tenantId ?? 'all', params],
+    queryKey: ['taskers', tenantId || 'all', params],
     queryFn: () => api.getTaskers(tenantId, params),
   });
 };

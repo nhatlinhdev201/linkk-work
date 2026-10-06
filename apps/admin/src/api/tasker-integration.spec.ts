@@ -163,4 +163,21 @@ test('Admin Tasker & HRM API Client Integration Suite', async (t) => {
     const tasker = await api.getTaskerById(createdTaskerId);
     assert.equal(tasker?.kycVerified, true);
   });
+
+  // Test 12: Negative balance protection
+  await t.test('12. Rejects withdrawal exceeding depositBalance', async () => {
+    await assert.rejects(
+      async () => {
+        await api.adjustTaskerDeposit(createdTaskerId, {
+          amount: -999999999,
+          notes: 'Rút vượt quá số dư ký quỹ',
+        });
+      },
+      (err: unknown) => {
+        assert.ok(err instanceof Error);
+        assert.ok(err.message.includes('Số dư ký quỹ không thể âm'));
+        return true;
+      }
+    );
+  });
 });

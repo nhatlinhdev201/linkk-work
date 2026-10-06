@@ -22,7 +22,7 @@ export class CreateTaskerDto {
   @ApiProperty({ description: 'Số điện thoại liên lạc', example: '0901234567' })
   @IsString()
   @IsNotEmpty({ message: 'Số điện thoại không được để trống' })
-  @Matches(/^(0|\+84)[3|5|7|8|9][0-9]{8}$/, {
+  @Matches(/^(\+?84|0)[35789][0-9]{8}$/, {
     message: 'Số điện thoại không đúng định dạng Việt Nam',
   })
   phone!: string;

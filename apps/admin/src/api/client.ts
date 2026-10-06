@@ -1329,8 +1329,8 @@ export class ApiClient {
         if (tenantId) query.set('tenantId', tenantId);
         if (params?.search) query.set('search', params.search);
         if (params?.onlineOnly !== undefined) query.set('isOnline', String(params.onlineOnly));
-        if (params?.kycPendingOnly !== undefined) query.set('kycVerified', 'false');
-        if (params?.lowDepositOnly !== undefined) query.set('lowDepositOnly', 'true');
+        if (params?.kycPendingOnly) query.set('kycVerified', 'false');
+        if (params?.lowDepositOnly) query.set('lowDepositOnly', 'true');
         query.set('limit', '100');
 
         const endpoint = `/taskers${query.toString() ? `?${query.toString()}` : ''}`;
