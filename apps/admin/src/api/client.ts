@@ -15,6 +15,7 @@ import type {
   Tenant,
   User,
   Booking,
+  BookingStatus,
   Tasker,
   PartnerApplication,
   CronJobItem,
@@ -1070,7 +1071,7 @@ export class ApiClient {
   async directAssignBooking(
     bookingId: string,
     taskerId: string,
-    adminTenantId: string
+    adminTenantId?: string
   ): Promise<Booking> {
     const storage = getStorage();
     const token = storage.getItem(STORAGE_KEYS.ACCESS_TOKEN);
@@ -1108,9 +1109,14 @@ export class ApiClient {
     const booking = bookings.find((b) => b.id === bookingId);
     if (!booking) throw new Error('Không tìm thấy đơn hàng');
 
-    const tasker = taskers.find((t) => t.id === taskerId);
+    let tasker = taskers.find((t) => t.id === taskerId);
     if (!tasker) {
-      throw new Error('Tasker không thuộc thẩm quyền của Tenant này.');
+      const allTaskers = loadData<Tasker[]>(STORAGE_KEYS.TASKERS, INITIAL_TASKERS);
+      tasker = allTaskers.find((t) => t.id === taskerId);
+      if (!tasker) {
+        throw new Error('Tasker không thuộc thẩm quyền của Tenant này.');
+      }
+      booking.servicingTenantId = tasker.tenantId;
     }
 
     booking.assignedTaskerId = tasker.id;
@@ -1118,6 +1124,49 @@ export class ApiClient {
     booking.assignedTaskerPhone = tasker.phone;
     booking.status = 'ASSIGNED';
 
+    saveData(STORAGE_KEYS.BOOKINGS, bookings);
+    return booking;
+  }
+
+  async transitionBookingStatus(
+    bookingId: string,
+    status: BookingStatus,
+    note?: string
+  ): Promise<Booking> {
+    const storage = getStorage();
+    const token = storage.getItem(STORAGE_KEYS.ACCESS_TOKEN);
+    if (token) {
+      try {
+        const raw = await this.fetchWithAuth<BackendBookingResponse>(
+          `/bookings/${bookingId}/status`,
+          {
+            method: 'PATCH',
+            body: JSON.stringify({
+              status,
+              note,
+            }),
+          },
+          true
+        );
+        const mapped = mapBackendBookingToAdminBooking(raw);
+        const bookings = await this.getBookings();
+        const updatedList = bookings.map((b) => (b.id === mapped.id ? mapped : b));
+        saveData(STORAGE_KEYS.BOOKINGS, updatedList);
+        return mapped;
+      } catch (err: unknown) {
+        const errorWithStatus = err as { status?: number };
+        if (errorWithStatus.status !== 404 && !bookingId.startsWith('bk-')) {
+          throw err;
+        }
+      }
+    }
+
+    // Offline / mock fallback
+    const bookings = loadData<Booking[]>(STORAGE_KEYS.BOOKINGS, INITIAL_BOOKINGS);
+    const booking = bookings.find((b) => b.id === bookingId);
+    if (!booking) throw new Error('Không tìm thấy đơn hàng');
+
+    booking.status = status;
     saveData(STORAGE_KEYS.BOOKINGS, bookings);
     return booking;
   }

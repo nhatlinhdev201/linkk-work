@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../client';
-import { Booking, PricingModel } from '../../types';
+import { Booking, BookingStatus, PricingModel } from '../../types';
 import { QUERY_KEYS } from '../../lib/queryClient';
 import { useToast } from '../../components/feedback/ToastContext';
 
@@ -195,3 +195,81 @@ export const useBroadcastBookingMutation = (tenantId?: string | null) => {
     },
   });
 };
+
+export interface TransitionBookingStatusVariables {
+  bookingId: string;
+  status: BookingStatus;
+  note?: string;
+}
+
+export const useTransitionBookingStatusMutation = (tenantId?: string | null) => {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  return useMutation<
+    Booking,
+    Error,
+    TransitionBookingStatusVariables,
+    { previousBookings?: Booking[] }
+  >({
+    mutationFn: async ({ bookingId, status, note }) => {
+      return api.transitionBookingStatus(bookingId, status, note);
+    },
+    onMutate: async ({ bookingId, status }) => {
+      await queryClient.cancelQueries({ queryKey: QUERY_KEYS.bookings(tenantId) });
+
+      const previousBookings = queryClient.getQueryData<Booking[]>(
+        QUERY_KEYS.bookings(tenantId)
+      );
+
+      queryClient.setQueryData<Booking[]>(QUERY_KEYS.bookings(tenantId), (old) => {
+        if (!old) return [];
+        return old.map((b) => {
+          if (b.id === bookingId) {
+            return {
+              ...b,
+              status,
+            };
+          }
+          return b;
+        });
+      });
+
+      return { previousBookings };
+    },
+    onSuccess: (updatedBooking) => {
+      const statusLabels: Record<string, string> = {
+        ASSIGNED: 'Đã gán thợ',
+        ARRIVING: 'Thợ đang di chuyển',
+        IN_PROGRESS: 'Đang thực hiện công việc',
+        PENDING_ACCEPTANCE: 'Chờ nghiệm thu',
+        COMPLETED: 'Đã hoàn thành đơn hàng',
+        CANCELLED: 'Đã hủy đơn hàng',
+        EMERGENCY_REDISPATCH: 'Điều phối lại',
+      };
+      const label = statusLabels[updatedBooking.status] || updatedBooking.status;
+      toast({
+        type: 'success',
+        title: 'Cập nhật trạng thái thành công!',
+        message: `Đơn [${updatedBooking.code}] đã chuyển sang: ${label}.`,
+      });
+    },
+    onError: (err, _vars, context) => {
+      if (context?.previousBookings) {
+        queryClient.setQueryData(
+          QUERY_KEYS.bookings(tenantId),
+          context.previousBookings
+        );
+      }
+      toast({
+        type: 'error',
+        title: 'Cập nhật trạng thái thất bại',
+        message: err.message || 'Không thể chuyển trạng thái đơn hàng.',
+      });
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.bookings(tenantId) });
+    },
+  });
+};
+

@@ -453,6 +453,25 @@ describe('Booking Engine & Dispatch Module E2E / Integration Tests', () => {
       expect(res.body.message).toContain('không thuộc thẩm quyền của Tenant');
     });
 
+    it('should allow Super Admin to direct assign tasker from another tenant and align servicingTenantId', async () => {
+      const res = await request(app.getHttpServer())
+        .post(`/api/v1/bookings/${bookingToAssignId}/assign`)
+        .set('Authorization', `Bearer ${superAdminToken}`)
+        .send({
+          taskerId: otherTaskerId,
+          note: 'Super Admin phân công thợ toàn sàn',
+        })
+        .expect(201);
+
+      expect(res.body.status).toBe(BookingStatus.ASSIGNED);
+      expect(res.body.assignedTasker).toBeDefined();
+      expect(res.body.assignedTasker.id).toBe(otherTaskerId);
+      expect(res.body.servicingTenantId).toBe(otherTenantId);
+
+      const redisStatus = await redis.get(`job:status:${bookingToAssignId}`);
+      expect(redisStatus).toBe('ASSIGNED');
+    });
+
     it('should reject assignment when booking is already in non-dispatchable state', async () => {
       // First assign
       await request(app.getHttpServer())

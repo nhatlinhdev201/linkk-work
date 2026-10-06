@@ -90,6 +90,7 @@ export class BookingController {
     @Req() req: RequestWithTenant,
     @CurrentUser() user: AuthenticatedUser,
   ) {
+    const isSuperAdmin = user?.isSuperAdmin === true || user?.role === UserRole.SUPER_ADMIN;
     const effectiveTenantId = getEffectiveTenantId(user, req);
     const triggeredBy = `${user?.email || 'Admin'} (${user?.id || 'admin'})`;
     return this.bookingService.directAssignTasker(
@@ -97,6 +98,7 @@ export class BookingController {
       dto,
       effectiveTenantId,
       triggeredBy,
+      isSuperAdmin,
     );
   }
 

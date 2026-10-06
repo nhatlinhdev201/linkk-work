@@ -279,6 +279,7 @@ export class BookingService {
     dto: AssignTaskerDto,
     effectiveTenantId: string | null,
     triggeredBy: string,
+    isSuperAdmin: boolean = false,
   ) {
     const booking = await this.getBookingById(bookingId, effectiveTenantId);
 
@@ -305,12 +306,21 @@ export class BookingService {
 
     // Thợ bắt buộc phải thuộc Tenant điều phối của đơn hàng
     if (tasker.tenantId !== booking.servicingTenantId) {
-      throw new ForbiddenException('Thợ không thuộc thẩm quyền của Tenant quản lý đơn này');
+      if (!isSuperAdmin) {
+        throw new ForbiddenException('Thợ không thuộc thẩm quyền của Tenant quản lý đơn này');
+      }
     }
 
     const previousStatus = booking.status;
 
     return this.prisma.$transaction(async (tx) => {
+      if (tasker.tenantId !== booking.servicingTenantId && isSuperAdmin && tasker.tenantId) {
+        await tx.booking.update({
+          where: { id: bookingId },
+          data: { servicingTenantId: tasker.tenantId },
+        });
+      }
+
       const updatedBooking = await tx.booking.update({
         where: { id: bookingId },
         data: {
@@ -329,6 +339,8 @@ export class BookingService {
           service: true,
           addons: true,
           events: true,
+          originTenant: true,
+          servicingTenant: true,
           assignedTasker: {
             select: { id: true, name: true, phone: true },
           },
@@ -379,6 +391,8 @@ export class BookingService {
           service: true,
           addons: true,
           events: true,
+          originTenant: true,
+          servicingTenant: true,
           assignedTasker: {
             select: { id: true, name: true, phone: true },
           },

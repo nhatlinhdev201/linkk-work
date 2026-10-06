@@ -121,4 +121,72 @@ test('Admin Booking & Dispatch Engine Integration Suite', async (t) => {
     assert.equal(broadcasted.id, anotherBooking.id);
     assert.equal(broadcasted.status, 'BROADCASTING');
   });
+
+  // Test 8: Complete booking lifecycle transitions
+  await t.test(
+    '8. Complete booking lifecycle transitions: PENDING_DISPATCH -> ASSIGNED -> ARRIVING -> IN_PROGRESS -> PENDING_ACCEPTANCE -> COMPLETED',
+    async () => {
+      // 1. Create a fresh booking (PENDING_DISPATCH)
+      const freshBooking = await api.createManualBooking(
+        partnerTenantId,
+        'Công ty Vệ Sinh Ánh Dương',
+        {
+          customerName: 'Khách Quy Trình Toàn Trình',
+          customerPhone: '0977889900',
+          addressText: '456 Điện Biên Phủ, Bình Thạnh',
+          serviceName: 'Dọn dẹp nhà trọn gói',
+          pricingType: 'HOURLY',
+          scheduledAt: new Date(Date.now() + 180000000).toISOString(),
+          durationHours: 4,
+          totalAmount: 320000,
+        }
+      );
+      assert.equal(freshBooking.status, 'PENDING_DISPATCH', 'Initial status must be PENDING_DISPATCH');
+
+      // 2. Direct Assign -> ASSIGNED
+      const assigned = await api.directAssignBooking(
+        freshBooking.id,
+        availableTaskerId,
+        partnerTenantId
+      );
+      assert.equal(assigned.status, 'ASSIGNED', 'Status must transition to ASSIGNED');
+      assert.equal(assigned.assignedTaskerId, availableTaskerId);
+
+      // 3. ARRIVING
+      const arriving = await api.transitionBookingStatus(
+        freshBooking.id,
+        'ARRIVING',
+        'Thợ bắt đầu xuất phát tới địa chỉ'
+      );
+      assert.equal(arriving.status, 'ARRIVING', 'Status must transition to ARRIVING');
+
+      // 4. IN_PROGRESS
+      const inProgress = await api.transitionBookingStatus(
+        freshBooking.id,
+        'IN_PROGRESS',
+        'Thợ đã có mặt và bắt đầu dọn dẹp'
+      );
+      assert.equal(inProgress.status, 'IN_PROGRESS', 'Status must transition to IN_PROGRESS');
+
+      // 5. PENDING_ACCEPTANCE
+      const pendingAcceptance = await api.transitionBookingStatus(
+        freshBooking.id,
+        'PENDING_ACCEPTANCE',
+        'Thợ đã hoàn thành công việc và gửi báo cáo nghiệm thu'
+      );
+      assert.equal(
+        pendingAcceptance.status,
+        'PENDING_ACCEPTANCE',
+        'Status must transition to PENDING_ACCEPTANCE'
+      );
+
+      // 6. COMPLETED
+      const completed = await api.transitionBookingStatus(
+        freshBooking.id,
+        'COMPLETED',
+        'Khách hàng nghiệm thu đạt chất lượng và hoàn tất đơn hàng'
+      );
+      assert.equal(completed.status, 'COMPLETED', 'Status must transition to COMPLETED');
+    }
+  );
 });
