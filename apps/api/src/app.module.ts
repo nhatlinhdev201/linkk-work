@@ -6,6 +6,7 @@ import { AuthModule } from './modules/auth/auth.module';
 import { TenancyModule } from './modules/tenancy/tenants.module';
 import { CatalogModule } from './modules/catalog/catalog.module';
 import { BookingModule } from './modules/booking/booking.module';
+import { TaskerModule } from './modules/tasker/tasker.module';
 import { AppController } from './app.controller';
 
 @Module({
@@ -20,6 +21,7 @@ import { AppController } from './app.controller';
     TenancyModule,
     CatalogModule,
     BookingModule,
+    TaskerModule,
   ],
   controllers: [AppController],
   providers: [],
