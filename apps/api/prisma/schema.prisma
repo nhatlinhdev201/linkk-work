@@ -183,7 +183,8 @@ model Addon {
   isActive  Boolean  @default(true)
   createdAt DateTime @default(now())
 
-  service   Service  @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  service   Service        @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  bookingAddons BookingAddon[]
 
   @@index([serviceId])
   @@map("addons")
@@ -201,6 +202,14 @@ model Booking {
   paymentStatus     PaymentStatus      @default(PENDING)
   pricingType       ServicePricingType
   baseUnitPrice     Float
+  durationHours     Float?
+  unitCount         Int?
+  areaSurcharge     Float              @default(0)
+  addonsPrice       Float              @default(0)
+  surgeMultiplier   Float              @default(1.0)
+  surgeAmount       Float              @default(0)
+  discountAmount    Float              @default(0)
+  voucherCode       String?
   scheduledAt       DateTime
   customerName      String
   customerPhone     String
@@ -216,6 +225,7 @@ model Booking {
   customer          User?              @relation("CustomerBookings", fields: [customerId], references: [id], onDelete: SetNull)
   assignedTasker    User?              @relation("TaskerBookings", fields: [assignedTaskerId], references: [id], onDelete: SetNull)
   service           Service            @relation(fields: [serviceId], references: [id])
+  addons            BookingAddon[]
   events            BookingEvent[]
 
   @@index([originTenantId])
@@ -224,6 +234,21 @@ model Booking {
   @@index([assignedTaskerId])
   @@index([status])
   @@map("bookings")
+}
+
+model BookingAddon {
+  id        String   @id @default(uuid())
+  bookingId String
+  addonId   String?
+  name      String
+  price     Float
+  createdAt DateTime @default(now())
+
+  booking   Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  addon     Addon?   @relation(fields: [addonId], references: [id], onDelete: SetNull)
+
+  @@index([bookingId])
+  @@map("booking_addons")
 }
 
 model BookingEvent {

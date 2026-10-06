@@ -5,6 +5,7 @@ import { RedisModule } from './common/redis/redis.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { TenancyModule } from './modules/tenancy/tenants.module';
 import { CatalogModule } from './modules/catalog/catalog.module';
+import { BookingModule } from './modules/booking/booking.module';
 import { AppController } from './app.controller';
 
 @Module({
@@ -18,6 +19,7 @@ import { AppController } from './app.controller';
     AuthModule,
     TenancyModule,
     CatalogModule,
+    BookingModule,
   ],
   controllers: [AppController],
   providers: [],
