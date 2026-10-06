@@ -53,6 +53,23 @@ enum PaymentStatus {
   DISPUTED
 }
 
+enum WalletTransactionType {
+  TOP_UP_DEPOSIT
+  WITHDRAW_DEPOSIT
+  SOFT_HOLD
+  HOLD_RELEASE
+  ORDER_PAYOUT
+  COMMISSION_FEE
+  PENALTY_DEDUCTION
+}
+
+enum WalletTransactionStatus {
+  COMPLETED
+  PENDING
+  FAILED
+  REJECTED
+}
+
 model Tenant {
   id                 String                   @id @default(uuid())
   code               String                   @unique
@@ -74,6 +91,7 @@ model Tenant {
   originBookings     Booking[]                @relation("OriginTenantBookings")
   servicingBookings  Booking[]                @relation("ServicingTenantBookings")
   auditLogs          AuditLog[]
+  walletTransactions WalletTransaction[]
 
   @@map("tenants")
 }
@@ -98,6 +116,7 @@ model User {
   customerBookings Booking[]       @relation("CustomerBookings")
   assignedBookings Booking[]       @relation("TaskerBookings")
   auditLogs        AuditLog[]
+  walletTransactions WalletTransaction[]
 
   @@index([tenantId])
   @@map("users")
@@ -234,6 +253,7 @@ model Booking {
   service           Service            @relation(fields: [serviceId], references: [id])
   addons            BookingAddon[]
   events            BookingEvent[]
+  walletTransactions WalletTransaction[]
 
   @@index([originTenantId])
   @@index([servicingTenantId])
@@ -282,6 +302,27 @@ model TaskerProfile {
   isOnline           Boolean  @default(false)
   currentLat         Float?
   currentLng         Float?
+  
+  // Năng lực & KYC
+  skills             String[] @default([])
+  idCardNumber       String?
+  kycVerified        Boolean  @default(false)
+  
+  // Sàn làm việc & Bán kính
+  maxDistanceKm      Float    @default(15.0)
+  autoRadarEnabled   Boolean  @default(true)
+  currentStatus      String   @default("IDLE") // "IDLE" | "ARRIVING" | "IN_PROGRESS" | "RESTRICTED"
+  
+  // Đa ví & Tài chính
+  depositBalance     Float    @default(500000)
+  walletBalance      Float    @default(0)
+  salaryType         String   @default("COMMISSION") // "COMMISSION" | "FIXED_SALARY"
+  
+  // Thông tin Ngân hàng nhận lương
+  bankName           String?
+  bankAccountNumber  String?
+  bankAccountHolder  String?
+  
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
 
@@ -289,5 +330,35 @@ model TaskerProfile {
   tenant             Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   @@index([tenantId])
+  @@index([isOnline, currentStatus])
   @@map("tasker_profiles")
 }
+
+model WalletTransaction {
+  id            String                  @id @default(uuid())
+  code          String                  @unique // TX-YYYY-XXXXXX
+  tenantId      String
+  taskerId      String?
+  bookingId     String?
+  type          WalletTransactionType
+  amount        Float
+  direction     String                  // "IN" | "OUT"
+  balanceBefore Float
+  balanceAfter  Float
+  status        WalletTransactionStatus @default(COMPLETED)
+  bankName      String?
+  bankAccount   String?
+  notes         String?
+  triggeredBy   String
+  createdAt     DateTime                @default(now())
+
+  tenant        Tenant                  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tasker        User?                   @relation(fields: [taskerId], references: [id], onDelete: SetNull)
+  booking       Booking?                @relation(fields: [bookingId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId])
+  @@index([taskerId])
+  @@index([bookingId])
+  @@map("wallet_transactions")
+}
+
