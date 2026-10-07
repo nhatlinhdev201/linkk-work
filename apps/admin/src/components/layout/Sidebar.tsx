@@ -16,6 +16,7 @@ import {
   ChevronLeft,
   ChevronRight,
   LogOut,
+  BookOpen,
 } from 'lucide-react';
 import { useAuth } from '../../auth/AuthContext';
 import { useUIStore } from '../../stores/uiStore';
@@ -100,6 +101,13 @@ export const Sidebar: React.FC<SidebarProps> = ({ isMobileOpen = false, onMobile
       label: 'Cài đặt Hệ thống',
       icon: Settings,
       roles: ['SUPER_ADMIN', 'TENANT_ADMIN'],
+    },
+    {
+      to: '/system-docs',
+      label: 'Tài liệu Hệ thống',
+      icon: BookOpen,
+      roles: ['SUPER_ADMIN', 'TENANT_ADMIN'],
+      badge: 'Docs',
     },
   ];
 

@@ -21,6 +21,7 @@ import { FinancePage } from './pages/finance/FinancePage';
 import { SettingsPage } from './pages/settings/SettingsPage';
 import { TenantsPage } from './pages/tenants/TenantsPage';
 import { CronPage } from './pages/cron/CronPage';
+import { SystemDocsPage } from './pages/docs/SystemDocsPage';
 import { NotFoundPage } from './pages/error/NotFoundPage';
 import { UnauthorizedPage } from './pages/error/UnauthorizedPage';
 
@@ -55,6 +56,7 @@ export const App: React.FC = () => {
                 <Route path="/services" element={<ServicesPage />} />
                 <Route path="/finance" element={<FinancePage />} />
                 <Route path="/settings" element={<SettingsPage />} />
+                <Route path="/system-docs" element={<SystemDocsPage />} />
 
                 {/* Super Admin Restricted Routes */}
                 <Route
