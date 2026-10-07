@@ -180,15 +180,24 @@ export const TransactionDetailModal: React.FC<TransactionDetailModalProps> = ({
   const targetConfig = getActorVisualConfig(transaction.targetType);
   const paymentConfig = getPaymentMethodVisual(transaction.paymentMethod);
 
-  const handleCopyCode = () => {
-    navigator.clipboard.writeText(transaction.code);
-    setIsCopied(true);
-    toast({
-      type: 'success',
-      title: 'Đã sao chép mã bút toán',
-      message: transaction.code,
-    });
-    setTimeout(() => setIsCopied(false), 2000);
+  const handleCopyCode = async () => {
+    if (!transaction) return;
+    try {
+      await navigator.clipboard.writeText(transaction.code);
+      setIsCopied(true);
+      toast({
+        type: 'success',
+        title: 'Đã sao chép mã bút toán',
+        message: transaction.code,
+      });
+      setTimeout(() => setIsCopied(false), 2000);
+    } catch {
+      toast({
+        type: 'error',
+        title: 'Lỗi sao chép',
+        message: 'Không thể sao chép: Trình duyệt không hỗ trợ hoặc chặn quyền',
+      });
+    }
   };
 
   const handleBookingClick = () => {
@@ -204,7 +213,7 @@ export const TransactionDetailModal: React.FC<TransactionDetailModalProps> = ({
       onClose={onClose}
       title="Chi tiết bút toán kế toán & Sổ cái"
       subtitle="Chứng từ giao dịch & luồng luân chuyển dòng tiền đối soát"
-      maxWidth="xl"
+      maxWidth="2xl"
       footer={
         <div className="flex items-center justify-between w-full">
           <span className="text-xs text-slate-400 hidden sm:inline">

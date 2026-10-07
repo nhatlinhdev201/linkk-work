@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { TransactionQueryParams, WalletTransaction } from '../../types';
 import { useAuth } from '../../auth/AuthContext';
@@ -47,36 +47,47 @@ export const FinancePage: React.FC = () => {
 
   // State for search and filters
   const [searchQuery, setSearchQuery] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [paymentMethodFilter, setPaymentMethodFilter] = useState<string>('ALL');
   const [activeTab, setActiveTab] = useState<string>('ALL');
   const [currentPage, setCurrentPage] = useState<number>(1);
   const pageSize = 10;
   const [selectedTx, setSelectedTx] = useState<WalletTransaction | null>(null);
 
+  // Debounce search query by 300ms
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(searchQuery);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
+
   // TanStack Query hooks
   const { data: summary, isLoading: isLoadingSummary } = useFinancialSummaryQuery(currentTenantId);
 
+  const isDepositTab = activeTab === 'DEPOSIT';
   const queryParams: TransactionQueryParams = {
     tenantId: isSuperAdmin
       ? currentTenantId === 'tenant-linkkwork'
         ? undefined
         : currentTenantId
       : currentTenantId,
-    search: searchQuery.trim() || undefined,
-    type: activeTab === 'ALL' ? undefined : (activeTab === 'DEPOSIT' ? undefined : activeTab),
+    search: debouncedSearch.trim() || undefined,
+    type: activeTab === 'ALL' ? undefined : (isDepositTab ? undefined : activeTab),
     paymentMethod: paymentMethodFilter === 'ALL' ? undefined : paymentMethodFilter,
-    page: currentPage,
-    limit: pageSize,
+    page: isDepositTab ? 1 : currentPage,
+    limit: isDepositTab ? 100 : pageSize,
   };
 
   const { data: txResponse, isLoading: isLoadingTx } = useWalletTransactionsQuery(queryParams);
 
-  const isInitialLoading = (isLoadingSummary || isLoadingTx) && !summary;
+  const isSummaryLoading = isLoadingSummary && !summary;
+  const isTableLoading = isLoadingTx && !txResponse;
   const transactions = txResponse || [];
 
   // Local filter fallback for DEPOSIT group tab
   const filteredTx = (transactions as WalletTransaction[]).filter((t) => {
-    if (activeTab === 'DEPOSIT') {
+    if (isDepositTab) {
       return (
         t.type === 'TOP_UP_DEPOSIT' ||
         t.type === 'WITHDRAW_DEPOSIT' ||
@@ -87,12 +98,12 @@ export const FinancePage: React.FC = () => {
     return true;
   });
 
-  const totalItems = txResponse?.total ?? filteredTx.length;
+  const totalItems = isDepositTab ? filteredTx.length : (txResponse?.total ?? filteredTx.length);
   const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
 
   // Determine transactions displayed on current page
   const displayedTx =
-    filteredTx.length > pageSize
+    isDepositTab || filteredTx.length > pageSize
       ? filteredTx.slice((currentPage - 1) * pageSize, currentPage * pageSize)
       : filteredTx;
 
@@ -104,14 +115,22 @@ export const FinancePage: React.FC = () => {
     });
   };
 
-  const handleCopyCode = (e: React.MouseEvent, code: string) => {
+  const handleCopyCode = async (e: React.MouseEvent, code: string) => {
     e.stopPropagation();
-    navigator.clipboard.writeText(code);
-    toast({
-      type: 'success',
-      title: 'Đã sao chép mã bút toán',
-      message: code,
-    });
+    try {
+      await navigator.clipboard.writeText(code);
+      toast({
+        type: 'success',
+        title: 'Đã sao chép mã bút toán',
+        message: code,
+      });
+    } catch {
+      toast({
+        type: 'error',
+        title: 'Lỗi sao chép',
+        message: 'Không thể sao chép: Trình duyệt không hỗ trợ hoặc chặn quyền',
+      });
+    }
   };
 
   const handleBookingClick = (e: React.MouseEvent, bookingCode: string) => {
@@ -249,7 +268,7 @@ export const FinancePage: React.FC = () => {
       </div>
 
       {/* KPI Stat Cards */}
-      {isInitialLoading ? (
+      {isSummaryLoading ? (
         <SkeletonStatCards count={4} />
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -358,8 +377,8 @@ export const FinancePage: React.FC = () => {
               Tổng cộng <strong className="text-slate-800 font-semibold">{totalItems}</strong> bút
               toán
             </span>
-            {searchQuery && (
-              <span className="text-brand-600 font-medium">(lọc theo &quot;{searchQuery}&quot;)</span>
+            {debouncedSearch && (
+              <span className="text-brand-600 font-medium">(lọc theo &quot;{debouncedSearch}&quot;)</span>
             )}
           </div>
         </div>
@@ -367,7 +386,7 @@ export const FinancePage: React.FC = () => {
 
       {/* Ledger Table Section */}
       <div className="space-y-4">
-        {isInitialLoading ? (
+        {isTableLoading ? (
           <SkeletonTable rows={6} cols={7} />
         ) : filteredTx.length === 0 ? (
           <EmptyState
