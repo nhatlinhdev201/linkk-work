@@ -51,7 +51,7 @@ model Booking {
 
 ---
 
-## 3. Quy Trình Nghiệp Vụ & Sơ Đồ Trạng Thái (Sequence Diagram)
+## 3. Quy Trình Nghiệp Vụ, Sổ Cái Kép & Sơ Đồ Trạng Thái (Sequence Diagram & Dual-Entry Ledger)
 
 ### 3.1. Luồng Ghi Nhận Thu Tiền Mặt Trực Tiếp (`POST /bookings/:id/record-cash-payment`)
 
@@ -59,9 +59,9 @@ model Booking {
 sequenceDiagram
     autonumber
     actor Admin as Admin / Điều Phối Viên
-    participant API as BookingService
+    participant API as BookingService (settleCashBookingLedger)
     participant DB as PostgreSQL (ACID Tx)
-    participant WT as WalletTransaction Ledger
+    participant WT as Universal Ledger (WalletTransaction)
 
     Admin->>API: POST /bookings/:id/record-cash-payment { amount, note, deductCommission: true }
     rect rgb(240, 248, 255)
@@ -71,25 +71,50 @@ sequenceDiagram
             API-->>Admin: Throw BadRequestException ("Đơn hàng đã được ghi nhận thanh toán")
         end
         API->>DB: Đọc TaskerProfile (kiểm tra số dư ký quỹ depositBalance)
-        Note over API: Tính hoa hồng sàn: commission = amount * 15% (30.000đ cho đơn 200.000đ)
-        alt depositBalance < commission
-            API-->>Admin: Throw BadRequestException ("Số dư ký quỹ của thợ không đủ để khấu trừ hoa hồng")
+        Note over API: 1. Bút toán CASH_COLLECTED: Nguồn CUSTOMER -> Đích TASKER (100% cước tiền mặt)
+        API->>WT: INSERT wallet_transactions (type: CASH_COLLECTED, sourceType: CUSTOMER, targetType: TASKER, amount: 200.000đ, paymentMethod: CASH, direction: IN)
+        
+        alt Khấu trừ hoa hồng (deductCommission == true)
+            Note over API: 2. Bút toán COMMISSION_FEE: Nguồn TASKER -> Đích TENANT (15% cước = 30.000đ)
+            alt depositBalance < commission
+                API-->>Admin: Throw BadRequestException ("Số dư ký quỹ của thợ không đủ để khấu trừ hoa hồng")
+            end
+            API->>DB: UPDATE tasker_profiles SET depositBalance = depositBalance - commission
+            API->>WT: INSERT wallet_transactions (type: COMMISSION_FEE, sourceType: TASKER, targetType: TENANT, amount: 30.000đ, paymentMethod: WALLET, direction: OUT, balanceBefore, balanceAfter)
         end
-        API->>DB: UPDATE tasker_profiles SET depositBalance = depositBalance - commission
-        API->>WT: INSERT wallet_transactions (code: TX-..., type: COMMISSION_FEE, amount: commission, direction: OUT, balanceBefore, balanceAfter)
+        
         API->>DB: UPDATE bookings SET paymentStatus = RELEASED_TO_TASKER, paidAt = now()
         API->>DB: INSERT booking_events (audit log THU_TIEN_MAT_THANH_CONG)
     end
-    API-->>Admin: 200 OK (Trả về Booking chi tiết kèm walletTransactions)
+    API-->>Admin: 200 OK (Trả về Booking chi tiết kèm walletTransactions kép)
 ```
 
-### 3.2. Luồng Tự Động Trích Hoa Hồng Khi Nghiệm Thu Hoàn Tất (`transitionStatus` -> `COMPLETED`)
-Khi Admin bấm nghiệm thu hoàn tất đơn (`COMPLETED`) trên Bàn điều phối:
-- Nếu đơn hàng **chưa được thanh toán trước đó** (`paymentStatus !== RELEASED_TO_TASKER`), hệ thống tự động:
-  1. Chuyển `paymentStatus` sang `RELEASED_TO_TASKER` và lưu `paidAt = now()`.
-  2. Tính 15% hoa hồng trên tổng cước `finalPrice || totalPrice`.
-  3. Khấu trừ `depositBalance` của thợ và ghi một bút toán `COMMISSION_FEE` vào Sổ cái `WalletTransaction`.
-  4. Tăng `completedJobsCount` của thợ (+1) và kiểm tra giải phóng thợ về trạng thái `IDLE`.
+### 3.2. Luồng Tự Động Trích Hoa Hồng & Quyết Toán Sổ Cái Kép Khi Nghiệm Thu Hoàn Tất (`transitionStatus` -> `COMPLETED`)
+Khi Admin hoặc Khách hàng bấm nghiệm thu hoàn tất đơn (`COMPLETED`) trên Bàn điều phối:
+- Nếu đơn hàng **chưa được thanh toán trước đó** (`paymentStatus !== RELEASED_TO_TASKER`), hàm `settleCashBookingLedger` trong ACID Transaction tự động thực hiện:
+  1. Chuyển `paymentStatus` sang `RELEASED_TO_TASKER` và gán nhãn thời gian `paidAt = now()`.
+  2. **Bút toán 1 (`CASH_COLLECTED`):** Ghi nhận 100% doanh thu cước dịch vụ bằng tiền mặt từ Khách hàng sang Thợ đối tác (`direction: IN`, `paymentMethod: CASH`).
+  3. **Bút toán 2 (`COMMISSION_FEE`):** Tính toán hoa hồng sàn (mặc định 15% hoặc theo `servicingTenant.commissionRate`), khấu trừ từ `depositBalance` của thợ và chuyển về doanh nghiệp (`direction: OUT`, `paymentMethod: WALLET`).
+  4. Tăng `completedJobsCount` của thợ (+1) và giải phóng thợ về trạng thái `IDLE` (nếu không còn ca việc nào đang thực hiện).
+
+### 3.3. Mô Hình Kế Toán Kép Bất Biến (Dual-Entry Accounting Model)
+Hệ thống hạch toán dòng tiền minh bạch, bảo đảm nguyên tắc kiểm toán và không thất thoát số liệu:
+
+| Đặc tính | Bút toán 1: Thu tiền mặt (`CASH_COLLECTED`) | Bút toán 2: Phí hoa hồng sàn (`COMMISSION_FEE`) |
+| :--- | :--- | :--- |
+| **Loại giao dịch (`type`)** | `CASH_COLLECTED` | `COMMISSION_FEE` |
+| **Nguồn tiền (`sourceType` / `sourceName`)** | `CUSTOMER` (Khách hàng đặt dịch vụ) | `TASKER` (Thợ thực hiện đơn) |
+| **Đích nhận (`targetType` / `targetName`)** | `TASKER` (Thợ nhận trực tiếp) | `TENANT` (Đơn vị vận hành / Nền tảng) |
+| **Phương thức (`paymentMethod`)** | `CASH` (Tiền mặt COD) | `WALLET` (Ví ký quỹ thợ) |
+| **Chiều dòng tiền (`direction`)** | `IN` (Vào túi thợ) | `OUT` (Khấu trừ ví ký quỹ) |
+| **Biến động số dư ví** | Không đổi (`balanceBefore` = `balanceAfter`) | Trừ hoa hồng (`balanceAfter` = `balanceBefore` - `amount`) |
+| **Mục đích kế toán** | Xác nhận doanh thu dịch vụ phát sinh | Xác nhận doanh thu chia sẻ hoa hồng nền tảng |
+
+### 3.4. Tích Hợp Sổ Cái Giao Dịch Chung (`FinanceModule`) & Bàn Tài Chính (`/finance`)
+Toàn bộ các bút toán trên được ghi nhận bất biến vào bảng cơ sở dữ liệu `wallet_transactions` và được quản lý tập trung bởi **`FinanceModule`**:
+- **API Truy vấn Sổ cái chung (`GET /api/v1/finance/transactions`):** Hỗ trợ tìm kiếm theo từ khóa (mã bút toán `TX-...`, mã đơn `BK-...`, tên khách, tên thợ), bộ lọc loại giao dịch (`type`), phương thức thanh toán (`paymentMethod`), nguồn/đích (`sourceType`, `targetType`), phân trang và cô lập dữ liệu theo Tenant.
+- **API Thống kê Tổng quan (`GET /api/v1/finance/summary`):** Tính toán thời gian thực tổng giá trị dịch vụ (GMV), tổng hoa hồng sàn thu được, và tổng quỹ tiền cọc ký quỹ.
+- **Bàn Tài Chính Trung Tâm (`/finance`):** Giao diện chuyên trách trên Admin Portal cho phép Super Admin (toàn sàn) và Tenant Admin (nội bộ đơn vị) đối soát dòng tiền, kiểm tra chi tiết chứng từ kép và trích xuất file CSV phục vụ quyết toán.
 
 ---
 
@@ -119,8 +144,8 @@ Khi Admin bấm nghiệm thu hoàn tất đơn (`COMPLETED`) trên Bàn điều 
 
 ## 5. API Contracts
 
-### `POST /api/v1/bookings/:id/record-cash-payment`
-- **Mô tả:** Ghi nhận thợ đã thu tiền mặt từ khách và trích hoa hồng sàn 15% từ ví ký quỹ.
+### 5.1. `POST /api/v1/bookings/:id/record-cash-payment`
+- **Mô tả:** Ghi nhận thợ đã thu tiền mặt từ khách và tự động quyết toán sổ cái kép (`CASH_COLLECTED` và trích `COMMISSION_FEE` 15% từ ví ký quỹ).
 - **Quyền hạn (RBAC):** `SUPER_ADMIN`, `TENANT_ADMIN`.
 - **Request Body:**
   ```json
@@ -140,16 +165,88 @@ Khi Admin bấm nghiệm thu hoàn tất đơn (`COMPLETED`) trên Bàn điều 
     "paidAt": "2026-10-07T07:15:00.000Z",
     "walletTransactions": [
       {
-        "id": "tx-uuid",
+        "id": "tx-commission-uuid",
         "code": "TX-1760000000-1234",
         "type": "COMMISSION_FEE",
+        "sourceType": "TASKER",
+        "sourceName": "Nguyễn Văn Thợ",
+        "targetType": "TENANT",
+        "targetName": "Điện Lạnh Ánh Dương",
+        "paymentMethod": "WALLET",
         "direction": "OUT",
         "amount": 30000,
         "balanceBefore": 500000,
         "balanceAfter": 470000,
         "notes": "Phí hoa hồng sàn 15% cho đơn BK-2026-0001"
+      },
+      {
+        "id": "tx-cash-uuid",
+        "code": "TX-1760000000-5678",
+        "type": "CASH_COLLECTED",
+        "sourceType": "CUSTOMER",
+        "sourceName": "Trần Thị Khách",
+        "targetType": "TASKER",
+        "targetName": "Nguyễn Văn Thợ",
+        "paymentMethod": "CASH",
+        "direction": "IN",
+        "amount": 200000,
+        "balanceBefore": 500000,
+        "balanceAfter": 500000,
+        "notes": "Khách hàng thanh toán tiền mặt trực tiếp cho thợ: 200.000 đ"
       }
     ]
+  }
+  ```
+
+### 5.2. `GET /api/v1/finance/transactions` (Universal Transaction Ledger)
+- **Mô tả:** Truy vấn Sổ cái Giao dịch chung toàn hệ thống, có phân quyền Tenant, bộ lọc đa chiều và phân trang.
+- **Quyền hạn (RBAC):** `SUPER_ADMIN`, `TENANT_ADMIN`, `TENANT_DISPATCHER`.
+- **Query Parameters:**
+  - `page`: số trang (mặc định: 1)
+  - `limit`: số bản ghi mỗi trang (mặc định: 20)
+  - `search`: tìm kiếm theo mã đơn, mã bút toán, tên đối tượng
+  - `type`: lọc theo loại giao dịch (`CASH_COLLECTED`, `COMMISSION_FEE`, `TOP_UP_DEPOSIT`, v.v.)
+  - `paymentMethod`: lọc theo phương thức (`CASH`, `WALLET`, `BANK_TRANSFER`, v.v.)
+  - `sourceType` / `targetType`: lọc theo loại thực thể Nguồn/Đích (`CUSTOMER`, `TASKER`, `TENANT`, `PLATFORM`)
+- **Response (200 OK):**
+  ```json
+  {
+    "data": [
+      {
+        "id": "tx-uuid",
+        "code": "TX-1760000000-1234",
+        "type": "CASH_COLLECTED",
+        "sourceType": "CUSTOMER",
+        "sourceName": "Trần Thị Khách",
+        "targetType": "TASKER",
+        "targetName": "Nguyễn Văn Thợ",
+        "paymentMethod": "CASH",
+        "direction": "IN",
+        "amount": 200000,
+        "balanceBefore": 500000,
+        "balanceAfter": 500000,
+        "status": "COMPLETED",
+        "bookingId": "booking-uuid",
+        "createdAt": "2026-10-07T07:15:00.000Z"
+      }
+    ],
+    "total": 128,
+    "page": 1,
+    "limit": 20,
+    "totalPages": 7
+  }
+  ```
+
+### 5.3. `GET /api/v1/finance/summary`
+- **Mô tả:** Thống kê tài chính thời gian thực từ cơ sở dữ liệu (GMV, hoa hồng sàn, tổng ký quỹ).
+- **Quyền hạn (RBAC):** `SUPER_ADMIN`, `TENANT_ADMIN`, `TENANT_DISPATCHER`.
+- **Response (200 OK):**
+  ```json
+  {
+    "totalGMV": 45000000,
+    "totalCommission": 6750000,
+    "totalDepositInSystem": 12500000,
+    "totalTransactions": 128
   }
   ```
 
@@ -161,7 +258,9 @@ Khi Admin bấm nghiệm thu hoàn tất đơn (`COMPLETED`) trên Bàn điều 
 | :--- | :--- | :---: | :---: |
 | **Shared Types** | `packages/shared-types/test/types.spec.ts` | 9 tests | ✅ PASS (100%) |
 | **Backend API** | `apps/api/test/booking.spec.ts` (Test Suite 7) | 4 tests | ✅ PASS (100%) |
-| **Backend API Total** | Toàn bộ 7 Test Suites của Backend | 231 tests | ✅ PASS (100%) |
+| **Backend Finance Module** | `apps/api/test/finance.spec.ts` | 8 tests | ✅ PASS (100%) |
+| **Backend API Total** | Toàn bộ 10 Test Suites của Backend | 250 tests | ✅ PASS (100%) |
 | **Frontend Integration** | `apps/admin/src/api/booking-integration.spec.ts` (Test 11) | 1 test | ✅ PASS (100%) |
-| **Frontend Admin Total** | Toàn bộ 11 Test Suites của Admin Portal | 83 tests | ✅ PASS (100%) |
+| **Frontend Finance Suite** | `apps/admin/src/api/finance-integration.spec.ts` | 6 tests | ✅ PASS (100%) |
+| **Frontend Admin Total** | Toàn bộ 4 Test Suites của Admin Portal | 90 tests | ✅ PASS (100%) |
 | **TypeScript Compilation**| `apps/admin run build` + `apps/api run build` | 0 errors | ✅ PASS (100%) |

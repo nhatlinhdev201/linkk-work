@@ -66,6 +66,8 @@ export const SystemDocsPage: React.FC = () => {
     { method: 'POST', path: '/api/v1/bookings/:id/broadcast', desc: 'Bắn đơn lên sàn radar diện rộng (atomic claim CAS)', role: 'Admin' },
     { method: 'PATCH', path: '/api/v1/bookings/:id/status', desc: 'Chuyển trạng thái đơn tuân thủ Booking State Machine', role: 'Admin / Tasker' },
     { method: 'POST', path: '/api/v1/bookings/:id/record-cash-payment', desc: 'Ghi nhận thanh toán tiền mặt & tự động trích hoa hồng sàn 15% từ ví thợ', role: 'Admin / Tasker' },
+    { method: 'GET', path: '/api/v1/finance/transactions', desc: 'Truy vấn Sổ cái Giao dịch chung (Universal Ledger) có tìm kiếm, lọc Nguồn/Đích, phân trang', role: 'Admin / Staff' },
+    { method: 'GET', path: '/api/v1/finance/summary', desc: 'Thống kê tài chính thời gian thực (GMV, hoa hồng sàn, quỹ cọc) từ cơ sở dữ liệu', role: 'Admin / Staff' },
     { method: 'GET', path: '/api/v1/taskers', desc: 'Danh sách thợ, tính toán availability & ca việc activeJob', role: 'Admin' },
     { method: 'POST', path: '/api/v1/taskers', desc: 'Đăng ký thợ mới, hồ sơ năng lực & bút toán ký quỹ ban đầu', role: 'Admin' },
     { method: 'PATCH', path: '/api/v1/taskers/:id/work-floor', desc: 'Cấu hình bán kính quét việc (1-100km) & radar tự động', role: 'Admin / Tasker' },
@@ -280,7 +282,7 @@ export const SystemDocsPage: React.FC = () => {
 
       {/* SECTION 2: SUPER ADMIN */}
       {(activeTab === 'ALL' || activeTab === 'SUPER_ADMIN') &&
-        (matchesSearch('super admin') || matchesSearch('đối tác') || matchesSearch('duyệt') || matchesSearch('cron') || matchesSearch('toàn sàn')) && (
+        (matchesSearch('super admin') || matchesSearch('đối tác') || matchesSearch('duyệt') || matchesSearch('cron') || matchesSearch('toàn sàn') || matchesSearch('tài chính') || matchesSearch('sổ cái') || matchesSearch('ledger') || matchesSearch('finance')) && (
           <div className="space-y-5">
             <div className="flex items-center gap-2">
               <ShieldCheck className="w-5 h-5 text-indigo-600" />
@@ -289,7 +291,7 @@ export const SystemDocsPage: React.FC = () => {
               </h2>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
               <Card className="border-slate-200 shadow-2xs">
                 <CardContent className="p-5 space-y-3">
                   <h3 className="font-bold text-slate-900 text-sm flex items-center gap-2">
@@ -335,13 +337,36 @@ export const SystemDocsPage: React.FC = () => {
                   </ul>
                 </CardContent>
               </Card>
+
+              <Card className="border-slate-200 shadow-2xs">
+                <CardContent className="p-5 space-y-3">
+                  <h3 className="font-bold text-slate-900 text-sm flex items-center gap-2">
+                    <Wallet className="w-4 h-4 text-indigo-600" />
+                    Sổ Cái Toàn Sàn &amp; Bàn Tài Chính (Universal Ledger &amp; Finance)
+                  </h3>
+                  <ul className="space-y-2 text-xs text-slate-600">
+                    <li className="flex items-start gap-2">
+                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0 mt-0.5" />
+                      <span><strong>2 bút toán kế toán kép COD:</strong> Hoàn tất đơn tự động hạch toán song hành: Ghi nhận thu tiền mặt (<code>CASH_COLLECTED</code> từ Khách sang Thợ) và trích thu hoa hồng sàn (<code>COMMISSION_FEE</code> từ Thợ sang Nền tảng/Tenant).</span>
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0 mt-0.5" />
+                      <span><strong>Định danh Nguồn tiền &amp; Đích nhận:</strong> Minh bạch dòng tiền chuẩn hóa với Nguồn (<code>sourceType</code>, <code>sourceName</code>) và Đích nhận (<code>targetType</code>, <code>targetName</code>) không thể xóa sửa.</span>
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0 mt-0.5" />
+                      <span><strong>Bàn tài chính <code>/finance</code>:</strong> Giám sát toàn sàn theo thời gian thực (GMV, hoa hồng, quỹ cọc) với bộ lọc đa chiều (Nguồn/Đích, loại bút toán, hình thức thanh toán), tìm kiếm tra cứu đối soát theo mã đơn/bút toán và phân trang.</span>
+                    </li>
+                  </ul>
+                </CardContent>
+              </Card>
             </div>
           </div>
         )}
 
       {/* SECTION 3: TENANT ADMIN */}
       {(activeTab === 'ALL' || activeTab === 'TENANT_ADMIN') &&
-        (matchesSearch('tenant admin') || matchesSearch('hrm') || matchesSearch('bàn điều phối') || matchesSearch('nhân sự') || matchesSearch('ký quỹ')) && (
+        (matchesSearch('tenant admin') || matchesSearch('hrm') || matchesSearch('bàn điều phối') || matchesSearch('nhân sự') || matchesSearch('ký quỹ') || matchesSearch('tài chính') || matchesSearch('sổ cái') || matchesSearch('ledger') || matchesSearch('finance')) && (
           <div className="space-y-5">
             <div className="flex items-center gap-2">
               <Building2 className="w-5 h-5 text-emerald-600" />
@@ -350,12 +375,12 @@ export const SystemDocsPage: React.FC = () => {
               </h2>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
               <Card className="border-slate-200 shadow-2xs">
                 <CardContent className="p-5 space-y-3">
                   <h3 className="font-bold text-slate-900 text-sm flex items-center gap-2">
                     <Users className="w-4 h-4 text-emerald-600" />
-                    Quản trị Nhân sự &amp; Tài chính Thợ (HRM &amp; Ledger)
+                    Quản trị Nhân sự &amp; Ký quỹ Thợ (HRM &amp; Deposit)
                   </h3>
                   <ul className="space-y-2 text-xs text-slate-600">
                     <li className="flex items-start gap-2">
@@ -372,7 +397,7 @@ export const SystemDocsPage: React.FC = () => {
                     </li>
                     <li className="flex items-start gap-2">
                       <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0 mt-0.5" />
-                      <span>Tra cứu Sổ cái 360 độ: Theo dõi chi tiết mọi bút toán biến động số dư của từng nhân sự.</span>
+                      <span>Tra cứu Sổ cái cá nhân 360 độ: Theo dõi chi tiết mọi bút toán biến động số dư của từng nhân sự.</span>
                     </li>
                   </ul>
                 </CardContent>
@@ -400,6 +425,29 @@ export const SystemDocsPage: React.FC = () => {
                     <li className="flex items-start gap-2">
                       <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0 mt-0.5" />
                       <span>Thiết lập sàn thợ: Cấu hình bán kính quét (1-100km), bật/tắt radar tự động và quản lý ca trực.</span>
+                    </li>
+                  </ul>
+                </CardContent>
+              </Card>
+
+              <Card className="border-slate-200 shadow-2xs">
+                <CardContent className="p-5 space-y-3">
+                  <h3 className="font-bold text-slate-900 text-sm flex items-center gap-2">
+                    <Wallet className="w-4 h-4 text-emerald-600" />
+                    Sổ Cái Đơn Vị &amp; Bàn Tài Chính (Tenant Universal Ledger)
+                  </h3>
+                  <ul className="space-y-2 text-xs text-slate-600">
+                    <li className="flex items-start gap-2">
+                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0 mt-0.5" />
+                      <span><strong>2 bút toán kế toán kép COD:</strong> Khi hoàn tất đơn COD, hệ thống tự động ghi nhận <code>CASH_COLLECTED</code> (khách trả thợ) và trích <code>COMMISSION_FEE</code> (15% từ ví thợ về doanh nghiệp).</span>
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0 mt-0.5" />
+                      <span><strong>Định danh Nguồn tiền &amp; Đích nhận:</strong> Phân định rành mạch Nguồn tiền (<code>sourceType</code>, <code>sourceName</code>) và Đích nhận (<code>targetType</code>, <code>targetName</code>) giúp kế toán đơn vị hạch toán chính xác.</span>
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0 mt-0.5" />
+                      <span><strong>Đối soát trên <code>/finance</code>:</strong> Bàn tài chính nội bộ cho Tenant Admin: Bộ lọc đa chiều Nguồn/Đích, phương thức thanh toán, tra cứu tức thì theo mã đơn <code>BK-...</code> hoặc mã <code>TX-...</code>.</span>
                     </li>
                   </ul>
                 </CardContent>
@@ -762,6 +810,13 @@ export const SystemDocsPage: React.FC = () => {
                     <td className="py-2.5 px-4 text-center text-emerald-600 font-bold">✅ Hỗ trợ khách</td>
                     <td className="py-2.5 px-4 text-center text-slate-400">Báo xong ca</td>
                     <td className="py-2.5 px-4 text-center text-emerald-600 font-bold">✅ Chủ trì</td>
+                  </tr>
+                  <tr className="hover:bg-slate-50">
+                    <td className="py-2.5 px-4 font-bold text-slate-800">Bàn Tài chính &amp; Sổ cái chung (/finance)</td>
+                    <td className="py-2.5 px-4 text-center text-emerald-600 font-bold">✅ Toàn sàn</td>
+                    <td className="py-2.5 px-4 text-center text-emerald-600 font-bold">✅ Đơn vị mình</td>
+                    <td className="py-2.5 px-4 text-center text-slate-400">❌ Ví cá nhân</td>
+                    <td className="py-2.5 px-4 text-center text-slate-400">❌ Không</td>
                   </tr>
                 </tbody>
               </table>
