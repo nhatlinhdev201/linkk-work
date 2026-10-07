@@ -289,7 +289,7 @@ export class TaskerService {
       include: {
         taskerProfile: true,
         tenant: true,
-        walletTransactions: {
+        taskerWalletTransactions: {
           take: 10,
           orderBy: { createdAt: 'desc' },
         },
@@ -339,6 +339,7 @@ export class TaskerService {
 
     return {
       ...sanitized,
+      walletTransactions: (tasker as any).taskerWalletTransactions || [],
       availability,
       activeJob,
     };

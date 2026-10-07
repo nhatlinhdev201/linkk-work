@@ -127,16 +127,17 @@ describe('Shared Domain Types & State Machines', () => {
     });
 
     describe('PaymentMethod', () => {
-      it('should define all 4 payment methods', () => {
+      it('should define all 5 payment methods', () => {
         expect(PaymentMethod.CASH).toBe('CASH');
         expect(PaymentMethod.MOMO).toBe('MOMO');
         expect(PaymentMethod.VNPAY).toBe('VNPAY');
         expect(PaymentMethod.BANK_TRANSFER).toBe('BANK_TRANSFER');
+        expect(PaymentMethod.WALLET).toBe('WALLET');
 
         const paymentMethods = Object.values(PaymentMethod);
-        expect(paymentMethods).toHaveLength(4);
+        expect(paymentMethods).toHaveLength(5);
         expect(paymentMethods).toEqual(
-          expect.arrayContaining(['CASH', 'MOMO', 'VNPAY', 'BANK_TRANSFER']),
+          expect.arrayContaining(['CASH', 'MOMO', 'VNPAY', 'BANK_TRANSFER', 'WALLET']),
         );
       });
     });

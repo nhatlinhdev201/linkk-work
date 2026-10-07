@@ -58,9 +58,11 @@ enum PaymentMethod {
   MOMO
   VNPAY
   BANK_TRANSFER
+  WALLET
 }
 
 enum WalletTransactionType {
+  CASH_COLLECTED
   TOP_UP_DEPOSIT
   WITHDRAW_DEPOSIT
   SOFT_HOLD
@@ -68,6 +70,7 @@ enum WalletTransactionType {
   ORDER_PAYOUT
   COMMISSION_FEE
   PENALTY_DEDUCTION
+  SUBSCRIPTION_FEE
 }
 
 enum WalletTransactionStatus {
@@ -122,8 +125,9 @@ model User {
   taskerProfile    TaskerProfile?
   customerBookings Booking[]       @relation("CustomerBookings")
   assignedBookings Booking[]       @relation("TaskerBookings")
-  auditLogs        AuditLog[]
-  walletTransactions WalletTransaction[]
+  auditLogs                  AuditLog[]
+  customerWalletTransactions WalletTransaction[] @relation("CustomerWalletTransactions")
+  taskerWalletTransactions   WalletTransaction[] @relation("TaskerWalletTransactions")
 
   @@index([tenantId])
   @@map("users")
@@ -348,6 +352,7 @@ model WalletTransaction {
   code          String                  @unique // TX-YYYY-XXXXXX
   tenantId      String
   taskerId      String?
+  customerId    String?
   bookingId     String?
   type          WalletTransactionType
   amount        Float
@@ -355,6 +360,13 @@ model WalletTransaction {
   balanceBefore Float
   balanceAfter  Float
   status        WalletTransactionStatus @default(COMPLETED)
+  sourceType    String                  @default("SYSTEM")
+  sourceId      String?
+  sourceName    String                  @default("Hệ thống LinkkWork")
+  targetType    String                  @default("SYSTEM")
+  targetId      String?
+  targetName    String                  @default("Hệ thống LinkkWork")
+  paymentMethod PaymentMethod           @default(CASH)
   bankName      String?
   bankAccount   String?
   notes         String?
@@ -362,12 +374,16 @@ model WalletTransaction {
   createdAt     DateTime                @default(now())
 
   tenant        Tenant                  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  tasker        User?                   @relation(fields: [taskerId], references: [id], onDelete: SetNull)
+  customer      User?                   @relation("CustomerWalletTransactions", fields: [customerId], references: [id], onDelete: SetNull)
+  tasker        User?                   @relation("TaskerWalletTransactions", fields: [taskerId], references: [id], onDelete: SetNull)
   booking       Booking?                @relation(fields: [bookingId], references: [id], onDelete: SetNull)
 
   @@index([tenantId])
   @@index([taskerId])
+  @@index([customerId])
   @@index([bookingId])
+  @@index([sourceType, targetType])
+  @@index([paymentMethod])
   @@map("wallet_transactions")
 }
 

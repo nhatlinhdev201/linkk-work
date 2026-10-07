@@ -87,6 +87,7 @@ describe('TaskerService', () => {
       code: 'clean-house',
     },
     walletTransactions: [],
+    taskerWalletTransactions: [],
   };
 
   const { passwordHash: _hash, ...sanitizedMockUser } = mockUserTasker;
@@ -350,7 +351,7 @@ describe('TaskerService', () => {
           include: expect.objectContaining({
             taskerProfile: true,
             tenant: true,
-            walletTransactions: {
+            taskerWalletTransactions: {
               take: 10,
               orderBy: { createdAt: 'desc' },
             },
