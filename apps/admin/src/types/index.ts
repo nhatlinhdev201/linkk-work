@@ -50,6 +50,8 @@ export type BookingStatus =
 
 export type PricingModel = 'HOURLY' | 'PER_UNIT' | 'BIDDING';
 
+export type PaymentMethod = 'CASH' | 'MOMO' | 'VNPAY' | 'BANK_TRANSFER';
+
 export interface BookingEventItem {
   id: string;
   fromStatus?: BookingStatus | null;
@@ -75,10 +77,14 @@ export interface Booking {
   durationHours?: number;
   totalAmount: number;
   status: BookingStatus;
+  paymentStatus?: 'PENDING' | 'ESCROW_HOLD' | 'RELEASED_TO_TASKER' | 'REFUNDED' | 'DISPUTED';
+  paymentMethod?: PaymentMethod;
+  paidAt?: string | null;
   assignedTaskerId: string | null;
   assignedTaskerName: string | null;
   assignedTaskerPhone: string | null;
   events?: BookingEventItem[];
+  walletTransactions?: WalletTransaction[];
   createdAt: string;
 }
 

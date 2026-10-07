@@ -25,6 +25,7 @@ import type {
   ServiceItem,
   ServiceAddon,
   PricingModel,
+  PaymentMethod,
   WalletTransaction,
   FinancialSummary,
   TenantSettings,
@@ -275,6 +276,9 @@ export interface BackendBookingResponse {
     note?: string | null;
     createdAt: string;
   }>;
+  paymentStatus?: 'PENDING' | 'ESCROW_HOLD' | 'RELEASED_TO_TASKER' | 'REFUNDED' | 'DISPUTED';
+  paymentMethod?: PaymentMethod;
+  paidAt?: string | null;
 }
 
 export interface BackendPaginatedBookingsResponse {
@@ -302,6 +306,9 @@ export function mapBackendBookingToAdminBooking(b: BackendBookingResponse): Book
     durationHours: b.durationHours ?? undefined,
     totalAmount: b.totalAmount,
     status: b.status,
+    paymentStatus: b.paymentStatus || 'PENDING',
+    paymentMethod: b.paymentMethod || 'CASH',
+    paidAt: b.paidAt || null,
     assignedTaskerId: b.assignedTaskerId || (b.assignedTasker ? b.assignedTasker.id : null),
     assignedTaskerName: b.assignedTasker?.name || null,
     assignedTaskerPhone: b.assignedTasker?.phone || null,
@@ -1169,6 +1176,7 @@ export class ApiClient {
       scheduledAt: string;
       durationHours?: number;
       totalAmount: number;
+      paymentMethod?: PaymentMethod;
     }
   ): Promise<Booking> {
     const storage = getStorage();
@@ -1195,6 +1203,7 @@ export class ApiClient {
               customerPhone: data.customerPhone,
               addressText: data.addressText,
               durationHours: data.durationHours || 2,
+              paymentMethod: data.paymentMethod || 'CASH',
               note: `Tạo thủ công từ Web Admin (${tenantName})`,
             }),
           },
@@ -1229,6 +1238,8 @@ export class ApiClient {
       ...data,
       serviceId: 'srv-manual',
       status: 'PENDING_DISPATCH',
+      paymentMethod: data.paymentMethod || 'CASH',
+      paymentStatus: 'PENDING',
       assignedTaskerId: null,
       assignedTaskerName: null,
       assignedTaskerPhone: null,
@@ -1374,6 +1385,47 @@ export class ApiClient {
     if (!booking) throw new Error('Không tìm thấy đơn hàng');
 
     booking.status = 'BROADCASTING';
+    saveData(STORAGE_KEYS.BOOKINGS, bookings);
+    return booking;
+  }
+
+  async recordCashPayment(
+    bookingId: string,
+    data?: { amount?: number; note?: string; deductCommission?: boolean }
+  ): Promise<Booking> {
+    const storage = getStorage();
+    const token = storage.getItem(STORAGE_KEYS.ACCESS_TOKEN);
+    if (token) {
+      try {
+        const raw = await this.fetchWithAuth<BackendBookingResponse>(
+          `/bookings/${bookingId}/record-cash-payment`,
+          {
+            method: 'POST',
+            body: JSON.stringify(data || {}),
+          },
+          true
+        );
+        const mapped = mapBackendBookingToAdminBooking(raw);
+        const bookings = await this.getBookings();
+        const updatedList = bookings.map((b) => (b.id === mapped.id ? mapped : b));
+        saveData(STORAGE_KEYS.BOOKINGS, updatedList);
+        return mapped;
+      } catch (err: unknown) {
+        const errorWithStatus = err as { status?: number };
+        if (errorWithStatus.status !== 404 && !bookingId.startsWith('bk-')) {
+          throw err;
+        }
+      }
+    }
+
+    // Mock fallback
+    const bookings = loadData<Booking[]>(STORAGE_KEYS.BOOKINGS, INITIAL_BOOKINGS);
+    const booking = bookings.find((b) => b.id === bookingId);
+    if (!booking) throw new Error('Không tìm thấy đơn hàng');
+
+    booking.paymentStatus = 'RELEASED_TO_TASKER';
+    booking.paymentMethod = 'CASH';
+    booking.paidAt = new Date().toISOString();
     saveData(STORAGE_KEYS.BOOKINGS, bookings);
     return booking;
   }

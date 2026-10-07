@@ -1,0 +1,167 @@
+# Tài Liệu Kỹ Thuật: Quy Trình Thanh Toán Tiền Mặt & Sổ Cái Hoa Hồng (Cash Payment Workflow & Commission Ledger)
+
+**Tác giả:** Đội ngũ Kiến trúc Nền tảng LinkkWork  
+**Ngày cập nhật:** 07/10/2026  
+**Trạng thái:** Triển khai Hoàn tất & Đã Kiểm Thử 100% (Completed & Verified)  
+**Quy chuẩn:** Tuân thủ Điều khoản 10 CODING_STANDARDS.md (Docs-as-Code)
+
+---
+
+## 1. Bối Cảnh & Mục Tiêu Nghiệp Vụ
+
+Trong giai đoạn MVP và vận hành thực tế thị trường dịch vụ tại chỗ (home services):
+- **Ưu tiên tiền mặt:** Đa số khách hàng thanh toán trực tiếp bằng tiền mặt (Cash On Delivery - COD) cho thợ sau khi nghiệm thu dịch vụ hoàn tất.
+- **Tạm hoãn cổng online:** Các cổng thanh toán trực tuyến của bên thứ ba (MoMo, VNPAY, VietQR / Chuyển khoản ngân hàng) chưa triển khai tích hợp trực tiếp, được tạm thời vô hiệu hóa trên toàn bộ giao diện kèm nhãn *"Hiện chưa hỗ trợ"*.
+- **Mô hình hoa hồng Grab / bTaskee:**
+  - Khách hàng thanh toán **100% cước dịch vụ bằng tiền mặt** cho thợ.
+  - Hệ thống ghi nhận trạng thái thanh toán đơn là `RELEASED_TO_TASKER` (do tiền đã về tay thợ trực tiếp).
+  - Nền tảng tự động trích thu phí hoa hồng quản lý sàn (**15%** tổng cước đơn hàng) từ **Ví ký quỹ đảm bảo (`depositBalance`)** của thợ.
+  - Bút toán kế toán được ghi nhận tức thời và bất biến vào bảng Sổ cái `WalletTransaction` với loại nghiệp vụ `COMMISSION_FEE`.
+
+---
+
+## 2. Kiến Trúc Dữ Liệu (Data Architecture & Schema)
+
+### 2.1. Enum Phương Thức Thanh Toán (`PaymentMethod`)
+Được định nghĩa đồng bộ trong `packages/shared-types` và `apps/api/prisma/schema.prisma`:
+
+```prisma
+enum PaymentMethod {
+  CASH
+  MOMO
+  VNPAY
+  BANK_TRANSFER
+}
+```
+
+### 2.2. Mở Rộng Model `Booking`
+Bổ sung trường lưu phương thức thanh toán và thời điểm thanh toán:
+
+```prisma
+model Booking {
+  // ... các trường hiện có
+  paymentMethod      PaymentMethod @default(CASH)
+  paymentStatus      PaymentStatus @default(UNPAID)
+  paidAt             DateTime?
+  // Quan hệ 1-N với sổ cái kế toán
+  walletTransactions WalletTransaction[]
+  // ...
+}
+```
+
+---
+
+## 3. Quy Trình Nghiệp Vụ & Sơ Đồ Trạng Thái (Sequence Diagram)
+
+### 3.1. Luồng Ghi Nhận Thu Tiền Mặt Trực Tiếp (`POST /bookings/:id/record-cash-payment`)
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Admin as Admin / Điều Phối Viên
+    participant API as BookingService
+    participant DB as PostgreSQL (ACID Tx)
+    participant WT as WalletTransaction Ledger
+
+    Admin->>API: POST /bookings/:id/record-cash-payment { amount, note, deductCommission: true }
+    rect rgb(240, 248, 255)
+        Note over API,DB: Giao dịch nguyên tử prisma.$transaction
+        API->>DB: Khóa và đọc Booking (kiểm tra status != CANCELLED)
+        alt Đơn đã thanh toán (paymentStatus == RELEASED_TO_TASKER)
+            API-->>Admin: Throw BadRequestException ("Đơn hàng đã được ghi nhận thanh toán")
+        end
+        API->>DB: Đọc TaskerProfile (kiểm tra số dư ký quỹ depositBalance)
+        Note over API: Tính hoa hồng sàn: commission = amount * 15% (30.000đ cho đơn 200.000đ)
+        alt depositBalance < commission
+            API-->>Admin: Throw BadRequestException ("Số dư ký quỹ của thợ không đủ để khấu trừ hoa hồng")
+        end
+        API->>DB: UPDATE tasker_profiles SET depositBalance = depositBalance - commission
+        API->>WT: INSERT wallet_transactions (code: TX-..., type: COMMISSION_FEE, amount: commission, direction: OUT, balanceBefore, balanceAfter)
+        API->>DB: UPDATE bookings SET paymentStatus = RELEASED_TO_TASKER, paidAt = now()
+        API->>DB: INSERT booking_events (audit log THU_TIEN_MAT_THANH_CONG)
+    end
+    API-->>Admin: 200 OK (Trả về Booking chi tiết kèm walletTransactions)
+```
+
+### 3.2. Luồng Tự Động Trích Hoa Hồng Khi Nghiệm Thu Hoàn Tất (`transitionStatus` -> `COMPLETED`)
+Khi Admin bấm nghiệm thu hoàn tất đơn (`COMPLETED`) trên Bàn điều phối:
+- Nếu đơn hàng **chưa được thanh toán trước đó** (`paymentStatus !== RELEASED_TO_TASKER`), hệ thống tự động:
+  1. Chuyển `paymentStatus` sang `RELEASED_TO_TASKER` và lưu `paidAt = now()`.
+  2. Tính 15% hoa hồng trên tổng cước `finalPrice || totalPrice`.
+  3. Khấu trừ `depositBalance` của thợ và ghi một bút toán `COMMISSION_FEE` vào Sổ cái `WalletTransaction`.
+  4. Tăng `completedJobsCount` của thợ (+1) và kiểm tra giải phóng thợ về trạng thái `IDLE`.
+
+---
+
+## 4. Đặc Tả Giao Diện Người Dùng (Admin Frontend Specifications)
+
+### 4.1. Tạo Đơn Hàng Mới (`BookingsPage.tsx`)
+- **Radio Card Selector:** Người dùng chọn phương thức thanh toán:
+  - 💵 **Tiền mặt (CASH):** Phương thức khả dụng duy nhất, được chọn mặc định.
+  - 🟣 **Ví MoMo:** Bị vô hiệu hóa (`disabled: opacity-50 cursor-not-allowed`) kèm Badge cảnh báo `Hiện chưa hỗ trợ`.
+  - 🔵 **VNPAY:** Bị vô hiệu hóa kèm Badge `Hiện chưa hỗ trợ`.
+  - 🏦 **Chuyển khoản (VietQR):** Bị vô hiệu hóa kèm Badge `Hiện chưa hỗ trợ`.
+
+### 4.2. Bàn Điều Phối Trung Tâm (`DispatchPage.tsx`)
+- **Nút Hành Động Độc Lập:** Trên Thanh điều phối chi tiết đơn hàng, bổ sung nút **"Ghi nhận thu tiền mặt"** (DollarSign icon).
+- **Modal Ghi Nhận Thu Tiền Mặt (`RecordCashPaymentModal.tsx`):**
+  - Hiển thị rõ tổng tiền mặt thợ thu từ khách (100%).
+  - Hiển thị chi tiết khoản hoa hồng sàn 15% sẽ trích từ ví ký quỹ của thợ.
+  - Trường ghi chú thu tiền (mặc định: *"Thu tiền mặt khi hoàn thành dịch vụ"*).
+  - Tự động khóa nút xác nhận nếu số dư ký quỹ của thợ không đủ.
+- **Modal Nghiệm Thu Hoàn Tất (`CompletionModal.tsx`):**
+  - Tích hợp sẵn thông tin thu tiền mặt và hoa hồng khấu trừ ngay trong bước ký biên bản bàn giao và đánh giá sao.
+- **Thẻ Sổ Cái Thanh Toán Đơn Hàng (`PaymentLedgerCard.tsx`):**
+  - Hiển thị tình trạng thu tiền (Đã thanh toán / Chưa thanh toán), thời điểm thu (`paidAt`).
+  - Liệt kê toàn bộ các biến động sổ cái `WalletTransaction` liên quan trực tiếp đến mã đơn hàng (mã giao dịch, số tiền hoa hồng trích, số dư ví trước và sau khấu trừ).
+
+---
+
+## 5. API Contracts
+
+### `POST /api/v1/bookings/:id/record-cash-payment`
+- **Mô tả:** Ghi nhận thợ đã thu tiền mặt từ khách và trích hoa hồng sàn 15% từ ví ký quỹ.
+- **Quyền hạn (RBAC):** `SUPER_ADMIN`, `TENANT_ADMIN`.
+- **Request Body:**
+  ```json
+  {
+    "amount": 200000,
+    "note": "Thu tiền mặt trực tiếp tại nhà khách",
+    "deductCommission": true
+  }
+  ```
+- **Response (200 OK):**
+  ```json
+  {
+    "id": "booking-uuid",
+    "code": "BK-2026-0001",
+    "paymentMethod": "CASH",
+    "paymentStatus": "RELEASED_TO_TASKER",
+    "paidAt": "2026-10-07T07:15:00.000Z",
+    "walletTransactions": [
+      {
+        "id": "tx-uuid",
+        "code": "TX-1760000000-1234",
+        "type": "COMMISSION_FEE",
+        "direction": "OUT",
+        "amount": 30000,
+        "balanceBefore": 500000,
+        "balanceAfter": 470000,
+        "notes": "Phí hoa hồng sàn 15% cho đơn BK-2026-0001"
+      }
+    ]
+  }
+  ```
+
+---
+
+## 6. Ma Trận Kiểm Thử & Xác Minh (Test Verification Matrix)
+
+| Khu Vực | File Test | Số Ca Kiểm Thử | Trạng Thái |
+| :--- | :--- | :---: | :---: |
+| **Shared Types** | `packages/shared-types/test/types.spec.ts` | 9 tests | ✅ PASS (100%) |
+| **Backend API** | `apps/api/test/booking.spec.ts` (Test Suite 7) | 4 tests | ✅ PASS (100%) |
+| **Backend API Total** | Toàn bộ 7 Test Suites của Backend | 231 tests | ✅ PASS (100%) |
+| **Frontend Integration** | `apps/admin/src/api/booking-integration.spec.ts` (Test 11) | 1 test | ✅ PASS (100%) |
+| **Frontend Admin Total** | Toàn bộ 11 Test Suites của Admin Portal | 83 tests | ✅ PASS (100%) |
+| **TypeScript Compilation**| `apps/admin run build` + `apps/api run build` | 0 errors | ✅ PASS (100%) |

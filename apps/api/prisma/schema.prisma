@@ -53,6 +53,13 @@ enum PaymentStatus {
   DISPUTED
 }
 
+enum PaymentMethod {
+  CASH
+  MOMO
+  VNPAY
+  BANK_TRANSFER
+}
+
 enum WalletTransactionType {
   TOP_UP_DEPOSIT
   WITHDRAW_DEPOSIT
@@ -226,6 +233,8 @@ model Booking {
   serviceId         String
   status            BookingStatus      @default(PENDING_DISPATCH)
   paymentStatus     PaymentStatus      @default(PENDING)
+  paymentMethod     PaymentMethod      @default(CASH)
+  paidAt            DateTime?
   pricingType       ServicePricingType
   baseUnitPrice     Float
   durationHours     Float?

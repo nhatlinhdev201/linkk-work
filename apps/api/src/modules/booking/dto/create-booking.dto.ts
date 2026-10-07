@@ -9,7 +9,9 @@ import {
   Min,
   Max,
   IsDateString,
+  IsEnum,
 } from 'class-validator';
+import { PaymentMethod } from '@linkkwork/shared-types';
 
 export class CreateBookingDto {
   @ApiProperty({ description: 'ID dịch vụ cần đặt', example: 'srv-hourly-cleaning' })
@@ -89,4 +91,13 @@ export class CreateBookingDto {
   @IsOptional()
   @IsString()
   note?: string;
+
+  @ApiPropertyOptional({
+    description: 'Phương thức thanh toán',
+    example: 'CASH',
+    enum: PaymentMethod,
+  })
+  @IsOptional()
+  @IsEnum(PaymentMethod)
+  paymentMethod?: PaymentMethod;
 }

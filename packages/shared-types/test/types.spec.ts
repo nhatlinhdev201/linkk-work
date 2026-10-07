@@ -4,6 +4,7 @@ import {
   UserRole,
   ServicePricingType,
   PaymentStatus,
+  PaymentMethod,
   PricingCalculationInput,
   PricingCalculationResult,
   ClaimJobInput,
@@ -121,6 +122,21 @@ describe('Shared Domain Types & State Machines', () => {
             'REFUNDED',
             'DISPUTED',
           ]),
+        );
+      });
+    });
+
+    describe('PaymentMethod', () => {
+      it('should define all 4 payment methods', () => {
+        expect(PaymentMethod.CASH).toBe('CASH');
+        expect(PaymentMethod.MOMO).toBe('MOMO');
+        expect(PaymentMethod.VNPAY).toBe('VNPAY');
+        expect(PaymentMethod.BANK_TRANSFER).toBe('BANK_TRANSFER');
+
+        const paymentMethods = Object.values(PaymentMethod);
+        expect(paymentMethods).toHaveLength(4);
+        expect(paymentMethods).toEqual(
+          expect.arrayContaining(['CASH', 'MOMO', 'VNPAY', 'BANK_TRANSFER']),
         );
       });
     });

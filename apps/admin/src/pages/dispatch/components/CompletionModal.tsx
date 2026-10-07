@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Booking } from '../../../types';
 import { Button } from '../../../components/common/Button';
-import { CheckCircle2, Star, Check, X } from 'lucide-react';
+import { CheckCircle2, Star, Check, X, Banknote } from 'lucide-react';
 
 interface CompletionModalProps {
   isOpen: boolean;
@@ -20,12 +20,16 @@ export const CompletionModal: React.FC<CompletionModalProps> = ({
 }) => {
   const [rating, setRating] = useState<number>(5);
   const [note, setNote] = useState<string>('');
+  const [collectedCash, setCollectedCash] = useState<boolean>(true);
 
   if (!isOpen || !booking) return null;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    await onConfirm(rating, note);
+    const finalNote = note.trim()
+      ? `${note.trim()}${collectedCash ? ' (Đã thu đủ tiền mặt)' : ''}`
+      : (collectedCash ? 'Thợ đã thu đủ tiền mặt từ khách hàng' : 'Nghiệm thu hoàn thành đơn');
+    await onConfirm(rating, finalNote);
   };
 
   return (
@@ -95,6 +99,36 @@ export const CompletionModal: React.FC<CompletionModalProps> = ({
                     : '1/5 - Không hài lòng'}
                 </span>
               </div>
+            </div>
+
+            {/* Khối thu tiền mặt & trích hoa hồng */}
+            <div className="p-3 bg-emerald-50/80 border border-emerald-200 rounded-xl space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-emerald-900 flex items-center gap-1.5">
+                  <Banknote className="w-4 h-4 text-emerald-600" />
+                  Thanh toán Tiền mặt (CASH)
+                </span>
+                <span className="text-xs font-black text-emerald-700">
+                  {booking.totalAmount.toLocaleString('vi-VN')} đ
+                </span>
+              </div>
+              <div className="text-[11px] text-emerald-800 flex items-center justify-between pt-1 border-t border-emerald-200/60">
+                <span>Dự toán hoa hồng sàn (15%):</span>
+                <span className="font-semibold text-emerald-900">
+                  -{Math.round(booking.totalAmount * 0.15).toLocaleString('vi-VN')} đ (trừ ví ký quỹ thợ)
+                </span>
+              </div>
+              <label className="flex items-center gap-2 pt-1 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={collectedCash}
+                  onChange={(e) => setCollectedCash(e.target.checked)}
+                  className="rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 w-3.5 h-3.5"
+                />
+                <span className="text-[11px] text-slate-700 font-medium">
+                  Xác nhận thợ đã thu đủ {booking.totalAmount.toLocaleString('vi-VN')} đ tiền mặt từ khách
+                </span>
+              </label>
             </div>
 
             <div>

@@ -8,6 +8,7 @@ import {
   useAssignBookingMutation,
   useBroadcastBookingMutation,
   useTransitionBookingStatusMutation,
+  useRecordCashPaymentMutation,
 } from '../../api/queries';
 import { Card, CardHeader, CardTitle, CardContent } from '../../components/common/Card';
 import { Button } from '../../components/common/Button';
@@ -37,12 +38,15 @@ import {
   Globe,
   SlidersHorizontal,
   X,
+  Banknote,
 } from 'lucide-react';
 import {
   DispatchStepper,
   CompletionModal,
   CancelBookingModal,
   AuditTimeline,
+  RecordCashPaymentModal,
+  PaymentLedgerCard,
   getStatusBadgeInfo,
 } from './components';
 
@@ -90,6 +94,7 @@ export const DispatchPage: React.FC = () => {
   const assignMutation = useAssignBookingMutation(queryTenantId);
   const broadcastMutation = useBroadcastBookingMutation(queryTenantId);
   const transitionMutation = useTransitionBookingStatusMutation(queryTenantId);
+  const recordCashPaymentMutation = useRecordCashPaymentMutation(queryTenantId);
 
   const [activeTab, setActiveTab] = useState<QueueTab>('pending');
   const [selectedBookingId, setSelectedBookingId] = useState<string | null>(urlBookingId);
@@ -100,6 +105,7 @@ export const DispatchPage: React.FC = () => {
   // Modals state
   const [isCompleteModalOpen, setIsCompleteModalOpen] = useState(false);
   const [isCancelModalOpen, setIsCancelModalOpen] = useState(false);
+  const [isRecordPaymentModalOpen, setIsRecordPaymentModalOpen] = useState(false);
 
   const hasInitializedUrlRef = useRef<string | null>(null);
 
@@ -390,6 +396,25 @@ export const DispatchPage: React.FC = () => {
         note: `Nghiệm thu đạt ${rating}/5 sao${note ? `: ${note}` : ''}`,
       });
       setIsCompleteModalOpen(false);
+    } catch {
+      // Handled in mutation onError
+    }
+  };
+
+  const handleConfirmCashPayment = async (
+    amount: number,
+    note: string,
+    deductCommission: boolean
+  ) => {
+    if (!selectedBooking) return;
+    try {
+      await recordCashPaymentMutation.mutateAsync({
+        bookingId: selectedBooking.id,
+        amount,
+        note,
+        deductCommission,
+      });
+      setIsRecordPaymentModalOpen(false);
     } catch {
       // Handled in mutation onError
     }
@@ -930,9 +955,30 @@ export const DispatchPage: React.FC = () => {
                           Đã hoàn thành toàn trình
                         </span>
                       )}
+
+                      {/* Action Ghi nhận thu tiền mặt nếu chưa thu */}
+                      {selectedBooking.paymentStatus !== 'RELEASED_TO_TASKER' &&
+                        !['DRAFT', 'CANCELLED'].includes(selectedBooking.status) && (
+                          <Button
+                            size="sm"
+                            variant="primary"
+                            className="bg-emerald-600 hover:bg-emerald-700 text-white"
+                            disabled={recordCashPaymentMutation.isPending}
+                            onClick={() => setIsRecordPaymentModalOpen(true)}
+                            leftIcon={<Banknote className="w-3.5 h-3.5" />}
+                          >
+                            Ghi nhận thu tiền mặt
+                          </Button>
+                        )}
                     </div>
                   </div>
                 </Card>
+
+                {/* Payment & Ledger Card */}
+                <PaymentLedgerCard
+                  booking={selectedBooking}
+                  onRecordPaymentClick={() => setIsRecordPaymentModalOpen(true)}
+                />
 
                 {/* Audit Timeline / Event Logs */}
                 <AuditTimeline events={selectedBooking.events} />
@@ -1173,6 +1219,15 @@ export const DispatchPage: React.FC = () => {
         isSubmitting={transitionMutation.isPending}
         onClose={() => setIsCancelModalOpen(false)}
         onConfirm={handleConfirmCancel}
+      />
+
+      {/* Record Cash Payment Modal */}
+      <RecordCashPaymentModal
+        isOpen={isRecordPaymentModalOpen}
+        booking={selectedBooking || null}
+        isSubmitting={recordCashPaymentMutation.isPending}
+        onClose={() => setIsRecordPaymentModalOpen(false)}
+        onConfirm={handleConfirmCashPayment}
       />
     </div>
   );

@@ -4,6 +4,7 @@ export * from './enums/tenant-status.enum';
 export * from './enums/user-role.enum';
 export * from './enums/service-pricing-type.enum';
 export * from './enums/payment-status.enum';
+export * from './enums/payment-method.enum';
 
 // Interfaces & DTOs
 export * from './interfaces/pricing.interface';

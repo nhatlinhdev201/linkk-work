@@ -16,6 +16,7 @@ import { CreateBookingDto } from './dto/create-booking.dto';
 import { AssignTaskerDto } from './dto/assign-tasker.dto';
 import { TransitionStatusDto } from './dto/transition-status.dto';
 import { QueryBookingsDto } from './dto/query-bookings.dto';
+import { RecordCashPaymentDto } from './dto/record-cash-payment.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { TenantContextGuard } from '../auth/guards/tenant-context.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
@@ -133,6 +134,26 @@ export class BookingController {
       dto,
       effectiveTenantId,
       triggeredBy,
+    );
+  }
+
+  @Post(':id/record-cash-payment')
+  @ApiOperation({ summary: 'Ghi nhận thanh toán tiền mặt và tự động trích hoa hồng ví ký quỹ của thợ' })
+  async recordCashPayment(
+    @Param('id') id: string,
+    @Body() dto: RecordCashPaymentDto,
+    @Req() req: RequestWithTenant,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    const isSuperAdmin = user?.isSuperAdmin === true || user?.role === UserRole.SUPER_ADMIN;
+    const effectiveTenantId = getEffectiveTenantId(user, req);
+    const triggeredBy = `${user?.email || 'Admin'} (${user?.id || 'admin'})`;
+    return this.bookingService.recordCashPayment(
+      id,
+      dto,
+      effectiveTenantId,
+      triggeredBy,
+      isSuperAdmin,
     );
   }
 }

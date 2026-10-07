@@ -273,5 +273,42 @@ test('Admin Booking & Dispatch Engine Integration Suite', async (t) => {
       }
     }
   );
+
+  await t.test(
+    '11. Cash payment recording via api.recordCashPayment sets paymentStatus to RELEASED_TO_TASKER and paymentMethod to CASH',
+    async () => {
+      const cashBooking = await api.createManualBooking(
+        partnerTenantId,
+        'Công ty Vệ Sinh Ánh Dương',
+        {
+          customerName: 'Trần Văn Tiền Mặt',
+          customerPhone: '0938111222',
+          addressText: '88 Hàm Nghi, Q1',
+          serviceName: 'Dọn dẹp nhà theo giờ',
+          pricingType: 'HOURLY',
+          scheduledAt: new Date(Date.now() + 86400000).toISOString(),
+          durationHours: 3,
+          totalAmount: 240000,
+          paymentMethod: 'CASH',
+        }
+      );
+      assert.ok(cashBooking.id);
+      assert.equal(cashBooking.paymentMethod, 'CASH');
+
+      // Direct assignment
+      await api.directAssignBooking(cashBooking.id, availableTaskerId, partnerTenantId);
+
+      // Record cash payment
+      const paidBooking = await api.recordCashPayment(cashBooking.id, {
+        amount: 240000,
+        note: 'Đã thu đủ 240.000đ tiền mặt từ khách hàng',
+        deductCommission: true,
+      });
+
+      assert.equal(paidBooking.paymentStatus, 'RELEASED_TO_TASKER');
+      assert.equal(paidBooking.paymentMethod, 'CASH');
+      assert.ok(paidBooking.paidAt);
+    }
+  );
 });
 

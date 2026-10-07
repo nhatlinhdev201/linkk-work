@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../client';
-import { Booking, BookingStatus, PricingModel } from '../../types';
+import { Booking, BookingStatus, PricingModel, PaymentMethod } from '../../types';
 import { QUERY_KEYS } from '../../lib/queryClient';
 import { useToast } from '../../components/feedback/ToastContext';
 
@@ -15,6 +15,7 @@ export interface CreateBookingVariables {
   scheduledAt: string;
   durationHours?: number;
   totalAmount: number;
+  paymentMethod?: PaymentMethod;
 }
 
 export interface AssignBookingVariables {
@@ -47,6 +48,7 @@ export const useCreateBookingMutation = (tenantId?: string | null) => {
         scheduledAt: vars.scheduledAt,
         durationHours: vars.durationHours,
         totalAmount: vars.totalAmount,
+        paymentMethod: vars.paymentMethod,
       });
     },
     onSuccess: (newBooking) => {
@@ -269,6 +271,45 @@ export const useTransitionBookingStatusMutation = (tenantId?: string | null) => 
     },
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.bookings(tenantId) });
+    },
+  });
+};
+
+export interface RecordCashPaymentVariables {
+  bookingId: string;
+  amount?: number;
+  note?: string;
+  deductCommission?: boolean;
+}
+
+export const useRecordCashPaymentMutation = (tenantId?: string | null) => {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  return useMutation<Booking, Error, RecordCashPaymentVariables>({
+    mutationFn: async ({ bookingId, amount, note, deductCommission }) => {
+      return api.recordCashPayment(bookingId, { amount, note, deductCommission });
+    },
+    onSuccess: (updatedBooking) => {
+      queryClient.setQueryData<Booking[]>(QUERY_KEYS.bookings(tenantId), (old) => {
+        if (!old) return [];
+        return old.map((b) => (b.id === updatedBooking.id ? updatedBooking : b));
+      });
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.bookings(tenantId) });
+      queryClient.invalidateQueries({ queryKey: ['taskers'] });
+      queryClient.invalidateQueries({ queryKey: ['taskerTransactions'] });
+      toast({
+        type: 'success',
+        title: 'Ghi nhận thanh toán thành công!',
+        message: `Đơn [${updatedBooking.code}] đã được ghi nhận thanh toán tiền mặt và trích hoa hồng.`,
+      });
+    },
+    onError: (err) => {
+      toast({
+        type: 'error',
+        title: 'Ghi nhận thanh toán thất bại',
+        message: err.message || 'Không thể ghi nhận thanh toán tiền mặt.',
+      });
     },
   });
 };

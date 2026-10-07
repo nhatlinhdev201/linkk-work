@@ -4,7 +4,7 @@ import * as request from 'supertest';
 import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/common/prisma/prisma.service';
 import { RedisService } from '../src/common/redis/redis.service';
-import { BookingStatus, ServicePricingType, UserRole } from '@linkkwork/shared-types';
+import { BookingStatus, ServicePricingType, UserRole, PaymentMethod } from '@linkkwork/shared-types';
 
 describe('Booking Engine & Dispatch Module E2E / Integration Tests', () => {
   let app: INestApplication;
@@ -679,6 +679,101 @@ describe('Booking Engine & Dispatch Module E2E / Integration Tests', () => {
       // Check Redis radar status
       const redisStatus = await redis.get(`job:status:${bookingId}`);
       expect(redisStatus).toBe('OPEN');
+    });
+  });
+
+  describe('7. Cash Payment & Commission Ledger', () => {
+    let cashBookingId: string;
+    let initialDeposit: number;
+
+    it('should create booking with CASH paymentMethod and assign tasker', async () => {
+      // Check tasker initial deposit balance
+      const profile = await prisma.taskerProfile.findUnique({
+        where: { userId: anhDuongTaskerId },
+      });
+      initialDeposit = profile?.depositBalance ?? 500000;
+
+      const res = await request(app.getHttpServer())
+        .post('/api/v1/bookings')
+        .set('Authorization', `Bearer ${anhDuongAdminToken}`)
+        .send({
+          serviceId: hourlyServiceId,
+          scheduledAt: new Date(Date.now() + 600000).toISOString(),
+          customerName: 'Khách Tiền Mặt Test',
+          customerPhone: '0901237777',
+          addressText: '123 Phố Huế, Hai Bà Trưng, Hà Nội',
+          durationHours: 3,
+          paymentMethod: PaymentMethod.CASH,
+        })
+        .expect(201);
+
+      cashBookingId = res.body.id;
+      expect(res.body.paymentMethod).toBe(PaymentMethod.CASH);
+      expect(res.body.paymentStatus).toBe('PENDING');
+
+      // Assign tasker
+      await request(app.getHttpServer())
+        .post(`/api/v1/bookings/${cashBookingId}/assign`)
+        .set('Authorization', `Bearer ${anhDuongAdminToken}`)
+        .send({ taskerId: anhDuongTaskerId })
+        .expect(201);
+    });
+
+    it('should record cash payment and automatically deduct commission from tasker deposit balance', async () => {
+      const res = await request(app.getHttpServer())
+        .post(`/api/v1/bookings/${cashBookingId}/record-cash-payment`)
+        .set('Authorization', `Bearer ${anhDuongAdminToken}`)
+        .send({
+          note: 'Khách hàng thanh toán đủ 240.000đ tiền mặt cho thợ tại nhà',
+        })
+        .expect(201);
+
+      expect(res.body.paymentStatus).toBe('RELEASED_TO_TASKER');
+      expect(res.body.paymentMethod).toBe(PaymentMethod.CASH);
+      expect(res.body.paidAt).toBeDefined();
+
+      // Verify commission deduction in tasker profile
+      const updatedProfile = await prisma.taskerProfile.findUnique({
+        where: { userId: anhDuongTaskerId },
+      });
+      // 15% commission of 240,000đ = 36,000đ
+      const expectedCommission = Math.round(res.body.totalAmount * 0.15);
+      expect(updatedProfile?.depositBalance).toBe(initialDeposit - expectedCommission);
+
+      // Verify wallet transaction
+      const tx = await prisma.walletTransaction.findFirst({
+        where: { bookingId: cashBookingId },
+      });
+      expect(tx).toBeDefined();
+      expect(tx?.type).toBe('COMMISSION_FEE');
+      expect(tx?.amount).toBe(expectedCommission);
+      expect(tx?.direction).toBe('OUT');
+      expect(tx?.balanceBefore).toBe(initialDeposit);
+      expect(tx?.balanceAfter).toBe(initialDeposit - expectedCommission);
+    });
+
+    it('should reject recording cash payment a second time (idempotency/duplicate check)', async () => {
+      await request(app.getHttpServer())
+        .post(`/api/v1/bookings/${cashBookingId}/record-cash-payment`)
+        .set('Authorization', `Bearer ${anhDuongAdminToken}`)
+        .send({
+          note: 'Cố tình ghi nhận lần 2',
+        })
+        .expect(400);
+    });
+
+    it('should include walletTransactions and payment fields in booking detail query', async () => {
+      const res = await request(app.getHttpServer())
+        .get(`/api/v1/bookings/${cashBookingId}`)
+        .set('Authorization', `Bearer ${anhDuongAdminToken}`)
+        .expect(200);
+
+      expect(res.body.paymentStatus).toBe('RELEASED_TO_TASKER');
+      expect(res.body.paymentMethod).toBe(PaymentMethod.CASH);
+      expect(res.body.paidAt).toBeDefined();
+      expect(res.body.walletTransactions).toBeDefined();
+      expect(res.body.walletTransactions.length).toBeGreaterThanOrEqual(1);
+      expect(res.body.walletTransactions[0].type).toBe('COMMISSION_FEE');
     });
   });
 });

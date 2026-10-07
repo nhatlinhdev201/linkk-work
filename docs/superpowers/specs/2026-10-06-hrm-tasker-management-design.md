@@ -310,7 +310,11 @@ sequenceDiagram
             API->>DB: UPDATE tasker_profiles SET currentStatus = status
         else status == COMPLETED
             API->>DB: UPDATE tasker_profiles SET completedJobsCount += 1
-            API->>DB: UPDATE bookings SET paymentStatus = RELEASED_TO_TASKER
+            API->>DB: UPDATE bookings SET paymentStatus = RELEASED_TO_TASKER, paidAt = now()
+            opt Chưa thanh toán trước đó & có chỉ định thợ
+                API->>DB: UPDATE tasker_profiles SET depositBalance = depositBalance - commission(15%)
+                API->>DB: INSERT wallet_transactions (type: COMMISSION_FEE, direction: OUT, amount: 15%)
+            end
             API->>DB: COUNT remaining active bookings for tasker
             opt remainingActive == 0
                 API->>DB: UPDATE tasker_profiles SET currentStatus = 'IDLE'

@@ -65,6 +65,7 @@ export const SystemDocsPage: React.FC = () => {
     { method: 'POST', path: '/api/v1/bookings/:id/assign', desc: 'Chỉ định trực tiếp thợ cho đơn hàng (hỗ trợ liên sàn)', role: 'Admin' },
     { method: 'POST', path: '/api/v1/bookings/:id/broadcast', desc: 'Bắn đơn lên sàn radar diện rộng (atomic claim CAS)', role: 'Admin' },
     { method: 'PATCH', path: '/api/v1/bookings/:id/status', desc: 'Chuyển trạng thái đơn tuân thủ Booking State Machine', role: 'Admin / Tasker' },
+    { method: 'POST', path: '/api/v1/bookings/:id/record-cash-payment', desc: 'Ghi nhận thanh toán tiền mặt & tự động trích hoa hồng sàn 15% từ ví thợ', role: 'Admin / Tasker' },
     { method: 'GET', path: '/api/v1/taskers', desc: 'Danh sách thợ, tính toán availability & ca việc activeJob', role: 'Admin' },
     { method: 'POST', path: '/api/v1/taskers', desc: 'Đăng ký thợ mới, hồ sơ năng lực & bút toán ký quỹ ban đầu', role: 'Admin' },
     { method: 'PATCH', path: '/api/v1/taskers/:id/work-floor', desc: 'Cấu hình bán kính quét việc (1-100km) & radar tự động', role: 'Admin / Tasker' },
@@ -588,7 +589,7 @@ export const SystemDocsPage: React.FC = () => {
               </h2>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
               <Card className="border-slate-200 shadow-2xs">
                 <CardContent className="p-5 space-y-3">
                   <span className="w-7 h-7 rounded-lg bg-blue-100 text-blue-700 font-bold flex items-center justify-center text-xs">
@@ -623,6 +624,18 @@ export const SystemDocsPage: React.FC = () => {
                   <h3 className="font-bold text-slate-900 text-sm">Nghiệm thu &amp; Đánh giá</h3>
                   <p className="text-xs text-slate-600">
                     Sau khi thợ báo hoàn thành (PENDING_ACCEPTANCE), khách hàng kiểm tra chất lượng, xác nhận nghiệm thu và đánh giá 1-5 sao kèm nhận xét phản hồi.
+                  </p>
+                </CardContent>
+              </Card>
+
+              <Card className="border-slate-200 shadow-2xs">
+                <CardContent className="p-5 space-y-3">
+                  <span className="w-7 h-7 rounded-lg bg-amber-100 text-amber-700 font-bold flex items-center justify-center text-xs">
+                    04
+                  </span>
+                  <h3 className="font-bold text-slate-900 text-sm">Thanh toán Tiền mặt &amp; Sổ cái</h3>
+                  <p className="text-xs text-slate-600">
+                    Khách trả 100% tiền mặt cho thợ. Hệ thống tự động khấu trừ 15% hoa hồng sàn từ ví ký quỹ của thợ và ghi lịch sử sổ cái. Cổng điện tử (MoMo/VNPAY/VietQR) tạm thời để trạng thái "Hiện chưa hỗ trợ".
                   </p>
                 </CardContent>
               </Card>

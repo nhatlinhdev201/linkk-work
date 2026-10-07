@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Booking, PricingModel } from '../../types';
+import { Booking, PricingModel, PaymentMethod } from '../../types';
 import { useAuth } from '../../auth/AuthContext';
 import { useToast } from '../../components/feedback/ToastContext';
 import { useBookingsQuery, useCreateBookingMutation } from '../../api/queries';
@@ -31,6 +31,10 @@ import {
   ArrowRight,
   Sparkles,
   CheckCircle,
+  Banknote,
+  Wallet,
+  CreditCard,
+  QrCode,
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { getStatusBadgeInfo } from '../dispatch/components';
@@ -59,6 +63,7 @@ export const BookingsPage: React.FC = () => {
     scheduledAt: new Date(Date.now() + 3600 * 2000).toISOString().slice(0, 16),
     durationHours: 3,
     totalAmount: 240000,
+    paymentMethod: 'CASH' as PaymentMethod,
   });
 
   const validateForm = (): boolean => {
@@ -104,6 +109,7 @@ export const BookingsPage: React.FC = () => {
         scheduledAt: form.scheduledAt,
         durationHours: Number(form.durationHours),
         totalAmount: Number(form.totalAmount),
+        paymentMethod: form.paymentMethod,
       });
 
       setIsModalOpen(false);
@@ -116,6 +122,7 @@ export const BookingsPage: React.FC = () => {
         scheduledAt: new Date(Date.now() + 3600 * 2000).toISOString().slice(0, 16),
         durationHours: 3,
         totalAmount: 240000,
+        paymentMethod: 'CASH',
       });
     } catch {
       // Error toast already handled by mutation hook
@@ -347,9 +354,21 @@ export const BookingsPage: React.FC = () => {
                       </TableCell>
 
                       <TableCell align="right">
-                        <span className="font-bold text-slate-900 text-xs">
+                        <span className="font-bold text-slate-900 text-xs block">
                           {b.totalAmount.toLocaleString('vi-VN')} đ
                         </span>
+                        <div className="flex items-center justify-end gap-1 mt-0.5">
+                          <span className="text-[10px] text-slate-500 font-medium">Tiền mặt</span>
+                          {b.paymentStatus === 'RELEASED_TO_TASKER' ? (
+                            <span className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-emerald-100 text-emerald-700">
+                              Đã thu
+                            </span>
+                          ) : (
+                            <span className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-amber-100 text-amber-700">
+                              Chờ thu
+                            </span>
+                          )}
+                        </div>
                       </TableCell>
 
                       <TableCell align="center">{getStatusBadge(b.status)}</TableCell>
@@ -435,9 +454,23 @@ export const BookingsPage: React.FC = () => {
                   <div className="flex items-center justify-between pt-1">
                     <div>
                       <span className="text-[10px] text-slate-400 block font-medium">Tổng cước:</span>
-                      <span className="text-sm font-black text-brand-600">
-                        {b.totalAmount.toLocaleString('vi-VN')} đ
-                      </span>
+                      <div className="flex items-center gap-1.5 mt-0.5">
+                        <span className="text-sm font-black text-brand-600">
+                          {b.totalAmount.toLocaleString('vi-VN')} đ
+                        </span>
+                        <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-slate-100 text-slate-600">
+                          Tiền mặt
+                        </span>
+                        {b.paymentStatus === 'RELEASED_TO_TASKER' ? (
+                          <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700">
+                            Đã thu
+                          </span>
+                        ) : (
+                          <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-amber-100 text-amber-700">
+                            Chờ thu
+                          </span>
+                        )}
+                      </div>
                     </div>
 
                     <Link
@@ -608,6 +641,97 @@ export const BookingsPage: React.FC = () => {
               onChange={(e) => setForm({ ...form, totalAmount: Number(e.target.value) })}
               required
             />
+          </div>
+
+          {/* Phương thức thanh toán & Đóng băng cổng chưa hỗ trợ */}
+          <div className="space-y-2 pt-2 border-t border-slate-100">
+            <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
+              Phương thức thanh toán
+            </label>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+              {/* Option 1: Tiền mặt (CASH) - Active & Default */}
+              <div
+                onClick={() => setForm({ ...form, paymentMethod: 'CASH' })}
+                className="flex items-center justify-between p-3 rounded-xl border-2 border-emerald-500 bg-emerald-50/50 cursor-pointer shadow-xs transition-all hover:bg-emerald-50"
+              >
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold shrink-0">
+                    <Banknote className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-xs font-bold text-slate-900">Tiền mặt (CASH)</span>
+                      <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-800">
+                        Khả dụng
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-slate-500 mt-0.5">
+                      Thợ thu trực tiếp từ khách khi hoàn tất
+                    </p>
+                  </div>
+                </div>
+                <div className="w-4 h-4 rounded-full border-2 border-emerald-600 bg-emerald-600 flex items-center justify-center">
+                  <div className="w-1.5 h-1.5 rounded-full bg-white" />
+                </div>
+              </div>
+
+              {/* Option 2: Ví điện tử MoMo - Disabled */}
+              <div className="flex items-center justify-between p-3 rounded-xl border border-slate-200 bg-slate-50/70 opacity-60 cursor-not-allowed select-none">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-lg bg-slate-200 text-slate-500 flex items-center justify-center font-bold shrink-0">
+                    <Wallet className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-xs font-bold text-slate-600">Ví điện tử MoMo</span>
+                      <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-slate-200 text-slate-500">
+                        Hiện chưa hỗ trợ
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-slate-400 mt-0.5">Thanh toán qua ví điện tử MoMo</p>
+                  </div>
+                </div>
+                <div className="w-4 h-4 rounded-full border border-slate-300" />
+              </div>
+
+              {/* Option 3: Cổng VNPAY / Thẻ ATM - Disabled */}
+              <div className="flex items-center justify-between p-3 rounded-xl border border-slate-200 bg-slate-50/70 opacity-60 cursor-not-allowed select-none">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-lg bg-slate-200 text-slate-500 flex items-center justify-center font-bold shrink-0">
+                    <CreditCard className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-xs font-bold text-slate-600">Cổng VNPAY / Thẻ ATM</span>
+                      <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-slate-200 text-slate-500">
+                        Hiện chưa hỗ trợ
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-slate-400 mt-0.5">Thẻ Visa/Mastercard/ATM nội địa</p>
+                  </div>
+                </div>
+                <div className="w-4 h-4 rounded-full border border-slate-300" />
+              </div>
+
+              {/* Option 4: Chuyển khoản QR (VietQR) - Disabled */}
+              <div className="flex items-center justify-between p-3 rounded-xl border border-slate-200 bg-slate-50/70 opacity-60 cursor-not-allowed select-none">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-lg bg-slate-200 text-slate-500 flex items-center justify-center font-bold shrink-0">
+                    <QrCode className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-xs font-bold text-slate-600">Chuyển khoản QR (VietQR)</span>
+                      <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-slate-200 text-slate-500">
+                        Hiện chưa hỗ trợ
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-slate-400 mt-0.5">Quét mã QR ngân hàng tự động</p>
+                  </div>
+                </div>
+                <div className="w-4 h-4 rounded-full border border-slate-300" />
+              </div>
+            </div>
           </div>
         </form>
       </Modal>
