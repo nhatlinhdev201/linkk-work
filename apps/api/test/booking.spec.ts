@@ -5,6 +5,7 @@ import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/common/prisma/prisma.service';
 import { RedisService } from '../src/common/redis/redis.service';
 import { BookingStatus, ServicePricingType, UserRole, PaymentMethod } from '@linkkwork/shared-types';
+import { WalletTransaction, WalletTransactionType } from '@prisma/client';
 
 describe('Booking Engine & Dispatch Module E2E / Integration Tests', () => {
   let app: INestApplication;
@@ -650,6 +651,30 @@ describe('Booking Engine & Dispatch Module E2E / Integration Tests', () => {
 
       expect(res.body.status).toBe(BookingStatus.COMPLETED);
       expect(res.body.paymentStatus).toBe('RELEASED_TO_TASKER');
+
+      // Verify dual-entry transactions were created upon completion
+      const completionTransactions = await prisma.walletTransaction.findMany({
+        where: { bookingId: lifecycleBookingId },
+      });
+      expect(completionTransactions).toHaveLength(2);
+
+      const cashTx = completionTransactions.find(
+        (t: WalletTransaction) => t.type === WalletTransactionType.CASH_COLLECTED,
+      );
+      expect(cashTx).toBeDefined();
+      expect(cashTx?.sourceType).toBe('CUSTOMER');
+      expect(cashTx?.targetType).toBe('TASKER');
+      expect(cashTx?.paymentMethod).toBe(PaymentMethod.CASH);
+      expect(cashTx?.direction).toBe('IN');
+
+      const commissionTx = completionTransactions.find(
+        (t: WalletTransaction) => t.type === WalletTransactionType.COMMISSION_FEE,
+      );
+      expect(commissionTx).toBeDefined();
+      expect(commissionTx?.sourceType).toBe('TASKER');
+      expect(commissionTx?.targetType).toBe('TENANT');
+      expect(commissionTx?.paymentMethod).toBe(PaymentMethod.WALLET);
+      expect(commissionTx?.direction).toBe('OUT');
     });
   });
 
@@ -740,16 +765,38 @@ describe('Booking Engine & Dispatch Module E2E / Integration Tests', () => {
       const expectedCommission = Math.round(res.body.totalAmount * 0.15);
       expect(updatedProfile?.depositBalance).toBe(initialDeposit - expectedCommission);
 
-      // Verify wallet transaction
-      const tx = await prisma.walletTransaction.findFirst({
+      // Verify dual-entry wallet transactions
+      const transactions = await prisma.walletTransaction.findMany({
         where: { bookingId: cashBookingId },
+        orderBy: { createdAt: 'asc' },
       });
-      expect(tx).toBeDefined();
-      expect(tx?.type).toBe('COMMISSION_FEE');
-      expect(tx?.amount).toBe(expectedCommission);
-      expect(tx?.direction).toBe('OUT');
-      expect(tx?.balanceBefore).toBe(initialDeposit);
-      expect(tx?.balanceAfter).toBe(initialDeposit - expectedCommission);
+      expect(transactions).toHaveLength(2);
+
+      const cashTx = transactions.find((t: WalletTransaction) => t.type === WalletTransactionType.CASH_COLLECTED);
+      expect(cashTx).toBeDefined();
+      expect(cashTx?.amount).toBe(res.body.totalAmount);
+      expect(cashTx?.direction).toBe('IN');
+      expect(cashTx?.balanceBefore).toBe(initialDeposit);
+      expect(cashTx?.balanceAfter).toBe(initialDeposit);
+      expect(cashTx?.sourceType).toBe('CUSTOMER');
+      expect(cashTx?.sourceName).toBe('Khách Tiền Mặt Test');
+      expect(cashTx?.targetType).toBe('TASKER');
+      expect(cashTx?.targetId).toBe(anhDuongTaskerId);
+      expect(cashTx?.targetName).toBe('Nguyễn Văn Thợ Ánh Dương');
+      expect(cashTx?.paymentMethod).toBe(PaymentMethod.CASH);
+
+      const commissionTx = transactions.find((t: WalletTransaction) => t.type === WalletTransactionType.COMMISSION_FEE);
+      expect(commissionTx).toBeDefined();
+      expect(commissionTx?.amount).toBe(expectedCommission);
+      expect(commissionTx?.direction).toBe('OUT');
+      expect(commissionTx?.balanceBefore).toBe(initialDeposit);
+      expect(commissionTx?.balanceAfter).toBe(initialDeposit - expectedCommission);
+      expect(commissionTx?.sourceType).toBe('TASKER');
+      expect(commissionTx?.sourceId).toBe(anhDuongTaskerId);
+      expect(commissionTx?.sourceName).toBe('Nguyễn Văn Thợ Ánh Dương');
+      expect(commissionTx?.targetType).toBe('TENANT');
+      expect(commissionTx?.targetId).toBe(anhDuongTenantId);
+      expect(commissionTx?.paymentMethod).toBe(PaymentMethod.WALLET);
     });
 
     it('should reject recording cash payment a second time (idempotency/duplicate check)', async () => {
@@ -772,8 +819,24 @@ describe('Booking Engine & Dispatch Module E2E / Integration Tests', () => {
       expect(res.body.paymentMethod).toBe(PaymentMethod.CASH);
       expect(res.body.paidAt).toBeDefined();
       expect(res.body.walletTransactions).toBeDefined();
-      expect(res.body.walletTransactions.length).toBeGreaterThanOrEqual(1);
-      expect(res.body.walletTransactions[0].type).toBe('COMMISSION_FEE');
+      expect(res.body.walletTransactions).toHaveLength(2);
+
+      const cashTx = res.body.walletTransactions.find(
+        (t: WalletTransaction) => t.type === WalletTransactionType.CASH_COLLECTED,
+      );
+      expect(cashTx).toBeDefined();
+      expect(cashTx.sourceType).toBe('CUSTOMER');
+      expect(cashTx.targetType).toBe('TASKER');
+      expect(cashTx.targetName).toBe('Nguyễn Văn Thợ Ánh Dương');
+      expect(cashTx.paymentMethod).toBe(PaymentMethod.CASH);
+
+      const commissionTx = res.body.walletTransactions.find(
+        (t: WalletTransaction) => t.type === WalletTransactionType.COMMISSION_FEE,
+      );
+      expect(commissionTx).toBeDefined();
+      expect(commissionTx.sourceType).toBe('TASKER');
+      expect(commissionTx.targetType).toBe('TENANT');
+      expect(commissionTx.paymentMethod).toBe(PaymentMethod.WALLET);
     });
   });
 });
