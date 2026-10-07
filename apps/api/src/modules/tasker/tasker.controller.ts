@@ -88,6 +88,20 @@ export class TaskerController {
           ? false
           : undefined;
 
+    const readyOnly =
+      query.readyOnly === 'true'
+        ? true
+        : query.readyOnly === 'false'
+          ? false
+          : undefined;
+
+    const busyOnly =
+      query.busyOnly === 'true'
+        ? true
+        : query.busyOnly === 'false'
+          ? false
+          : undefined;
+
     const page = query.page !== undefined ? Number(query.page) : undefined;
     const limit = query.limit !== undefined ? Number(query.limit) : undefined;
 
@@ -98,6 +112,8 @@ export class TaskerController {
         isOnline,
         kycVerified,
         lowDepositOnly,
+        readyOnly,
+        busyOnly,
         page,
         limit,
       },

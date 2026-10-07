@@ -27,6 +27,16 @@ export class QueryTaskersDto {
   @IsString()
   lowDepositOnly?: string;
 
+  @ApiPropertyOptional({ description: 'Chỉ lấy thợ sẵn sàng nhận việc (true/false)' })
+  @IsOptional()
+  @IsString()
+  readyOnly?: string;
+
+  @ApiPropertyOptional({ description: 'Chỉ lấy thợ đang bận làm việc (true/false)' })
+  @IsOptional()
+  @IsString()
+  busyOnly?: string;
+
   @ApiPropertyOptional({ description: 'Số trang', default: 1 })
   @IsOptional()
   page?: string | number;

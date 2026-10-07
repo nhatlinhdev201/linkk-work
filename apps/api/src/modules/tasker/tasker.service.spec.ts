@@ -5,7 +5,7 @@ import {
   ForbiddenException,
   NotFoundException,
 } from '@nestjs/common';
-import { TaskerService } from './tasker.service';
+import { TaskerService, computeTaskerAvailability } from './tasker.service';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { UserRole, WalletTransactionType, WalletTransactionStatus } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
@@ -357,8 +357,53 @@ describe('TaskerService', () => {
           }),
         }),
       );
-      expect(result).toEqual(sanitizedMockUser);
+      expect(result).toEqual(
+        expect.objectContaining({
+          ...sanitizedMockUser,
+          availability: expect.objectContaining({
+            code: 'OFFLINE',
+            isReadyForDispatch: false,
+          }),
+          activeJob: null,
+        }),
+      );
       expect((result as Record<string, unknown>).passwordHash).toBeUndefined();
+    });
+
+    it('should return activeJob if tasker has an in-progress booking', async () => {
+      const activeBooking = {
+        id: 'bk-123',
+        code: 'BK-20261007-001',
+        status: 'IN_PROGRESS',
+        customerName: 'Nguyễn Văn Khách',
+        customerPhone: '0988776655',
+        addressText: '123 Nguyễn Huệ, Q1, TP.HCM',
+        scheduledAt: new Date(),
+        totalAmount: 350000,
+        service: { id: 'srv-1', name: 'Dọn dẹp nhà tiêu chuẩn' },
+      };
+
+      prisma.user.findFirst.mockResolvedValueOnce({
+        ...mockUserTasker,
+        taskerProfile: {
+          ...mockUserTasker.taskerProfile,
+          isOnline: true,
+          kycVerified: true,
+          currentStatus: 'IN_PROGRESS',
+        },
+        assignedBookings: [activeBooking],
+      });
+
+      const result = await service.getTaskerById('user-tasker-1', mockTenantId, false);
+      expect(result.availability.code).toBe('BUSY');
+      expect(result.availability.isReadyForDispatch).toBe(false);
+      expect(result.activeJob).toEqual(
+        expect.objectContaining({
+          bookingId: 'bk-123',
+          bookingCode: 'BK-20261007-001',
+          serviceName: 'Dọn dẹp nhà tiêu chuẩn',
+        }),
+      );
     });
 
     it('should throw NotFoundException if tasker not found', async () => {
@@ -399,6 +444,68 @@ describe('TaskerService', () => {
       expect((result as Record<string, unknown>).passwordHash).toBeUndefined();
     });
   });
+
+  describe('computeTaskerAvailability Engine', () => {
+    const baseProfile = {
+      isOnline: true,
+      depositBalance: 500000,
+      kycVerified: true,
+      autoRadarEnabled: true,
+      currentStatus: 'IDLE',
+    };
+
+    it('should return READY when all criteria pass', () => {
+      const avail = computeTaskerAvailability('ACTIVE', baseProfile, null);
+      expect(avail.code).toBe('READY');
+      expect(avail.isReadyForDispatch).toBe(true);
+    });
+
+    it('should return OFFLINE when isOnline is false', () => {
+      const avail = computeTaskerAvailability('ACTIVE', { ...baseProfile, isOnline: false }, null);
+      expect(avail.code).toBe('OFFLINE');
+      expect(avail.isReadyForDispatch).toBe(false);
+    });
+
+    it('should return LOW_DEPOSIT when depositBalance < 100,000', () => {
+      const avail = computeTaskerAvailability('ACTIVE', { ...baseProfile, depositBalance: 80000 }, null);
+      expect(avail.code).toBe('LOW_DEPOSIT');
+      expect(avail.isReadyForDispatch).toBe(false);
+    });
+
+    it('should return UNVERIFIED_KYC when kycVerified is false', () => {
+      const avail = computeTaskerAvailability('ACTIVE', { ...baseProfile, kycVerified: false }, null);
+      expect(avail.code).toBe('UNVERIFIED_KYC');
+      expect(avail.isReadyForDispatch).toBe(false);
+    });
+
+    it('should return BUSY when tasker has an active job or currentStatus != IDLE', () => {
+      const avail = computeTaskerAvailability(
+        'ACTIVE',
+        { ...baseProfile, currentStatus: 'IN_PROGRESS' },
+        { id: 'b1', code: 'BK-001', status: 'IN_PROGRESS' },
+      );
+      expect(avail.code).toBe('BUSY');
+      expect(avail.isReadyForDispatch).toBe(false);
+      expect(avail.reason).toContain('BK-001');
+    });
+
+    it('should return RADAR_DISABLED when autoRadarEnabled is false', () => {
+      const avail = computeTaskerAvailability(
+        'ACTIVE',
+        { ...baseProfile, autoRadarEnabled: false },
+        null,
+      );
+      expect(avail.code).toBe('RADAR_DISABLED');
+      expect(avail.isReadyForDispatch).toBe(false);
+    });
+
+    it('should return RESTRICTED when user or profile is restricted', () => {
+      const avail = computeTaskerAvailability('RESTRICTED', baseProfile, null);
+      expect(avail.code).toBe('RESTRICTED');
+      expect(avail.isReadyForDispatch).toBe(false);
+    });
+  });
+
 
   describe('updateTasker', () => {
     const updateDto: UpdateTaskerDto = {

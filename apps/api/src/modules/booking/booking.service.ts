@@ -13,6 +13,10 @@ import { TransitionStatusDto } from './dto/transition-status.dto';
 import { QueryBookingsDto } from './dto/query-bookings.dto';
 import { isValidBookingTransition } from './booking-state-machine';
 import { BookingStatus, UserRole, ServicePricingType, PaymentStatus } from '@linkkwork/shared-types';
+import {
+  computeTaskerAvailability,
+  formatActiveJob,
+} from '../tasker/tasker-availability.helper';
 
 @Injectable()
 export class BookingService {
@@ -347,6 +351,36 @@ export class BookingService {
         },
       });
 
+      // Đồng bộ trạng thái ca việc của thợ được chỉ định
+      await tx.taskerProfile.updateMany({
+        where: { userId: tasker.id },
+        data: { currentStatus: 'ASSIGNED' },
+      });
+
+      // Nếu đơn trước đó đã từng gán cho thợ khác, giải phóng thợ cũ về IDLE nếu không còn đơn nào
+      if (booking.assignedTaskerId && booking.assignedTaskerId !== tasker.id) {
+        const prevTaskerActive = await tx.booking.count({
+          where: {
+            assignedTaskerId: booking.assignedTaskerId,
+            id: { not: bookingId },
+            status: {
+              in: [
+                BookingStatus.ASSIGNED,
+                BookingStatus.ARRIVING,
+                BookingStatus.IN_PROGRESS,
+                BookingStatus.PENDING_ACCEPTANCE,
+              ],
+            },
+          },
+        });
+        if (prevTaskerActive === 0) {
+          await tx.taskerProfile.updateMany({
+            where: { userId: booking.assignedTaskerId },
+            data: { currentStatus: 'IDLE' },
+          });
+        }
+      }
+
       // Nếu đơn đang mở trên Redis radar thì cập nhật
       await this.redis.set(`job:status:${bookingId}`, 'ASSIGNED', 86400);
 
@@ -407,13 +441,59 @@ export class BookingService {
         },
       });
 
-      if (dto.status === BookingStatus.COMPLETED && booking.assignedTaskerId) {
-        await tx.taskerProfile.updateMany({
-          where: { userId: booking.assignedTaskerId },
-          data: {
-            completedJobsCount: { increment: 1 },
-          },
-        });
+      if (booking.assignedTaskerId) {
+        if (dto.status === BookingStatus.ARRIVING) {
+          await tx.taskerProfile.updateMany({
+            where: { userId: booking.assignedTaskerId },
+            data: { currentStatus: 'ARRIVING' },
+          });
+        } else if (dto.status === BookingStatus.IN_PROGRESS) {
+          await tx.taskerProfile.updateMany({
+            where: { userId: booking.assignedTaskerId },
+            data: { currentStatus: 'IN_PROGRESS' },
+          });
+        } else if (dto.status === BookingStatus.PENDING_ACCEPTANCE) {
+          await tx.taskerProfile.updateMany({
+            where: { userId: booking.assignedTaskerId },
+            data: { currentStatus: 'PENDING_ACCEPTANCE' },
+          });
+        } else if (
+          dto.status === BookingStatus.COMPLETED ||
+          dto.status === BookingStatus.CANCELLED
+        ) {
+          // Tăng số lượng việc hoàn thành nếu là COMPLETED
+          if (dto.status === BookingStatus.COMPLETED) {
+            await tx.taskerProfile.updateMany({
+              where: { userId: booking.assignedTaskerId },
+              data: {
+                completedJobsCount: { increment: 1 },
+              },
+            });
+          }
+
+          // Kiểm tra xem thợ còn đơn nào khác đang làm không, nếu không thì đưa về IDLE
+          const remainingActive = await tx.booking.count({
+            where: {
+              assignedTaskerId: booking.assignedTaskerId,
+              id: { not: bookingId },
+              status: {
+                in: [
+                  BookingStatus.ASSIGNED,
+                  BookingStatus.ARRIVING,
+                  BookingStatus.IN_PROGRESS,
+                  BookingStatus.PENDING_ACCEPTANCE,
+                ],
+              },
+            },
+          });
+
+          if (remainingActive === 0) {
+            await tx.taskerProfile.updateMany({
+              where: { userId: booking.assignedTaskerId },
+              data: { currentStatus: 'IDLE' },
+            });
+          }
+        }
       }
 
       // Cập nhật trạng thái Redis cho radar/worker
@@ -482,7 +562,7 @@ export class BookingService {
       where.tenantId = effectiveTenantId;
     }
 
-    return this.prisma.user.findMany({
+    const taskers = await this.prisma.user.findMany({
       where,
       select: {
         id: true,
@@ -491,9 +571,48 @@ export class BookingService {
         email: true,
         avatarUrl: true,
         tenantId: true,
+        status: true,
         taskerProfile: true,
+        assignedBookings: {
+          where: {
+            status: {
+              in: [
+                BookingStatus.ASSIGNED,
+                BookingStatus.ARRIVING,
+                BookingStatus.IN_PROGRESS,
+                BookingStatus.PENDING_ACCEPTANCE,
+              ],
+            },
+          },
+          take: 1,
+          orderBy: { updatedAt: 'desc' },
+          include: {
+            service: {
+              select: {
+                id: true,
+                name: true,
+              },
+            },
+          },
+        },
       },
       orderBy: { createdAt: 'desc' },
+    });
+
+    return taskers.map((t) => {
+      const activeBooking = t.assignedBookings?.[0] || null;
+      const availability = computeTaskerAvailability(
+        t.status,
+        t.taskerProfile,
+        activeBooking,
+      );
+      const activeJob = formatActiveJob(activeBooking);
+      const { assignedBookings: _b, ...rest } = t;
+      return {
+        ...rest,
+        availability,
+        activeJob,
+      };
     });
   }
 }

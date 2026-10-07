@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import {
+  BookingStatus,
   Prisma,
   UserRole,
   WalletTransactionStatus,
@@ -20,6 +21,19 @@ import {
   UpdateTaskerDto,
   UpdateWorkFloorDto,
 } from './dto';
+import {
+  computeTaskerAvailability,
+  formatActiveJob,
+  TaskerAvailability,
+  TaskerActiveJob,
+} from './tasker-availability.helper';
+
+export {
+  computeTaskerAvailability,
+  formatActiveJob,
+  TaskerAvailability,
+  TaskerActiveJob,
+};
 
 export interface TaskerQueryParams {
   tenantId?: string;
@@ -27,6 +41,8 @@ export interface TaskerQueryParams {
   isOnline?: boolean;
   kycVerified?: boolean;
   lowDepositOnly?: boolean;
+  readyOnly?: boolean;
+  busyOnly?: boolean;
   page?: number;
   limit?: number;
 }
@@ -182,6 +198,18 @@ export class TaskerService {
     if (params.lowDepositOnly) {
       taskerProfileWhere.depositBalance = { lt: 100000 };
     }
+    if (params.readyOnly) {
+      taskerProfileWhere.isOnline = true;
+      taskerProfileWhere.kycVerified = true;
+      taskerProfileWhere.depositBalance = { gte: 100000 };
+      taskerProfileWhere.autoRadarEnabled = true;
+      taskerProfileWhere.currentStatus = 'IDLE';
+    }
+    if (params.busyOnly) {
+      taskerProfileWhere.currentStatus = {
+        in: ['ASSIGNED', 'ARRIVING', 'IN_PROGRESS', 'PENDING_ACCEPTANCE'],
+      };
+    }
 
     if (Object.keys(taskerProfileWhere).length > 0) {
       where.taskerProfile = taskerProfileWhere;
@@ -194,6 +222,28 @@ export class TaskerService {
         include: {
           taskerProfile: true,
           tenant: true,
+          assignedBookings: {
+            where: {
+              status: {
+                in: [
+                  BookingStatus.ASSIGNED,
+                  BookingStatus.ARRIVING,
+                  BookingStatus.IN_PROGRESS,
+                  BookingStatus.PENDING_ACCEPTANCE,
+                ],
+              },
+            },
+            take: 1,
+            orderBy: { updatedAt: 'desc' },
+            include: {
+              service: {
+                select: {
+                  id: true,
+                  name: true,
+                },
+              },
+            },
+          },
         },
         skip,
         take: limit,
@@ -202,7 +252,21 @@ export class TaskerService {
     ]);
 
     return {
-      taskers: taskers.map(sanitizeTaskerUser),
+      taskers: taskers.map((t) => {
+        const activeBooking = t.assignedBookings?.[0] || null;
+        const availability = computeTaskerAvailability(
+          t.status,
+          t.taskerProfile,
+          activeBooking,
+        );
+        const activeJob = formatActiveJob(activeBooking);
+        const { assignedBookings: _b, ...sanitized } = sanitizeTaskerUser(t);
+        return {
+          ...sanitized,
+          availability,
+          activeJob,
+        };
+      }),
       total,
       page,
       limit,
@@ -229,6 +293,28 @@ export class TaskerService {
           take: 10,
           orderBy: { createdAt: 'desc' },
         },
+        assignedBookings: {
+          where: {
+            status: {
+              in: [
+                BookingStatus.ASSIGNED,
+                BookingStatus.ARRIVING,
+                BookingStatus.IN_PROGRESS,
+                BookingStatus.PENDING_ACCEPTANCE,
+              ],
+            },
+          },
+          take: 1,
+          orderBy: { updatedAt: 'desc' },
+          include: {
+            service: {
+              select: {
+                id: true,
+                name: true,
+              },
+            },
+          },
+        },
       },
     });
 
@@ -242,7 +328,20 @@ export class TaskerService {
       }
     }
 
-    return sanitizeTaskerUser(tasker);
+    const activeBooking = tasker.assignedBookings?.[0] || null;
+    const availability = computeTaskerAvailability(
+      tasker.status,
+      tasker.taskerProfile,
+      activeBooking,
+    );
+    const activeJob = formatActiveJob(activeBooking);
+    const { assignedBookings: _b, ...sanitized } = sanitizeTaskerUser(tasker);
+
+    return {
+      ...sanitized,
+      availability,
+      activeJob,
+    };
   }
 
   /**
