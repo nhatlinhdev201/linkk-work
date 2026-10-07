@@ -71,6 +71,13 @@ Tài liệu quy định toàn bộ tiêu chuẩn viết mã, phong cách kiến 
      - Chỉ kích hoạt Skeleton Loading khi `isLoading && !data` (lần đầu vào trang chưa có cache).
      - Khi người dùng bấm action hoặc đang revalidate ở background (`isFetching`), chỉ hiển thị trạng thái xử lý cục bộ trên nút (`isPending`), giữ nguyên bảng/thẻ dữ liệu.
 
+10. **Documentation Integrity & Docs-as-Code Rule (Quy Chuẩn Đồng Bộ Tài Liệu Hệ Thống):**
+    - **Single Source of Truth:** Mọi thay đổi về kiến trúc, Data Model, API endpoints, State Machine, thuật toán điều phối, quy tắc tài chính, hoặc phân quyền RBAC đều **bắt buộc** phải được cập nhật đồng bộ vào:
+      1. Tài liệu kỹ thuật dự án trong thư mục `docs/` (Architecture, Specs, APIs, Workflow).
+      2. Trang Trình Diễn Tài Liệu Trực Quan (`apps/admin/src/pages/docs/SystemDocsPage.tsx`) trên Web Admin Portal để các bên liên quan (Super Admin, Tenant Admin, Dev team) nắm bắt kịp thời.
+    - **Docs-as-Code & Subagent Maintenance:** Subagent chuyên trách `docs-maintainer` được phân công tự động rà soát `git diff`, kiểm tra tính toàn vẹn của tài liệu và cập nhật nội dung tương ứng theo từng Actor (Super Admin, Tenant Admin, Tasker, Customer, System Engine).
+    - **Cấm Code Drift:** Tuyệt đối không để xảy ra tình trạng "code chạy một đằng, tài liệu viết một nẻo". Bất kỳ pull request/tính năng mới nào thiếu cập nhật tài liệu đồng bộ sẽ bị coi là chưa hoàn tất (INCOMPLETE).
+
 ---
 
 ## 2. Quy Chuẩn Đặt Tên & Cấu Trúc File (Naming & Structure)
@@ -95,4 +102,6 @@ Tài liệu quy định toàn bộ tiêu chuẩn viết mã, phong cách kiến 
 - [ ] Form có validation logic rõ ràng, hiển thị lỗi màu đỏ dưới input.
 - [ ] Sidebar đóng mở có animation mượt mà, không bị duplicate DOM node.
 - [ ] Đã thêm Toast feedback cho cả 2 trường hợp thành công và thất bại.
+- [ ] Tài liệu hệ thống (`SystemDocsPage.tsx` & `docs/`) đã được đồng bộ phản ánh đúng 100% thay đổi mới nhất (hoặc kích hoạt `docs-maintainer` subagent).
 - [ ] Chạy `npm run build` đạt 0 lỗi TypeScript và 0 cảnh báo nghiêm trọng.
+
