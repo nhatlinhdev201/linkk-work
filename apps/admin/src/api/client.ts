@@ -17,6 +17,8 @@ import type {
   Booking,
   BookingStatus,
   Tasker,
+  TaskerAvailability,
+  TaskerActiveJob,
   PartnerApplication,
   CronJobItem,
   ServiceCategory,
@@ -331,7 +333,7 @@ export interface BackendTaskerResponse {
     rating: number;
     completedJobsCount: number;
     isOnline: boolean;
-    currentStatus: 'IDLE' | 'ARRIVING' | 'IN_PROGRESS' | 'RESTRICTED';
+    currentStatus: 'IDLE' | 'ASSIGNED' | 'ARRIVING' | 'IN_PROGRESS' | 'PENDING_ACCEPTANCE' | 'RESTRICTED';
     skills: string[];
     idCardNumber?: string | null;
     kycVerified: boolean;
@@ -348,6 +350,8 @@ export interface BackendTaskerResponse {
     id: string;
     name: string;
   } | null;
+  availability?: TaskerAvailability;
+  activeJob?: TaskerActiveJob | null;
 }
 
 export interface BackendPaginatedTaskersResponse {
@@ -362,6 +366,8 @@ export interface TaskerQueryParams {
   onlineOnly?: boolean;
   kycPendingOnly?: boolean;
   lowDepositOnly?: boolean;
+  readyOnly?: boolean;
+  busyOnly?: boolean;
 }
 
 export interface TaskerDepositResult {
@@ -379,6 +385,61 @@ export interface TaskerDepositResult {
 export function mapBackendTaskerToAdminTasker(raw: BackendTaskerResponse): Tasker {
   const profile = raw.taskerProfile;
   const rating = profile?.rating ?? 5.0;
+
+  let availability = raw.availability;
+  if (!availability) {
+    if (raw.status === 'RESTRICTED' || profile?.currentStatus === 'RESTRICTED') {
+      availability = {
+        isReadyForDispatch: false,
+        code: 'RESTRICTED',
+        label: 'Bị giới hạn / Khóa',
+        reason: 'Tài khoản hoặc trạng thái thợ đang bị giới hạn hoặc khóa tạm thời',
+      };
+    } else if (!profile?.isOnline) {
+      availability = {
+        isReadyForDispatch: false,
+        code: 'OFFLINE',
+        label: 'Ngoại tuyến',
+        reason: 'Thợ đang tắt ca trực tuyến, chưa sẵn sàng nhận đơn',
+      };
+    } else if ((profile?.depositBalance ?? 0) < 100000) {
+      availability = {
+        isReadyForDispatch: false,
+        code: 'LOW_DEPOSIT',
+        label: 'Nợ cọc (< 100k)',
+        reason: `Số dư ký quỹ (${Math.round(profile?.depositBalance ?? 0).toLocaleString('vi-VN')}đ) thấp hơn mức tối thiểu 100.000đ`,
+      };
+    } else if (!profile?.kycVerified) {
+      availability = {
+        isReadyForDispatch: false,
+        code: 'UNVERIFIED_KYC',
+        label: 'Chờ duyệt KYC',
+        reason: 'Hồ sơ chưa được xác thực thông tin căn cước công dân (CCCD)',
+      };
+    } else if (raw.activeJob || (profile?.currentStatus && profile.currentStatus !== 'IDLE')) {
+      availability = {
+        isReadyForDispatch: false,
+        code: 'BUSY',
+        label: 'Đang làm việc',
+        reason: raw.activeJob ? `Đang thực hiện ca việc (${raw.activeJob.bookingCode})` : 'Đang bận thực hiện công việc',
+      };
+    } else if (profile?.autoRadarEnabled === false) {
+      availability = {
+        isReadyForDispatch: false,
+        code: 'RADAR_DISABLED',
+        label: 'Tắt radar tự động',
+        reason: 'Thợ tắt tính năng tự động nhận việc qua radar (cần Admin chỉ định tay)',
+      };
+    } else {
+      availability = {
+        isReadyForDispatch: true,
+        code: 'READY',
+        label: 'Sẵn sàng nhận việc',
+        reason: 'Đủ điều kiện nhận việc và sẵn sàng quét đơn từ radar điều phối',
+      };
+    }
+  }
+
   return {
     id: raw.id,
     code: `TSK-${raw.id.slice(0, 6).toUpperCase()}`,
@@ -406,6 +467,8 @@ export function mapBackendTaskerToAdminTasker(raw: BackendTaskerResponse): Taske
     bankAccountNumber: profile?.bankAccountNumber || undefined,
     bankAccountHolder: profile?.bankAccountHolder || undefined,
     createdAt: raw.createdAt,
+    availability,
+    activeJob: raw.activeJob ?? null,
   };
 }
 
@@ -1331,6 +1394,8 @@ export class ApiClient {
         if (params?.onlineOnly !== undefined) query.set('isOnline', String(params.onlineOnly));
         if (params?.kycPendingOnly) query.set('kycVerified', 'false');
         if (params?.lowDepositOnly) query.set('lowDepositOnly', 'true');
+        if (params?.readyOnly) query.set('readyOnly', 'true');
+        if (params?.busyOnly) query.set('busyOnly', 'true');
         query.set('limit', '100');
 
         const endpoint = `/taskers${query.toString() ? `?${query.toString()}` : ''}`;
@@ -1375,6 +1440,21 @@ export class ApiClient {
     }
     if (params?.lowDepositOnly) {
       filtered = filtered.filter((t) => (t.depositBalance ?? 0) < 100000);
+    }
+    if (params?.readyOnly) {
+      filtered = filtered.filter(
+        (t) =>
+          t.isOnline &&
+          t.kycVerified &&
+          (t.depositBalance ?? 0) >= 100000 &&
+          t.autoRadarEnabled !== false &&
+          (t.currentStatus === 'IDLE' || !t.currentStatus)
+      );
+    }
+    if (params?.busyOnly) {
+      filtered = filtered.filter((t) =>
+        ['ASSIGNED', 'ARRIVING', 'IN_PROGRESS', 'PENDING_ACCEPTANCE'].includes(t.currentStatus)
+      );
     }
     return filtered;
   }

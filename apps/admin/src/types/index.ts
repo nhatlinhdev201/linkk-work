@@ -82,6 +82,34 @@ export interface Booking {
   createdAt: string;
 }
 
+export type TaskerAvailabilityCode =
+  | 'READY'
+  | 'BUSY'
+  | 'LOW_DEPOSIT'
+  | 'UNVERIFIED_KYC'
+  | 'OFFLINE'
+  | 'RADAR_DISABLED'
+  | 'RESTRICTED';
+
+export interface TaskerAvailability {
+  isReadyForDispatch: boolean;
+  code: TaskerAvailabilityCode;
+  label: string;
+  reason: string;
+}
+
+export interface TaskerActiveJob {
+  bookingId: string;
+  bookingCode: string;
+  serviceName: string;
+  customerName: string;
+  customerPhone: string;
+  addressText: string;
+  status: string;
+  scheduledAt: string;
+  totalAmount: number;
+}
+
 export interface Tasker {
   id: string;
   code: string;
@@ -98,7 +126,7 @@ export interface Tasker {
   walletBalance: number;
   depositBalance: number;
   softHoldBalance: number;
-  currentStatus: 'IDLE' | 'ARRIVING' | 'IN_PROGRESS' | 'RESTRICTED';
+  currentStatus: 'IDLE' | 'ASSIGNED' | 'ARRIVING' | 'IN_PROGRESS' | 'PENDING_ACCEPTANCE' | 'RESTRICTED';
   kycVerified: boolean;
   idCardNumber?: string;
   skills: string[];
@@ -109,6 +137,8 @@ export interface Tasker {
   bankAccountNumber?: string;
   bankAccountHolder?: string;
   createdAt?: string;
+  availability?: TaskerAvailability;
+  activeJob?: TaskerActiveJob | null;
 }
 
 export interface PartnerApplication {

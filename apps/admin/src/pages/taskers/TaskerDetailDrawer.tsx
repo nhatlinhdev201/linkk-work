@@ -26,6 +26,11 @@ import {
   FileText,
   Clock,
   Briefcase,
+  CheckCircle2,
+  XCircle,
+  AlertCircle,
+  ExternalLink,
+  Radio,
 } from 'lucide-react';
 
 export interface TaskerDetailDrawerProps {
@@ -223,6 +228,178 @@ export const TaskerDetailDrawer: React.FC<TaskerDetailDrawerProps> = ({
                     </>
                   )}
                 </span>
+              </div>
+            </div>
+
+            {/* Active Job Card */}
+            {tasker.activeJob ? (
+              <div className="bg-indigo-50/90 border border-indigo-200 rounded-2xl p-4 space-y-3 shadow-xs">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="w-2.5 h-2.5 rounded-full bg-amber-500 animate-pulse" />
+                    <h4 className="font-bold text-indigo-950 text-xs uppercase tracking-wider">
+                      Ca việc đang thực hiện
+                    </h4>
+                  </div>
+                  <span className="px-2 py-0.5 text-[10px] font-bold rounded-md bg-indigo-200/80 text-indigo-900 uppercase">
+                    {tasker.activeJob.status}
+                  </span>
+                </div>
+
+                <div className="bg-white/95 rounded-xl p-3.5 border border-indigo-100 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <span className="font-mono font-bold text-indigo-900 text-sm">
+                        {tasker.activeJob.bookingCode}
+                      </span>
+                      <span className="text-slate-600 text-xs block font-medium mt-0.5">
+                        {tasker.activeJob.serviceName}
+                      </span>
+                    </div>
+                    <div className="text-right">
+                      <span className="text-sm font-bold text-emerald-700">
+                        {tasker.activeJob.totalAmount.toLocaleString('vi-VN')} đ
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="pt-2 border-t border-slate-100 space-y-1.5 text-slate-600 text-[11px]">
+                    <div className="flex items-center justify-between">
+                      <span className="text-slate-400">Khách hàng:</span>
+                      <span className="font-medium text-slate-800">{tasker.activeJob.customerName}</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-slate-400">Số điện thoại:</span>
+                      <a
+                        href={`tel:${tasker.activeJob.customerPhone}`}
+                        className="font-mono text-brand-600 hover:underline flex items-center gap-1 font-semibold"
+                      >
+                        <Phone className="w-3 h-3" />
+                        {tasker.activeJob.customerPhone}
+                      </a>
+                    </div>
+                    <div className="flex items-start justify-between gap-2">
+                      <span className="text-slate-400 shrink-0">Địa chỉ:</span>
+                      <span className="text-right text-slate-700 truncate font-medium" title={tasker.activeJob.addressText}>
+                        {tasker.activeJob.addressText}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-end">
+                  <a
+                    href={`/dispatch?search=${tasker.activeJob.bookingCode}`}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-indigo-700 bg-white hover:bg-indigo-100 border border-indigo-200 transition-colors cursor-pointer"
+                  >
+                    <ExternalLink className="w-3.5 h-3.5" />
+                    Chuyển đến Bàn Điều Phối
+                  </a>
+                </div>
+              </div>
+            ) : (
+              <div className="p-3 bg-slate-50 border border-slate-200/80 rounded-xl flex items-center justify-between text-slate-600 text-xs">
+                <span className="flex items-center gap-2 font-medium">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500" />
+                  Trạng thái ca việc: <strong>Đang rảnh (IDLE)</strong>
+                </span>
+                <span className="text-[11px] text-slate-400">Không có đơn đang xử lý</span>
+              </div>
+            )}
+
+            {/* Availability Engine Checklist */}
+            <div className="bg-slate-50 border border-slate-200/80 rounded-2xl p-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <h4 className="font-bold text-slate-800 flex items-center gap-1.5 text-xs">
+                  <Radio className="w-4 h-4 text-brand-600" />
+                  Tiêu chí Sẵn sàng nhận việc &amp; Quét Radar
+                </h4>
+                {tasker.availability?.isReadyForDispatch ? (
+                  <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
+                    🟢 SẴN SÀNG
+                  </span>
+                ) : (
+                  <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-rose-100 text-rose-800 border border-rose-300">
+                    🔴 CHƯA SẴN SÀNG
+                  </span>
+                )}
+              </div>
+
+              {tasker.availability?.reason && !tasker.availability?.isReadyForDispatch && (
+                <div className="p-2.5 bg-rose-50 border border-rose-200 rounded-xl text-rose-700 text-[11px] flex items-start gap-2">
+                  <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-rose-500" />
+                  <div>
+                    <span className="font-bold block">Lý do chưa sẵn sàng:</span>
+                    <span>{tasker.availability.reason}</span>
+                  </div>
+                </div>
+              )}
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px]">
+                <div className="flex items-center justify-between p-2 rounded-lg bg-white border border-slate-100">
+                  <span className="text-slate-500">1. Ca trực tuyến</span>
+                  {tasker.isOnline ? (
+                    <span className="font-semibold text-emerald-600 flex items-center gap-1">
+                      <CheckCircle2 className="w-3.5 h-3.5" /> Bật
+                    </span>
+                  ) : (
+                    <span className="font-semibold text-slate-400 flex items-center gap-1">
+                      <XCircle className="w-3.5 h-3.5" /> Tắt
+                    </span>
+                  )}
+                </div>
+
+                <div className="flex items-center justify-between p-2 rounded-lg bg-white border border-slate-100">
+                  <span className="text-slate-500">2. Ký quỹ &gt;= 100k</span>
+                  {(tasker.depositBalance ?? 0) >= 100000 ? (
+                    <span className="font-semibold text-emerald-600 flex items-center gap-1">
+                      <CheckCircle2 className="w-3.5 h-3.5" /> Đạt ({(tasker.depositBalance ?? 0).toLocaleString('vi-VN')}đ)
+                    </span>
+                  ) : (
+                    <span className="font-semibold text-rose-600 flex items-center gap-1">
+                      <XCircle className="w-3.5 h-3.5" /> Nợ cọc ({(tasker.depositBalance ?? 0).toLocaleString('vi-VN')}đ)
+                    </span>
+                  )}
+                </div>
+
+                <div className="flex items-center justify-between p-2 rounded-lg bg-white border border-slate-100">
+                  <span className="text-slate-500">3. Duyệt KYC</span>
+                  {tasker.kycVerified ? (
+                    <span className="font-semibold text-blue-600 flex items-center gap-1">
+                      <CheckCircle2 className="w-3.5 h-3.5" /> Đã duyệt
+                    </span>
+                  ) : (
+                    <span className="font-semibold text-amber-600 flex items-center gap-1">
+                      <AlertCircle className="w-3.5 h-3.5" /> Chờ duyệt
+                    </span>
+                  )}
+                </div>
+
+                <div className="flex items-center justify-between p-2 rounded-lg bg-white border border-slate-100">
+                  <span className="text-slate-500">4. Trạng thái ca</span>
+                  {!tasker.activeJob && (tasker.currentStatus === 'IDLE' || !tasker.currentStatus) ? (
+                    <span className="font-semibold text-emerald-600 flex items-center gap-1">
+                      <CheckCircle2 className="w-3.5 h-3.5" /> Rảnh (IDLE)
+                    </span>
+                  ) : (
+                    <span className="font-semibold text-indigo-600 flex items-center gap-1">
+                      <AlertCircle className="w-3.5 h-3.5" /> Đang bận
+                    </span>
+                  )}
+                </div>
+
+                <div className="flex items-center justify-between p-2 rounded-lg bg-white border border-slate-100 sm:col-span-2">
+                  <span className="text-slate-500">5. Quét Radar tự động</span>
+                  {tasker.autoRadarEnabled !== false ? (
+                    <span className="font-semibold text-emerald-600 flex items-center gap-1">
+                      <CheckCircle2 className="w-3.5 h-3.5" /> Bật tự động ({tasker.maxDistanceKm ?? 15}km)
+                    </span>
+                  ) : (
+                    <span className="font-semibold text-purple-600 flex items-center gap-1">
+                      <XCircle className="w-3.5 h-3.5" /> Tắt (Chỉ gán tay)
+                    </span>
+                  )}
+                </div>
               </div>
             </div>
 

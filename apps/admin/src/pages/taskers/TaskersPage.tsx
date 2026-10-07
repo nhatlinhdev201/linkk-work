@@ -59,6 +59,15 @@ export const TaskersPage: React.FC = () => {
 
   // Computed Counts
   const onlineCount = taskers.filter((t) => t.isOnline).length;
+  const readyCount = taskers.filter(
+    (t) => t.availability?.code === 'READY' || (t.isOnline && (t.depositBalance ?? 0) >= 100000 && t.kycVerified && (t.currentStatus === 'IDLE' || !t.currentStatus))
+  ).length;
+  const busyCount = taskers.filter(
+    (t) =>
+      t.availability?.code === 'BUSY' ||
+      Boolean(t.activeJob) ||
+      ['ASSIGNED', 'ARRIVING', 'IN_PROGRESS', 'PENDING_ACCEPTANCE'].includes(t.currentStatus)
+  ).length;
   const lowDepositCount = taskers.filter((t) => (t.depositBalance ?? 0) < 100000).length;
   const pendingKycCount = taskers.filter((t) => !t.kycVerified).length;
   const lowRatingCount = taskers.filter(
@@ -68,10 +77,12 @@ export const TaskersPage: React.FC = () => {
   // Filter Tabs
   const filterTabs = [
     { id: 'ALL', label: 'Tất cả nhân sự', count: taskers.length },
-    { id: 'ONLINE', label: 'Đang trực tuyến', count: onlineCount },
-    { id: 'OFFLINE', label: 'Ngoại tuyến', count: taskers.length - onlineCount },
+    { id: 'READY', label: '🟢 Sẵn sàng', count: readyCount },
+    { id: 'BUSY', label: '🟡 Đang làm việc', count: busyCount },
     { id: 'LOW_DEPOSIT', label: 'Nợ cọc (< 100k)', count: lowDepositCount },
     { id: 'PENDING_KYC', label: 'Chờ duyệt KYC', count: pendingKycCount },
+    { id: 'ONLINE', label: 'Đang trực tuyến', count: onlineCount },
+    { id: 'OFFLINE', label: 'Ngoại tuyến', count: taskers.length - onlineCount },
     ...(lowRatingCount > 0
       ? [{ id: 'LOW_RATING', label: 'Sao thấp (< 4★)', count: lowRatingCount }]
       : []),
@@ -91,6 +102,23 @@ export const TaskersPage: React.FC = () => {
 
     if (!matchSearch) return false;
 
+    if (activeFilter === 'READY') {
+      return (
+        t.availability?.code === 'READY' ||
+        (t.isOnline &&
+          (t.depositBalance ?? 0) >= 100000 &&
+          t.kycVerified &&
+          t.autoRadarEnabled !== false &&
+          (t.currentStatus === 'IDLE' || !t.currentStatus))
+      );
+    }
+    if (activeFilter === 'BUSY') {
+      return (
+        t.availability?.code === 'BUSY' ||
+        Boolean(t.activeJob) ||
+        ['ASSIGNED', 'ARRIVING', 'IN_PROGRESS', 'PENDING_ACCEPTANCE'].includes(t.currentStatus)
+      );
+    }
     if (activeFilter === 'ONLINE') return t.isOnline;
     if (activeFilter === 'OFFLINE') return !t.isOnline;
     if (activeFilter === 'LOW_DEPOSIT') return (t.depositBalance ?? 0) < 100000;
@@ -101,6 +129,82 @@ export const TaskersPage: React.FC = () => {
 
   const totalPages = Math.max(1, Math.ceil(filteredTaskers.length / pageSize));
   const safePage = Math.min(currentPage, totalPages);
+
+  const renderAvailabilityBadge = (t: Tasker) => {
+    const code = t.availability?.code || (t.isOnline ? 'READY' : 'OFFLINE');
+    switch (code) {
+      case 'READY':
+        return (
+          <span
+            className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-300"
+            title={t.availability?.reason || 'Sẵn sàng nhận việc và quét radar'}
+          >
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+            Sẵn sàng nhận việc
+          </span>
+        );
+      case 'BUSY':
+        return (
+          <span
+            className="inline-flex items-center gap-1 text-[10px] font-bold text-indigo-800 bg-indigo-50 px-2 py-0.5 rounded-md border border-indigo-300"
+            title={t.availability?.reason || 'Thợ đang trong ca làm việc'}
+          >
+            <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+            Đang làm: {t.activeJob?.bookingCode || 'Có ca việc'}
+          </span>
+        );
+      case 'LOW_DEPOSIT':
+        return (
+          <span
+            className="inline-flex items-center gap-1 text-[10px] font-bold text-rose-800 bg-rose-50 px-2 py-0.5 rounded-md border border-rose-300"
+            title={t.availability?.reason || 'Ký quỹ dưới 100k, bị chặn nhận đơn'}
+          >
+            <AlertTriangle className="w-3 h-3 text-rose-600" />
+            Nợ cọc (&lt; 100k)
+          </span>
+        );
+      case 'UNVERIFIED_KYC':
+        return (
+          <span
+            className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-800 bg-amber-50 px-2 py-0.5 rounded-md border border-amber-300"
+            title={t.availability?.reason || 'Chờ duyệt căn cước công dân'}
+          >
+            <ShieldAlert className="w-3 h-3 text-amber-600" />
+            Chờ duyệt KYC
+          </span>
+        );
+      case 'RADAR_DISABLED':
+        return (
+          <span
+            className="inline-flex items-center gap-1 text-[10px] font-bold text-purple-800 bg-purple-50 px-2 py-0.5 rounded-md border border-purple-300"
+            title={t.availability?.reason || 'Thợ tắt radar nhận việc tự động'}
+          >
+            <Radio className="w-3 h-3 text-purple-600" />
+            Tắt radar tự động
+          </span>
+        );
+      case 'RESTRICTED':
+        return (
+          <span
+            className="inline-flex items-center gap-1 text-[10px] font-bold text-rose-900 bg-rose-100 px-2 py-0.5 rounded-md border border-rose-400"
+            title={t.availability?.reason || 'Tài khoản bị giới hạn'}
+          >
+            Bị giới hạn / Khóa
+          </span>
+        );
+      case 'OFFLINE':
+      default:
+        return (
+          <span
+            className="inline-flex items-center gap-1 text-[10px] font-bold text-slate-600 bg-slate-100 px-2 py-0.5 rounded-md border border-slate-300"
+            title={t.availability?.reason || 'Thợ chưa bật ca trực tuyến'}
+          >
+            <span className="w-1.5 h-1.5 rounded-full bg-slate-400" />
+            Ngoại tuyến
+          </span>
+        );
+    }
+  };
 
   // Action Handlers
   const handleToggleOnline = async (t: Tasker) => {
@@ -270,7 +374,8 @@ export const TaskersPage: React.FC = () => {
                               <Phone className="w-3 h-3 shrink-0 text-slate-400" />
                               <span className="font-mono">{t.phone}</span>
                             </div>
-                            <div className="mt-1 flex items-center gap-1.5">
+                            <div className="mt-1 flex items-center gap-1.5 flex-wrap">
+                              {renderAvailabilityBadge(t)}
                               {t.kycVerified ? (
                                 <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-blue-700 bg-blue-50 px-2 py-0.5 rounded-md border border-blue-200/80">
                                   <ShieldCheck className="w-3 h-3 text-blue-600" />
@@ -341,6 +446,34 @@ export const TaskersPage: React.FC = () => {
                           </span>
                         </div>
                       </div>
+
+                      {/* Active Job Card if currently working */}
+                      {t.activeJob && (
+                        <div
+                          onClick={() => setDetailTasker(t)}
+                          className="p-2.5 bg-indigo-50/80 border border-indigo-200/90 rounded-xl cursor-pointer hover:bg-indigo-100/70 transition-all shadow-2xs group"
+                          title="Bấm để xem chi tiết ca việc trong Sổ cái"
+                        >
+                          <div className="flex items-center justify-between text-[11px]">
+                            <span className="font-bold text-indigo-950 flex items-center gap-1.5">
+                              <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
+                              {t.activeJob.bookingCode}
+                            </span>
+                            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-indigo-200/70 text-indigo-900 uppercase">
+                              {t.activeJob.status}
+                            </span>
+                          </div>
+                          <div className="text-[11px] text-indigo-900 font-medium mt-1 truncate">
+                            {t.activeJob.serviceName}
+                          </div>
+                          <div className="text-[10px] text-indigo-600/90 mt-0.5 flex items-center justify-between">
+                            <span className="truncate">KH: {t.activeJob.customerName}</span>
+                            <span className="font-bold text-slate-800 shrink-0">
+                              {t.activeJob.totalAmount.toLocaleString('vi-VN')} đ
+                            </span>
+                          </div>
+                        </div>
+                      )}
 
                       {/* Low Deposit Alert notice */}
                       {isLowDeposit && (
