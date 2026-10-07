@@ -447,7 +447,8 @@ export class BookingService {
         const currentBooking = await tx.booking.findUnique({ where: { id: bookingId } });
         if (
           currentBooking?.paymentStatus !== PaymentStatus.RELEASED_TO_TASKER &&
-          booking.assignedTaskerId
+          booking.assignedTaskerId &&
+          (booking.paymentMethod === PaymentMethod.CASH || !booking.paymentMethod)
         ) {
           await this.settleCashBookingLedger(
             tx,
@@ -771,7 +772,7 @@ export class BookingService {
     // 1. Bút toán Thu tiền mặt (CASH_COLLECTED)
     await tx.walletTransaction.create({
       data: {
-        code: `TX-${Date.now()}-${Math.floor(1000 + Math.random() * 9000)}`,
+        code: `TX-${Date.now()}-${Math.floor(1000 + Math.random() * 9000)}-CSH`,
         tenantId: booking.servicingTenantId,
         taskerId: booking.assignedTaskerId,
         customerId: booking.customerId ?? null,
@@ -810,7 +811,7 @@ export class BookingService {
 
         commissionTx = await tx.walletTransaction.create({
           data: {
-            code: `TX-${Date.now()}-${Math.floor(1000 + Math.random() * 9000)}`,
+            code: `TX-${Date.now()}-${Math.floor(1000 + Math.random() * 9000)}-COM`,
             tenantId: booking.servicingTenantId,
             taskerId: booking.assignedTaskerId,
             customerId: booking.customerId ?? null,

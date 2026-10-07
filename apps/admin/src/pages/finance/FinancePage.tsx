@@ -102,10 +102,9 @@ export const FinancePage: React.FC = () => {
   const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
 
   // Determine transactions displayed on current page
-  const displayedTx =
-    isDepositTab || filteredTx.length > pageSize
-      ? filteredTx.slice((currentPage - 1) * pageSize, currentPage * pageSize)
-      : filteredTx;
+  const displayedTx = isDepositTab
+    ? filteredTx.slice((currentPage - 1) * pageSize, currentPage * pageSize)
+    : filteredTx;
 
   const handleExportCSV = () => {
     toast({
