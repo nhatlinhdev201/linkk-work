@@ -50,7 +50,15 @@ export type BookingStatus =
 
 export type PricingModel = 'HOURLY' | 'PER_UNIT' | 'BIDDING';
 
-export type PaymentMethod = 'CASH' | 'MOMO' | 'VNPAY' | 'BANK_TRANSFER';
+export const PaymentMethod = {
+  CASH: 'CASH',
+  MOMO: 'MOMO',
+  VNPAY: 'VNPAY',
+  BANK_TRANSFER: 'BANK_TRANSFER',
+  WALLET: 'WALLET',
+} as const;
+
+export type PaymentMethod = (typeof PaymentMethod)[keyof typeof PaymentMethod];
 
 export interface BookingEventItem {
   id: string;
@@ -220,6 +228,7 @@ export interface ServiceItem {
 
 // --- TÀI CHÍNH & VÍ KÝ QUỸ (FINANCIAL & LEDGER) ---
 export type TransactionType =
+  | 'CASH_COLLECTED' // Thu tiền mặt trực tiếp
   | 'TOP_UP_DEPOSIT' // Nạp tiền ví ký quỹ
   | 'WITHDRAW_DEPOSIT' // Khấu trừ/rút ký quỹ
   | 'SOFT_HOLD' // Tạm khóa cọc khi nhận việc
@@ -238,6 +247,7 @@ export interface WalletTransaction {
   tenantName?: string;
   taskerId?: string;
   taskerName?: string;
+  customerId?: string;
   bookingId?: string;
   bookingCode?: string;
   type: TransactionType;
@@ -246,11 +256,42 @@ export interface WalletTransaction {
   balanceBefore: number;
   balanceAfter: number;
   status: TransactionStatus;
+  sourceType: string;
+  sourceId?: string;
+  sourceName: string;
+  targetType: string;
+  targetId?: string;
+  targetName: string;
+  paymentMethod: PaymentMethod;
   bankName?: string;
   bankAccount?: string;
   notes?: string;
   triggeredBy?: string;
   createdAt: string;
+}
+
+export interface TransactionQueryParams {
+  search?: string;
+  type?: string;
+  paymentMethod?: PaymentMethod | string;
+  tenantId?: string | null;
+  taskerId?: string;
+  startDate?: string;
+  endDate?: string;
+  page?: number;
+  limit?: number;
+}
+
+export interface TransactionsResponse {
+  transactions: WalletTransaction[];
+  total: number;
+  page: number;
+  limit: number;
+  summary?: {
+    totalCashCollected: number;
+    totalCommissionFee: number;
+    totalDepositTopUp: number;
+  };
 }
 
 export interface FinancialSummary {

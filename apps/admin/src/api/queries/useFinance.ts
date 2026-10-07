@@ -1,18 +1,29 @@
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../client';
-import { FinancialSummary, WalletTransaction } from '../../types';
-import { QUERY_KEYS } from '../../lib/queryClient';
+import {
+  FinancialSummary,
+  TransactionQueryParams,
+  TransactionsResponse,
+  WalletTransaction,
+} from '../../types';
 
 export const useFinancialSummaryQuery = (tenantId?: string | null) => {
   return useQuery<FinancialSummary>({
-    queryKey: QUERY_KEYS.financialSummary(tenantId),
+    queryKey: ['financialSummary', tenantId],
     queryFn: () => api.getFinancialSummary(tenantId),
   });
 };
 
-export const useWalletTransactionsQuery = (tenantId?: string | null) => {
-  return useQuery<WalletTransaction[]>({
-    queryKey: QUERY_KEYS.financialTransactions(tenantId),
-    queryFn: () => api.getWalletTransactions(tenantId),
+export const useWalletTransactionsQuery = (
+  params?: TransactionQueryParams | string | null
+) => {
+  const resolvedParams: TransactionQueryParams | undefined =
+    typeof params === 'string'
+      ? { tenantId: params }
+      : params ?? undefined;
+
+  return useQuery<WalletTransaction[] & TransactionsResponse>({
+    queryKey: ['financialTransactions', params],
+    queryFn: () => api.getWalletTransactions(resolvedParams),
   });
 };

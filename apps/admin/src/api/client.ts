@@ -27,6 +27,10 @@ import type {
   PricingModel,
   PaymentMethod,
   WalletTransaction,
+  TransactionStatus,
+  TransactionType,
+  TransactionQueryParams,
+  TransactionsResponse,
   FinancialSummary,
   TenantSettings,
 } from '../types/index.ts';
@@ -387,6 +391,95 @@ export interface TaskerDepositResult {
     autoRadarEnabled: boolean;
   };
   transaction: WalletTransaction;
+}
+
+export interface BackendWalletTransactionResponse {
+  id: string;
+  code: string;
+  tenantId: string;
+  taskerId?: string | null;
+  customerId?: string | null;
+  bookingId?: string | null;
+  type: TransactionType | string;
+  amount: number;
+  direction: 'IN' | 'OUT';
+  balanceBefore: number;
+  balanceAfter: number;
+  status: TransactionStatus;
+  sourceType: string;
+  sourceId?: string | null;
+  sourceName: string;
+  targetType: string;
+  targetId?: string | null;
+  targetName: string;
+  paymentMethod: PaymentMethod;
+  bankName?: string | null;
+  bankAccount?: string | null;
+  notes?: string | null;
+  triggeredBy?: string | null;
+  createdAt: string;
+  booking?: {
+    id: string;
+    code: string;
+  } | null;
+  tenant?: {
+    id: string;
+    name: string;
+  } | null;
+  tasker?: {
+    id: string;
+    name: string;
+    phone?: string | null;
+  } | null;
+  tenantName?: string;
+  taskerName?: string;
+  bookingCode?: string;
+}
+
+export interface BackendTransactionsListResponse {
+  transactions: BackendWalletTransactionResponse[];
+  total: number;
+  page: number;
+  limit: number;
+  summary?: {
+    totalCashCollected: number;
+    totalCommissionFee: number;
+    totalDepositTopUp: number;
+  };
+}
+
+export function mapBackendTransactionToWalletTransaction(
+  raw: BackendWalletTransactionResponse
+): WalletTransaction {
+  return {
+    id: raw.id,
+    code: raw.code,
+    tenantId: raw.tenantId,
+    tenantName: raw.tenantName || raw.tenant?.name || undefined,
+    taskerId: raw.taskerId || raw.tasker?.id || undefined,
+    taskerName: raw.taskerName || raw.tasker?.name || undefined,
+    customerId: raw.customerId || undefined,
+    bookingId: raw.bookingId || raw.booking?.id || undefined,
+    bookingCode: raw.bookingCode || raw.booking?.code || undefined,
+    type: raw.type as TransactionType,
+    amount: Number(raw.amount) || 0,
+    direction: raw.direction,
+    balanceBefore: Number(raw.balanceBefore) || 0,
+    balanceAfter: Number(raw.balanceAfter) || 0,
+    status: raw.status,
+    sourceType: raw.sourceType || 'UNKNOWN',
+    sourceId: raw.sourceId || undefined,
+    sourceName: raw.sourceName || 'Chưa xác định',
+    targetType: raw.targetType || 'UNKNOWN',
+    targetId: raw.targetId || undefined,
+    targetName: raw.targetName || 'Chưa xác định',
+    paymentMethod: raw.paymentMethod || 'WALLET',
+    bankName: raw.bankName || undefined,
+    bankAccount: raw.bankAccount || undefined,
+    notes: raw.notes || undefined,
+    triggeredBy: raw.triggeredBy || undefined,
+    createdAt: raw.createdAt,
+  };
 }
 
 export function mapBackendTaskerToAdminTasker(raw: BackendTaskerResponse): Tasker {
@@ -1807,6 +1900,13 @@ export class ApiClient {
       balanceBefore,
       balanceAfter,
       status: 'COMPLETED',
+      sourceType: data.amount > 0 ? 'TENANT' : 'TASKER',
+      sourceId: data.amount > 0 ? item.tenantId : item.id,
+      sourceName: data.amount > 0 ? item.tenantName : item.name,
+      targetType: data.amount > 0 ? 'TASKER' : 'TENANT',
+      targetId: data.amount > 0 ? item.id : item.tenantId,
+      targetName: data.amount > 0 ? item.name : item.tenantName,
+      paymentMethod: 'WALLET',
       notes: data.notes,
       createdAt: new Date().toISOString(),
     };
@@ -1885,13 +1985,13 @@ export class ApiClient {
 
     if (token) {
       try {
-        const list = await this.fetchWithAuth<WalletTransaction[]>(
+        const list = await this.fetchWithAuth<BackendWalletTransactionResponse[]>(
           `/taskers/${id}/transactions`,
           { method: 'GET' },
           true
         );
         if (Array.isArray(list)) {
-          return list;
+          return list.map(mapBackendTransactionToWalletTransaction);
         }
       } catch (err: unknown) {
         console.warn(
@@ -2570,6 +2670,37 @@ export class ApiClient {
 
   // --- TÀI CHÍNH & VÍ KÝ QUỸ (FINANCIAL & WALLET) ---
   async getFinancialSummary(tenantId?: string | null): Promise<FinancialSummary> {
+    const token = getStorage().getItem(STORAGE_KEYS.ACCESS_TOKEN);
+    if (token) {
+      try {
+        const query = new URLSearchParams();
+        if (tenantId && tenantId !== 'tenant-linkkwork') {
+          query.append('tenantId', tenantId);
+        }
+        const queryString = query.toString();
+        const endpoint = `/finance/summary${queryString ? `?${queryString}` : ''}`;
+        const data = await this.fetchWithAuth<FinancialSummary>(
+          endpoint,
+          { method: 'GET' },
+          true
+        );
+        if (data && typeof data.grossServiceVolume === 'number') {
+          return {
+            grossServiceVolume: Number(data.grossServiceVolume) || 0,
+            platformCommissionEarned: Number(data.platformCommissionEarned) || 0,
+            tenantNetRevenue: Number(data.tenantNetRevenue) || 0,
+            totalDepositHeld: Number(data.totalDepositHeld) || 0,
+            pendingSettlementsCount: Number(data.pendingSettlementsCount) || 0,
+          };
+        }
+      } catch (err: unknown) {
+        console.warn(
+          'Error fetching live financial summary:',
+          err instanceof Error ? err.message : String(err)
+        );
+      }
+    }
+
     await sleep(150);
     const summary = loadData<FinancialSummary>(
       STORAGE_KEYS.FINANCIAL_SUMMARY,
@@ -2587,14 +2718,107 @@ export class ApiClient {
     };
   }
 
-  async getWalletTransactions(tenantId?: string | null): Promise<WalletTransaction[]> {
+  async getWalletTransactions(
+    params?: TransactionQueryParams | string | null
+  ): Promise<WalletTransaction[] & TransactionsResponse> {
+    const resolvedParams: TransactionQueryParams | undefined =
+      typeof params === 'string'
+        ? { tenantId: params }
+        : params ?? undefined;
+
+    const token = getStorage().getItem(STORAGE_KEYS.ACCESS_TOKEN);
+    if (token) {
+      try {
+        const query = new URLSearchParams();
+        if (resolvedParams?.search) query.append('search', resolvedParams.search);
+        if (resolvedParams?.type && resolvedParams.type !== 'ALL') query.append('type', resolvedParams.type);
+        if (resolvedParams?.paymentMethod && resolvedParams.paymentMethod !== 'ALL') query.append('paymentMethod', resolvedParams.paymentMethod);
+        if (resolvedParams?.tenantId && resolvedParams.tenantId !== 'tenant-linkkwork') query.append('tenantId', resolvedParams.tenantId);
+        if (resolvedParams?.taskerId) query.append('taskerId', resolvedParams.taskerId);
+        if (resolvedParams?.startDate) query.append('startDate', resolvedParams.startDate);
+        if (resolvedParams?.endDate) query.append('endDate', resolvedParams.endDate);
+        if (resolvedParams?.page) query.append('page', String(resolvedParams.page));
+        if (resolvedParams?.limit) query.append('limit', String(resolvedParams.limit));
+
+        const queryString = query.toString();
+        const endpoint = `/finance/transactions${queryString ? `?${queryString}` : ''}`;
+        const data = await this.fetchWithAuth<BackendTransactionsListResponse>(
+          endpoint,
+          { method: 'GET' },
+          true
+        );
+
+        if (data && Array.isArray(data.transactions)) {
+          const mappedTransactions = data.transactions.map(mapBackendTransactionToWalletTransaction);
+          const total = data.total ?? mappedTransactions.length;
+          const page = data.page ?? 1;
+          const limit = data.limit ?? 20;
+          const summary = data.summary;
+
+          return Object.assign(mappedTransactions, {
+            transactions: mappedTransactions,
+            total,
+            page,
+            limit,
+            summary,
+          });
+        }
+      } catch (err: unknown) {
+        console.warn(
+          'Error fetching live wallet transactions:',
+          err instanceof Error ? err.message : String(err)
+        );
+      }
+    }
+
     await sleep(150);
     const list = loadData<WalletTransaction[]>(
       STORAGE_KEYS.FINANCIAL_TX,
       INITIAL_FINANCIAL_TRANSACTIONS
     );
-    if (!tenantId || tenantId === 'tenant-linkkwork') return list;
-    return list.filter((t) => t.tenantId === tenantId);
+
+    let filtered = [...list];
+    const tenantId = resolvedParams?.tenantId;
+    if (tenantId && tenantId !== 'tenant-linkkwork') {
+      filtered = filtered.filter((t) => t.tenantId === tenantId);
+    }
+    if (resolvedParams?.type && resolvedParams.type !== 'ALL') {
+      filtered = filtered.filter((t) => t.type === resolvedParams.type);
+    }
+    if (resolvedParams?.paymentMethod && resolvedParams.paymentMethod !== 'ALL') {
+      filtered = filtered.filter((t) => t.paymentMethod === resolvedParams.paymentMethod);
+    }
+    if (resolvedParams?.taskerId) {
+      filtered = filtered.filter((t) => t.taskerId === resolvedParams.taskerId);
+    }
+    if (resolvedParams?.search) {
+      const s = resolvedParams.search.toLowerCase();
+      filtered = filtered.filter(
+        (t) =>
+          t.code.toLowerCase().includes(s) ||
+          t.notes?.toLowerCase().includes(s) ||
+          t.bookingCode?.toLowerCase().includes(s) ||
+          t.sourceName?.toLowerCase().includes(s) ||
+          t.targetName?.toLowerCase().includes(s)
+      );
+    }
+
+    const total = filtered.length;
+    const page = resolvedParams?.page ?? 1;
+    const limit = resolvedParams?.limit ?? 20;
+    const paged = filtered.slice((page - 1) * limit, page * limit);
+
+    return Object.assign(paged, {
+      transactions: paged,
+      total,
+      page,
+      limit,
+      summary: {
+        totalCashCollected: 0,
+        totalCommissionFee: 0,
+        totalDepositTopUp: 0,
+      },
+    });
   }
 
   // --- CÀI ĐẶT HỆ THỐNG & TENANT (SETTINGS) ---
