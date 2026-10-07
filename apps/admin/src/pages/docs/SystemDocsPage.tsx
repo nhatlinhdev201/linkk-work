@@ -23,6 +23,7 @@ import {
   Terminal,
   Compass,
   AlertTriangle,
+  Briefcase,
 } from 'lucide-react';
 
 type ActorTab = 'ALL' | 'OVERVIEW' | 'SUPER_ADMIN' | 'TENANT_ADMIN' | 'TASKER' | 'CUSTOMER' | 'SYSTEM_ENGINE';
@@ -70,6 +71,8 @@ export const SystemDocsPage: React.FC = () => {
     { method: 'PATCH', path: '/api/v1/taskers/:id/toggle-status', desc: 'Bật/tắt ca trực tuyến (isOnline) nhận việc', role: 'Admin / Tasker' },
     { method: 'POST', path: '/api/v1/taskers/:id/deposit', desc: 'Nạp / Khấu trừ ký quỹ (ghi Sổ cái WalletTransaction)', role: 'Admin' },
     { method: 'PATCH', path: '/api/v1/taskers/:id/kyc', desc: 'Xác thực căn cước công dân (CCCD) cho thợ', role: 'Admin' },
+    { method: 'GET', path: '/api/v1/taskers/:id/transactions', desc: 'Lịch sử giao dịch sổ cái kép (WalletTransaction) của thợ', role: 'Admin / Tasker' },
+    { method: 'GET', path: '/api/v1/bookings/available-taskers', desc: 'Danh sách thợ khả dụng phục vụ điều phối kèm availability & activeJob', role: 'Admin' },
   ];
 
   const filteredEndpoints = useMemo(() => {
@@ -250,6 +253,27 @@ export const SystemDocsPage: React.FC = () => {
                 </div>
               </CardContent>
             </Card>
+
+            {/* Docs-as-Code & Subagent Standards */}
+            <Card className="border-slate-200 shadow-2xs bg-gradient-to-r from-slate-50 to-brand-50/30">
+              <CardContent className="p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2">
+                    <BookOpen className="w-4 h-4 text-brand-600" />
+                    <h3 className="font-bold text-slate-900 text-sm">
+                      Quy chuẩn Docs-as-Code &amp; Tự động hóa Tài liệu (Rule 10 CODING_STANDARDS)
+                    </h3>
+                  </div>
+                  <p className="text-xs text-slate-600 leading-relaxed max-w-3xl">
+                    Toàn bộ thay đổi về kiến trúc, state machine, API contracts và phân quyền RBAC luôn được duy trì đồng bộ 100% giữa tài liệu kỹ thuật dự án (<code>docs/</code>) và trang tài liệu trực quan này (<code>SystemDocsPage.tsx</code>) bởi subagent chuyên trách <code>docs-maintainer</code>, loại bỏ hoàn toàn hiện tượng lệch pha (code drift).
+                  </p>
+                </div>
+                <div className="shrink-0 flex items-center gap-1.5">
+                  <Badge variant="success" size="sm">Single Source of Truth</Badge>
+                  <Badge variant="brand" size="sm">Zero Code Drift</Badge>
+                </div>
+              </CardContent>
+            </Card>
           </div>
         )}
 
@@ -398,10 +422,10 @@ export const SystemDocsPage: React.FC = () => {
             <Card className="border-slate-200 shadow-2xs">
               <CardContent className="p-5 space-y-4">
                 <h3 className="font-bold text-slate-900 text-sm">
-                  Mô Hình Trạng Thái 3 Tầng &amp; 6 Lý Do Không Sẵn Sàng (Availability Engine)
+                  Mô Hình Trạng Thái 3 Tầng &amp; 7 Mã Khả Dụng (Availability Engine)
                 </h3>
                 <p className="text-xs text-slate-600">
-                  Hệ thống tự động tính toán thời gian thực xem thợ có đủ điều kiện nhận việc và quét radar hay không dựa trên 3 tầng kiểm tra:
+                  Hệ thống tự động tính toán thời gian thực xem thợ có đủ điều kiện nhận việc và quét radar hay không dựa trên 3 tầng kiểm tra chặt chẽ:
                 </p>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 pt-1">
@@ -458,9 +482,59 @@ export const SystemDocsPage: React.FC = () => {
                       Thợ tắt chế độ tự động quét việc; chỉ có thể nhận đơn khi Admin chỉ định trực tiếp bằng tay.
                     </p>
                   </div>
+
+                  <div className="p-3 bg-red-50 border border-red-300 rounded-xl space-y-1 sm:col-span-2 lg:col-span-3">
+                    <span className="text-xs font-bold text-red-800 flex items-center gap-1.5">
+                      ⛔ RESTRICTED (Bị giới hạn / Tạm khóa)
+                    </span>
+                    <p className="text-[11px] text-red-700">
+                      Tài khoản thợ hoặc trạng thái hồ sơ bị khóa do vi phạm chính sách hoặc đang xử lý khiếu nại chất lượng. Tuyệt đối không thể nhận bất kỳ công việc nào.
+                    </p>
+                  </div>
                 </div>
               </CardContent>
             </Card>
+
+            {/* Lifecycle Sync & Active Job Tracking */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+              <Card className="border-slate-200 shadow-2xs">
+                <CardContent className="p-5 space-y-3">
+                  <h3 className="font-bold text-slate-900 text-sm flex items-center gap-2">
+                    <Layers className="w-4 h-4 text-indigo-600" />
+                    Đồng Bộ Hai Chiều BookingState - TaskerProfile trong ACID Transaction
+                  </h3>
+                  <div className="space-y-2 text-xs text-slate-600 leading-relaxed">
+                    <p>
+                      Mọi bước chuyển trạng thái đơn hàng đều cập nhật đồng thời trạng thái thợ (<code>currentStatus</code>) trong giao dịch cơ sở dữ liệu nguyên tử (<code>prisma.$transaction</code>):
+                    </p>
+                    <ul className="list-disc list-inside space-y-1 text-[11px] text-slate-600">
+                      <li><strong>Gán thợ (ASSIGNED):</strong> Profile thợ cập nhật <code>ASSIGNED</code>. Nếu đổi thợ khác, thợ cũ tự động hoàn trả về <code>IDLE</code> khi không còn đơn đang xử lý.</li>
+                      <li><strong>Di chuyển &amp; Thi công:</strong> Đồng bộ theo thời gian thực sang <code>ARRIVING</code>, <code>IN_PROGRESS</code>, <code>PENDING_ACCEPTANCE</code>.</li>
+                      <li><strong>Hoàn thành / Hủy:</strong> Tăng bộ đếm <code>completedJobsCount</code> (+1), tự động kiểm tra số đơn còn lại và trả thợ về <code>IDLE</code>.</li>
+                    </ul>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card className="border-slate-200 shadow-2xs">
+                <CardContent className="p-5 space-y-3">
+                  <h3 className="font-bold text-slate-900 text-sm flex items-center gap-2">
+                    <Briefcase className="w-4 h-4 text-brand-600" />
+                    Theo Dõi Ca Việc Đang Thực Hiện (Active Job Tracking)
+                  </h3>
+                  <div className="space-y-2 text-xs text-slate-600 leading-relaxed">
+                    <p>
+                      Hệ thống tự động gắn kèm cấu trúc dữ liệu <code>activeJob</code> vào hồ sơ thợ khi có đơn hàng chưa hoàn tất:
+                    </p>
+                    <ul className="list-disc list-inside space-y-1 text-[11px] text-slate-600">
+                      <li><strong>Dữ liệu đính kèm:</strong> Mã đơn (<code>bookingCode</code>), tên dịch vụ, khách hàng, số điện thoại liên hệ, địa chỉ thi công, giá tiền và trạng thái.</li>
+                      <li><strong>Thao tác 1-Click:</strong> Thẻ việc nổi bật trên Drawer chi tiết thợ cung cấp nút liên kết trực tiếp sang Bàn Điều Phối (<code>/dispatch</code>) để can thiệp kịp thời.</li>
+                      <li><strong>Huy hiệu trực quan:</strong> Danh sách thợ hiển thị rõ ràng nhãn Sẵn sàng (🟢) hoặc Đang làm việc (🟡 kèm mã đơn).</li>
+                    </ul>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
 
             {/* Financial model */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
