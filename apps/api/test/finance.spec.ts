@@ -21,6 +21,7 @@ describe('Finance & Universal Ledger Module Integration Tests', () => {
   let tenantAId: string;
   let tenantBAdminToken: string;
   let tenantBId: string;
+  let taskerToken: string;
 
   let taskerAId: string;
   let taskerBId: string;
@@ -128,10 +129,11 @@ describe('Finance & Universal Ledger Module Integration Tests', () => {
 
     // 4. Create Tasker A for Tenant A
     const passwordHash = await bcrypt.hash('Tasker@123456', 10);
+    const taskerEmail = `tasker_fin_a_${Date.now()}@anhduong.vn`;
     const taskerAUser = await prisma.user.create({
       data: {
         tenantId: tenantAId,
-        email: `tasker_fin_a_${Date.now()}@anhduong.vn`,
+        email: taskerEmail,
         name: 'Nguyễn Văn Thợ Finance A',
         phone: `09${Math.floor(10000000 + Math.random() * 90000000)}`,
         passwordHash,
@@ -150,6 +152,14 @@ describe('Finance & Universal Ledger Module Integration Tests', () => {
         skills: ['don-dep-nha'],
       },
     });
+
+    const taskerLoginRes = await request(app.getHttpServer())
+      .post('/api/v1/auth/login')
+      .send({
+        email: taskerEmail,
+        password: 'Tasker@123456',
+      });
+    taskerToken = taskerLoginRes.body.accessToken;
 
     // 5. Create Tasker B for Tenant B
     const taskerBUser = await prisma.user.create({
@@ -615,6 +625,47 @@ describe('Finance & Universal Ledger Module Integration Tests', () => {
       await request(app.getHttpServer())
         .get('/api/v1/finance/summary')
         .expect(401);
+    });
+
+    it('request from a TASKER returns 403 Forbidden', async () => {
+      await request(app.getHttpServer())
+        .get('/api/v1/finance/transactions')
+        .set('Authorization', `Bearer ${taskerToken}`)
+        .expect(403);
+
+      await request(app.getHttpServer())
+        .get('/api/v1/finance/summary')
+        .set('Authorization', `Bearer ${taskerToken}`)
+        .expect(403);
+    });
+
+    it('Super Admin with x-impersonate-tenant-id header correctly scopes transactions and summary to Tenant A without query parameter', async () => {
+      // 1. Transactions scoped to Tenant A
+      const txRes = await request(app.getHttpServer())
+        .get('/api/v1/finance/transactions')
+        .set('Authorization', `Bearer ${superAdminToken}`)
+        .set('x-impersonate-tenant-id', tenantAId)
+        .expect(200);
+
+      expect(txRes.body.transactions.length).toBeGreaterThanOrEqual(3);
+      txRes.body.transactions.forEach((tx: { tenantId: string; code: string }) => {
+        expect(tx.tenantId).toBe(tenantAId);
+        expect(tx.code).not.toBe(testTxCodes[3]); // No Tenant B tx
+      });
+      expect(txRes.body.summary.totalCashCollected).toBeGreaterThanOrEqual(300000);
+
+      // 2. Summary scoped to Tenant A
+      const summaryRes = await request(app.getHttpServer())
+        .get('/api/v1/finance/summary')
+        .set('Authorization', `Bearer ${superAdminToken}`)
+        .set('x-impersonate-tenant-id', tenantAId)
+        .expect(200);
+
+      expect(summaryRes.body.grossServiceVolume).toBeGreaterThanOrEqual(300000);
+      expect(summaryRes.body.platformCommissionEarned).toBeGreaterThanOrEqual(45000);
+      expect(summaryRes.body.tenantNetRevenue).toBe(
+        summaryRes.body.grossServiceVolume - summaryRes.body.platformCommissionEarned,
+      );
     });
   });
 });

@@ -35,13 +35,11 @@ export class FinanceService {
     const where: Prisma.WalletTransactionWhereInput = {};
 
     // Phân quyền tenant
-    if (!isSuperAdmin) {
-      if (!effectiveTenantId) {
-        throw new ForbiddenException('Tenant context is required');
-      }
-      where.tenantId = effectiveTenantId;
-    } else if (query.tenantId) {
-      where.tenantId = query.tenantId;
+    const targetTenantId = effectiveTenantId || (isSuperAdmin ? query.tenantId : null);
+    if (targetTenantId) {
+      where.tenantId = targetTenantId;
+    } else if (!isSuperAdmin) {
+      throw new ForbiddenException('Tenant context is required');
     }
 
     // Bộ lọc nghiệp vụ và phương thức
@@ -121,10 +119,8 @@ export class FinanceService {
 
     // Tính toán số liệu tóm tắt cho matching tenant
     const summaryTenantFilter: Prisma.WalletTransactionWhereInput = {};
-    if (!isSuperAdmin) {
-      summaryTenantFilter.tenantId = effectiveTenantId!;
-    } else if (query.tenantId) {
-      summaryTenantFilter.tenantId = query.tenantId;
+    if (targetTenantId) {
+      summaryTenantFilter.tenantId = targetTenantId;
     }
 
     const [cashAgg, commAgg, depositAgg] = await Promise.all([
@@ -177,26 +173,14 @@ export class FinanceService {
     effectiveTenantId: string | null,
     isSuperAdmin: boolean,
   ): Promise<FinancialSummary> {
-    let targetTenantId: string | null = null;
-    if (!isSuperAdmin) {
-      if (!effectiveTenantId) {
-        throw new ForbiddenException('Tenant context is required');
-      }
-      targetTenantId = effectiveTenantId;
-    } else {
-      targetTenantId = queryTenantId || null;
+    const targetTenantId = effectiveTenantId || (isSuperAdmin ? queryTenantId : null);
+    if (!targetTenantId && !isSuperAdmin) {
+      throw new ForbiddenException('Tenant context is required');
     }
 
     const bookingWhere: Prisma.BookingWhereInput = {
       status: BookingStatus.COMPLETED,
-      ...(targetTenantId
-        ? {
-            OR: [
-              { servicingTenantId: targetTenantId },
-              { originTenantId: targetTenantId },
-            ],
-          }
-        : {}),
+      ...(targetTenantId ? { servicingTenantId: targetTenantId } : {}),
     };
 
     const commTxWhere: Prisma.WalletTransactionWhereInput = {
@@ -213,14 +197,7 @@ export class FinanceService {
       status: {
         in: [BookingStatus.IN_PROGRESS, BookingStatus.PENDING_ACCEPTANCE],
       },
-      ...(targetTenantId
-        ? {
-            OR: [
-              { servicingTenantId: targetTenantId },
-              { originTenantId: targetTenantId },
-            ],
-          }
-        : {}),
+      ...(targetTenantId ? { servicingTenantId: targetTenantId } : {}),
     };
 
     const [bookingSum, commSum, depositSum, pendingCount] = await Promise.all([
