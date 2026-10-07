@@ -339,7 +339,7 @@ export class TaskerService {
 
     return {
       ...sanitized,
-      walletTransactions: (tasker as any).taskerWalletTransactions || [],
+      walletTransactions: tasker.taskerWalletTransactions ?? [],
       availability,
       activeJob,
     };
