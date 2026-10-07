@@ -21,6 +21,8 @@ import {
   PaymentMethod,
 } from '@linkkwork/shared-types';
 import {
+  Prisma,
+  WalletTransaction,
   WalletTransactionType,
   WalletTransactionStatus,
 } from '@prisma/client';
@@ -442,86 +444,19 @@ export class BookingService {
         }
 
         // Tự động ghi nhận thanh toán và khấu trừ hoa hồng sàn nếu chưa từng thanh toán/khấu trừ trước đó
+        const currentBooking = await tx.booking.findUnique({ where: { id: bookingId } });
         if (
-          booking.paymentStatus !== PaymentStatus.RELEASED_TO_TASKER &&
+          currentBooking?.paymentStatus !== PaymentStatus.RELEASED_TO_TASKER &&
           booking.assignedTaskerId
         ) {
-          const tasker = await tx.user.findUnique({
-            where: { id: booking.assignedTaskerId },
-          });
-          const taskerProfile = await tx.taskerProfile.findUnique({
-            where: { userId: booking.assignedTaskerId },
-          });
-
-          if (taskerProfile) {
-            const servicingTenant = await tx.tenant.findUnique({
-              where: { id: booking.servicingTenantId },
-            });
-
-            // 1. CASH_COLLECTED transaction: Khách hàng thanh toán tiền mặt trực tiếp cho thợ
-            await tx.walletTransaction.create({
-              data: {
-                code: `TX-${new Date().getFullYear()}-${Math.floor(100000 + Math.random() * 900000)}`,
-                tenantId: booking.servicingTenantId,
-                taskerId: booking.assignedTaskerId,
-                customerId: booking.customerId ?? null,
-                bookingId: booking.id,
-                type: WalletTransactionType.CASH_COLLECTED,
-                sourceType: 'CUSTOMER',
-                sourceId: booking.customerId ?? null,
-                sourceName: booking.customerName || 'Khách hàng',
-                targetType: 'TASKER',
-                targetId: booking.assignedTaskerId,
-                targetName: tasker?.name || 'Thợ đối tác',
-                paymentMethod: PaymentMethod.CASH,
-                amount: booking.totalAmount,
-                direction: 'IN',
-                balanceBefore: taskerProfile.depositBalance,
-                balanceAfter: taskerProfile.depositBalance,
-                status: WalletTransactionStatus.COMPLETED,
-                notes: dto.note || `Khách hàng thanh toán tiền mặt trực tiếp cho thợ: ${booking.totalAmount.toLocaleString('vi-VN')} đ`,
-                triggeredBy,
-              },
-            });
-
-            // 2. COMMISSION_FEE transaction: Tự động khấu trừ hoa hồng sàn từ ví ký quỹ của thợ
-            const commissionRate = servicingTenant?.commissionRate ?? 15.0;
-            const commissionAmount = Math.round(booking.totalAmount * (commissionRate / 100));
-
-            if (commissionAmount > 0) {
-              const newDepositBalance = taskerProfile.depositBalance - commissionAmount;
-
-              await tx.taskerProfile.update({
-                where: { id: taskerProfile.id },
-                data: { depositBalance: newDepositBalance },
-              });
-
-              await tx.walletTransaction.create({
-                data: {
-                  code: `TX-${new Date().getFullYear()}-${Math.floor(100000 + Math.random() * 900000)}`,
-                  tenantId: booking.servicingTenantId,
-                  taskerId: booking.assignedTaskerId,
-                  customerId: booking.customerId ?? null,
-                  bookingId: booking.id,
-                  type: WalletTransactionType.COMMISSION_FEE,
-                  sourceType: 'TASKER',
-                  sourceId: booking.assignedTaskerId,
-                  sourceName: tasker?.name || 'Thợ đối tác',
-                  targetType: 'TENANT',
-                  targetId: booking.servicingTenantId,
-                  targetName: servicingTenant?.name || 'Đơn vị đối tác',
-                  paymentMethod: PaymentMethod.WALLET,
-                  amount: commissionAmount,
-                  direction: 'OUT',
-                  balanceBefore: taskerProfile.depositBalance,
-                  balanceAfter: newDepositBalance,
-                  status: WalletTransactionStatus.COMPLETED,
-                  notes: `Khấu trừ hoa hồng sàn ${commissionRate}% khi hoàn tất đơn ${booking.code} (Tiền mặt)`,
-                  triggeredBy,
-                },
-              });
-            }
-          }
+          await this.settleCashBookingLedger(
+            tx,
+            booking,
+            booking.totalAmount,
+            triggeredBy,
+            true,
+            dto.note,
+          );
         }
       }
 
@@ -738,89 +673,23 @@ export class BookingService {
     }
 
     return this.prisma.$transaction(async (tx) => {
+      // TOCTOU Concurrency Guard: Kiểm tra lại trạng thái thanh toán bên trong giao dịch ACID
+      const currentBooking = await tx.booking.findUnique({ where: { id: bookingId } });
+      if (currentBooking?.paymentStatus === PaymentStatus.RELEASED_TO_TASKER) {
+        throw new BadRequestException('Đơn hàng này đã được ghi nhận thanh toán trước đó');
+      }
+
       const amountToCollect = dto.amount ?? booking.totalAmount;
 
-      // Tự động ghi nhận thanh toán tiền mặt và khấu trừ hoa hồng sàn từ ví ký quỹ của thợ
-      let commissionTx = null;
-      if (booking.assignedTaskerId) {
-        const tasker = await tx.user.findUnique({
-          where: { id: booking.assignedTaskerId },
-        });
-        const taskerProfile = await tx.taskerProfile.findUnique({
-          where: { userId: booking.assignedTaskerId },
-        });
-        const servicingTenant = await tx.tenant.findUnique({
-          where: { id: booking.servicingTenantId },
-        });
-
-        if (taskerProfile) {
-          // 1. CASH_COLLECTED transaction: Khách hàng thanh toán tiền mặt trực tiếp cho thợ
-          await tx.walletTransaction.create({
-            data: {
-              code: `TX-${new Date().getFullYear()}-${Math.floor(100000 + Math.random() * 900000)}`,
-              tenantId: booking.servicingTenantId,
-              taskerId: booking.assignedTaskerId,
-              customerId: booking.customerId ?? null,
-              bookingId: booking.id,
-              type: WalletTransactionType.CASH_COLLECTED,
-              sourceType: 'CUSTOMER',
-              sourceId: booking.customerId ?? null,
-              sourceName: booking.customerName || 'Khách hàng',
-              targetType: 'TASKER',
-              targetId: booking.assignedTaskerId,
-              targetName: tasker?.name || 'Thợ đối tác',
-              paymentMethod: PaymentMethod.CASH,
-              amount: amountToCollect,
-              direction: 'IN',
-              balanceBefore: taskerProfile.depositBalance,
-              balanceAfter: taskerProfile.depositBalance,
-              status: WalletTransactionStatus.COMPLETED,
-              notes: dto.note || `Khách hàng thanh toán tiền mặt trực tiếp cho thợ: ${amountToCollect.toLocaleString('vi-VN')} đ`,
-              triggeredBy,
-            },
-          });
-
-          // 2. COMMISSION_FEE transaction: Tự động khấu trừ hoa hồng sàn từ ví ký quỹ của thợ
-          if (dto.deductCommission !== false) {
-            const commissionRate = servicingTenant?.commissionRate ?? 15.0;
-            const commissionAmount = Math.round(amountToCollect * (commissionRate / 100));
-
-            if (commissionAmount > 0) {
-              const newDepositBalance = taskerProfile.depositBalance - commissionAmount;
-
-              await tx.taskerProfile.update({
-                where: { id: taskerProfile.id },
-                data: { depositBalance: newDepositBalance },
-              });
-
-              commissionTx = await tx.walletTransaction.create({
-                data: {
-                  code: `TX-${new Date().getFullYear()}-${Math.floor(100000 + Math.random() * 900000)}`,
-                  tenantId: booking.servicingTenantId,
-                  taskerId: booking.assignedTaskerId,
-                  customerId: booking.customerId ?? null,
-                  bookingId: booking.id,
-                  type: WalletTransactionType.COMMISSION_FEE,
-                  sourceType: 'TASKER',
-                  sourceId: booking.assignedTaskerId,
-                  sourceName: tasker?.name || 'Thợ đối tác',
-                  targetType: 'TENANT',
-                  targetId: booking.servicingTenantId,
-                  targetName: servicingTenant?.name || 'Đơn vị đối tác',
-                  paymentMethod: PaymentMethod.WALLET,
-                  amount: commissionAmount,
-                  direction: 'OUT',
-                  balanceBefore: taskerProfile.depositBalance,
-                  balanceAfter: newDepositBalance,
-                  status: WalletTransactionStatus.COMPLETED,
-                  notes: `Khấu trừ hoa hồng sàn ${commissionRate}% cho đơn ${booking.code} (Thợ thu ${amountToCollect.toLocaleString('vi-VN')} đ tiền mặt)`,
-                  triggeredBy,
-                },
-              });
-            }
-          }
-        }
-      }
+      // Quyết toán sổ cái kép (CASH_COLLECTED & COMMISSION_FEE)
+      const commissionTx = await this.settleCashBookingLedger(
+        tx,
+        booking,
+        amountToCollect,
+        triggeredBy,
+        dto.deductCommission !== false,
+        dto.note,
+      );
 
       const updatedBooking = await tx.booking.update({
         where: { id: bookingId },
@@ -859,5 +728,113 @@ export class BookingService {
         commissionTransaction: commissionTx,
       };
     });
+  }
+
+  /**
+   * Quyết toán sổ cái kép cho đơn hàng tiền mặt (CASH_COLLECTED & COMMISSION_FEE)
+   */
+  private async settleCashBookingLedger(
+    tx: Prisma.TransactionClient,
+    booking: {
+      id: string;
+      code: string;
+      totalAmount: number;
+      servicingTenantId: string;
+      customerId?: string | null;
+      customerName?: string;
+      assignedTaskerId?: string | null;
+      paymentMethod?: PaymentMethod | string | null;
+    },
+    amountToCollect: number,
+    triggeredBy: string,
+    deductCommission = true,
+    note?: string,
+  ): Promise<WalletTransaction | null> {
+    if (!booking.assignedTaskerId) {
+      return null;
+    }
+
+    const tasker = await tx.user.findUnique({
+      where: { id: booking.assignedTaskerId },
+    });
+    const taskerProfile = await tx.taskerProfile.findUnique({
+      where: { userId: booking.assignedTaskerId },
+    });
+    const servicingTenant = await tx.tenant.findUnique({
+      where: { id: booking.servicingTenantId },
+    });
+
+    if (!taskerProfile) {
+      return null;
+    }
+
+    // 1. Bút toán Thu tiền mặt (CASH_COLLECTED)
+    await tx.walletTransaction.create({
+      data: {
+        code: `TX-${Date.now()}-${Math.floor(1000 + Math.random() * 9000)}`,
+        tenantId: booking.servicingTenantId,
+        taskerId: booking.assignedTaskerId,
+        customerId: booking.customerId ?? null,
+        bookingId: booking.id,
+        type: WalletTransactionType.CASH_COLLECTED,
+        sourceType: 'CUSTOMER',
+        sourceId: booking.customerId ?? null,
+        sourceName: booking.customerName || 'Khách hàng',
+        targetType: 'TASKER',
+        targetId: booking.assignedTaskerId,
+        targetName: tasker?.name || 'Thợ đối tác',
+        paymentMethod: PaymentMethod.CASH,
+        amount: amountToCollect,
+        direction: 'IN',
+        balanceBefore: taskerProfile.depositBalance,
+        balanceAfter: taskerProfile.depositBalance,
+        status: WalletTransactionStatus.COMPLETED,
+        notes: note || `Khách hàng thanh toán tiền mặt trực tiếp cho thợ: ${amountToCollect.toLocaleString('vi-VN')} đ`,
+        triggeredBy,
+      },
+    });
+
+    // 2. Bút toán Khấu trừ hoa hồng sàn (COMMISSION_FEE)
+    let commissionTx: WalletTransaction | null = null;
+    if (deductCommission) {
+      const commissionRate = servicingTenant?.commissionRate ?? 15.0;
+      const commissionAmount = Math.round(amountToCollect * (commissionRate / 100));
+
+      if (commissionAmount > 0) {
+        const newDepositBalance = taskerProfile.depositBalance - commissionAmount;
+
+        await tx.taskerProfile.update({
+          where: { id: taskerProfile.id },
+          data: { depositBalance: newDepositBalance },
+        });
+
+        commissionTx = await tx.walletTransaction.create({
+          data: {
+            code: `TX-${Date.now()}-${Math.floor(1000 + Math.random() * 9000)}`,
+            tenantId: booking.servicingTenantId,
+            taskerId: booking.assignedTaskerId,
+            customerId: booking.customerId ?? null,
+            bookingId: booking.id,
+            type: WalletTransactionType.COMMISSION_FEE,
+            sourceType: 'TASKER',
+            sourceId: booking.assignedTaskerId,
+            sourceName: tasker?.name || 'Thợ đối tác',
+            targetType: 'TENANT',
+            targetId: booking.servicingTenantId,
+            targetName: servicingTenant?.name || 'Đơn vị đối tác',
+            paymentMethod: PaymentMethod.WALLET,
+            amount: commissionAmount,
+            direction: 'OUT',
+            balanceBefore: taskerProfile.depositBalance,
+            balanceAfter: newDepositBalance,
+            status: WalletTransactionStatus.COMPLETED,
+            notes: `Khấu trừ hoa hồng sàn ${commissionRate}% cho đơn ${booking.code} (Thợ thu ${amountToCollect.toLocaleString('vi-VN')} đ tiền mặt)`,
+            triggeredBy,
+          },
+        });
+      }
+    }
+
+    return commissionTx;
   }
 }
