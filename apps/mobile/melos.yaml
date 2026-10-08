@@ -12,3 +12,6 @@ scripts:
     packageFilters:
       dirExists: test
     description: Run tests in all packages.
+  format:check:
+    exec: dart format --output=none --set-exit-if-changed .
+    description: Check formatting across all packages.
