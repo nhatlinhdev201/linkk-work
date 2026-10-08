@@ -23,7 +23,7 @@ class UserProfile extends Equatable {
 
   factory UserProfile.fromJson(Map<String, dynamic> json) {
     final roleRaw = json['role'];
-    final roleStr = roleRaw is String ? roleRaw : '';
+    final roleStr = roleRaw is String ? roleRaw : null;
 
     return UserProfile(
       id: json['id'] as String? ?? '',

@@ -109,6 +109,46 @@ void main() {
     });
 
     test(
+        'saveUserProfile saves tenantId when present and deletes when null or empty',
+        () async {
+      when(
+        () => mockStorage.write(
+          key: any(named: 'key'),
+          value: any(named: 'value'),
+        ),
+      ).thenAnswer((_) async {});
+      when(() => mockStorage.delete(key: any(named: 'key')))
+          .thenAnswer((_) async {});
+
+      const profileWithTenant = UserProfile(
+        id: 'usr_99',
+        email: 'test@linkk.vn',
+        phone: '0909090909',
+        name: 'Nguyen Van A',
+        role: UserRole.tasker,
+        tenantId: 'tenant_99',
+        avatarUrl: null,
+      );
+
+      await storageService.saveUserProfile(profileWithTenant);
+      verify(() => mockStorage.write(key: 'tenant_id', value: 'tenant_99'))
+          .called(1);
+
+      const profileWithoutTenant = UserProfile(
+        id: 'usr_99',
+        email: 'test@linkk.vn',
+        phone: '0909090909',
+        name: 'Nguyen Van A',
+        role: UserRole.tasker,
+        tenantId: null,
+        avatarUrl: null,
+      );
+
+      await storageService.saveUserProfile(profileWithoutTenant);
+      verify(() => mockStorage.delete(key: 'tenant_id')).called(1);
+    });
+
+    test(
         'saveUserProfile and getUserProfile serialize and deserialize correctly',
         () async {
       const profile = UserProfile(
@@ -266,9 +306,10 @@ void main() {
           );
         }
 
-        // 3rd call: retried GET /bookings succeeds with new token
+        // 3rd call: retried GET /bookings succeeds with new token and retry guard
         if (callCount == 3) {
           expect(options.path, equals('/bookings'));
+          expect(options.extra['is_retry'], isTrue);
           expect(options.headers['Authorization'],
               equals('Bearer new_refreshed_access_token'));
           return ResponseBody.fromString(
@@ -328,7 +369,7 @@ void main() {
           );
         }
 
-        // 2nd call: POST /auth/refresh-token also fails with 401
+        // 2nd call: POST /auth/refresh-token fails with 401
         if (callCount == 2) {
           return ResponseBody.fromString(
             jsonEncode({'message': 'Refresh token expired'}),
@@ -356,10 +397,162 @@ void main() {
         throwsA(isA<DioException>()),
       );
 
-      // Allow async onError cleanup to complete
       await pumpEventQueue();
 
       verify(() => mockStorage.deleteAll()).called(1);
+    });
+
+    test('500 server error on retried request does NOT call storage.clearAll',
+        () async {
+      when(() => mockStorage.read(key: 'access_token'))
+          .thenAnswer((_) async => 'expired_token');
+      when(() => mockStorage.read(key: 'refresh_token'))
+          .thenAnswer((_) async => 'valid_refresh_token');
+      when(() => mockStorage.read(key: 'tenant_id'))
+          .thenAnswer((_) async => null);
+      when(() => mockStorage.write(
+          key: any(named: 'key'),
+          value: any(named: 'value'))).thenAnswer((_) async {});
+      when(() => mockStorage.deleteAll()).thenAnswer((_) async {});
+
+      var callCount = 0;
+      final adapter = FakeHttpClientAdapter((options) async {
+        callCount++;
+        // 1st call: GET /bookings fails with 401
+        if (callCount == 1) {
+          return ResponseBody.fromString(
+            jsonEncode({'message': 'Unauthorized'}),
+            401,
+            headers: {
+              'content-type': ['application/json']
+            },
+          );
+        }
+
+        // 2nd call: POST /auth/refresh-token succeeds
+        if (callCount == 2) {
+          return ResponseBody.fromString(
+            jsonEncode({
+              'accessToken': 'new_access_token',
+              'refreshToken': 'new_refresh_token',
+            }),
+            200,
+            headers: {
+              'content-type': ['application/json']
+            },
+          );
+        }
+
+        // 3rd call: retried GET /bookings fails with 500 internal server error
+        if (callCount == 3) {
+          return ResponseBody.fromString(
+            jsonEncode({'message': 'Internal Server Error'}),
+            500,
+            headers: {
+              'content-type': ['application/json']
+            },
+          );
+        }
+
+        throw Exception('Unexpected call');
+      });
+
+      final dio = Dio(BaseOptions(baseUrl: 'https://api.linkk.vn'));
+      dio.httpClientAdapter = adapter;
+
+      final client = DioClient(
+        baseUrl: 'https://api.linkk.vn',
+        storage: storageService,
+        customDio: dio,
+      );
+
+      expect(
+        () async => client.dio.get<Map<String, dynamic>>('/bookings'),
+        throwsA(
+          isA<DioException>()
+              .having((e) => e.response?.statusCode, 'statusCode', 500),
+        ),
+      );
+
+      await pumpEventQueue();
+
+      // Session must NOT be wiped when server has a 500 error!
+      verifyNever(() => mockStorage.deleteAll());
+    });
+
+    test(
+        'concurrent 401 requests share a single refresh call and both retry successfully',
+        () async {
+      when(() => mockStorage.read(key: 'access_token'))
+          .thenAnswer((_) async => 'expired_token');
+      when(() => mockStorage.read(key: 'refresh_token'))
+          .thenAnswer((_) async => 'valid_refresh_token');
+      when(() => mockStorage.read(key: 'tenant_id'))
+          .thenAnswer((_) async => null);
+      when(() => mockStorage.write(
+          key: any(named: 'key'),
+          value: any(named: 'value'))).thenAnswer((_) async {});
+
+      var refreshCallCount = 0;
+      final adapter = FakeHttpClientAdapter((options) async {
+        final path = options.path;
+
+        if (path == '/auth/refresh-token') {
+          refreshCallCount++;
+          return ResponseBody.fromString(
+            jsonEncode({
+              'accessToken': 'shared_new_access_token',
+              'refreshToken': 'shared_new_refresh_token',
+            }),
+            200,
+            headers: {
+              'content-type': ['application/json']
+            },
+          );
+        }
+
+        // Initial calls with expired token return 401
+        if (options.headers['Authorization'] !=
+            'Bearer shared_new_access_token') {
+          return ResponseBody.fromString(
+            jsonEncode({'message': 'Unauthorized'}),
+            401,
+            headers: {
+              'content-type': ['application/json']
+            },
+          );
+        }
+
+        // Retried calls with new token succeed
+        return ResponseBody.fromString(
+          jsonEncode({'path': path, 'success': true}),
+          200,
+          headers: {
+            'content-type': ['application/json']
+          },
+        );
+      });
+
+      final dio = Dio(BaseOptions(baseUrl: 'https://api.linkk.vn'));
+      dio.httpClientAdapter = adapter;
+
+      final client = DioClient(
+        baseUrl: 'https://api.linkk.vn',
+        storage: storageService,
+        customDio: dio,
+      );
+
+      // Execute two requests concurrently
+      final responses = await Future.wait([
+        client.dio.get<Map<String, dynamic>>('/bookings'),
+        client.dio.get<Map<String, dynamic>>('/finance/summary'),
+      ]);
+
+      expect(responses[0].statusCode, equals(200));
+      expect(responses[1].statusCode, equals(200));
+
+      // Refresh must only have been invoked ONCE across both concurrent requests
+      expect(refreshCallCount, equals(1));
     });
 
     test(
@@ -407,7 +600,6 @@ void main() {
 
       await pumpEventQueue();
 
-      // Only one call should be made to refresh-token, never an infinite loop
       expect(refreshCallCount, equals(1));
     });
   });

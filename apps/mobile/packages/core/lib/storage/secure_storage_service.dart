@@ -7,8 +7,13 @@ import '../models/user_profile.dart';
 class SecureStorageService {
   final FlutterSecureStorage _storage;
 
+  static const _defaultStorage = FlutterSecureStorage(
+    aOptions: AndroidOptions(encryptedSharedPreferences: true),
+    iOptions: IOSOptions(accessibility: KeychainAccessibility.first_unlock),
+  );
+
   SecureStorageService({FlutterSecureStorage? storage})
-      : _storage = storage ?? const FlutterSecureStorage();
+      : _storage = storage ?? _defaultStorage;
 
   static const _keyAccessToken = 'access_token';
   static const _keyRefreshToken = 'refresh_token';
@@ -44,6 +49,8 @@ class SecureStorageService {
     await _storage.write(key: _keyUserId, value: profile.id);
     if (profile.tenantId != null && profile.tenantId!.isNotEmpty) {
       await _storage.write(key: _keyTenantId, value: profile.tenantId!);
+    } else {
+      await _storage.delete(key: _keyTenantId);
     }
   }
 

@@ -12,7 +12,8 @@ enum BookingStatus {
   final String value;
   const BookingStatus(this.value);
 
-  static BookingStatus fromString(String val) {
+  static BookingStatus fromString(String? val) {
+    if (val == null) return BookingStatus.draft;
     final normalized = val.trim().toUpperCase();
     return BookingStatus.values.firstWhere(
       (e) => e.value == normalized,
@@ -31,7 +32,8 @@ enum PaymentMethod {
   final String value;
   const PaymentMethod(this.value);
 
-  static PaymentMethod fromString(String val) {
+  static PaymentMethod fromString(String? val) {
+    if (val == null) return PaymentMethod.cash;
     final normalized = val.trim().toUpperCase();
     return PaymentMethod.values.firstWhere(
       (e) => e.value == normalized,
@@ -49,7 +51,8 @@ enum UserRole {
   final String value;
   const UserRole(this.value);
 
-  static UserRole fromString(String val) {
+  static UserRole fromString(String? val) {
+    if (val == null) return UserRole.customer;
     final normalized = val.trim().toUpperCase();
     return UserRole.values.firstWhere(
       (e) => e.value == normalized,

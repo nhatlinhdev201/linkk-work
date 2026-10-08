@@ -35,13 +35,19 @@ void main() {
       );
     });
 
-    test('BookingStatus.fromString falls back to draft on unknown string', () {
+    test(
+        'BookingStatus.fromString falls back to draft on unknown string or null',
+        () {
       expect(
         BookingStatus.fromString('UNKNOWN_STATUS'),
         equals(BookingStatus.draft),
       );
       expect(
         BookingStatus.fromString(''),
+        equals(BookingStatus.draft),
+      );
+      expect(
+        BookingStatus.fromString(null),
         equals(BookingStatus.draft),
       );
     });
@@ -66,13 +72,19 @@ void main() {
       expect(PaymentMethod.fromString('VIETQR'), equals(PaymentMethod.vietqr));
     });
 
-    test('PaymentMethod.fromString falls back to cash on unknown string', () {
+    test(
+        'PaymentMethod.fromString falls back to cash on unknown string or null',
+        () {
       expect(
         PaymentMethod.fromString('UNKNOWN_PAYMENT'),
         equals(PaymentMethod.cash),
       );
       expect(
         PaymentMethod.fromString(''),
+        equals(PaymentMethod.cash),
+      );
+      expect(
+        PaymentMethod.fromString(null),
         equals(PaymentMethod.cash),
       );
     });
@@ -99,13 +111,18 @@ void main() {
       );
     });
 
-    test('UserRole.fromString falls back to customer on unknown string', () {
+    test('UserRole.fromString falls back to customer on unknown string or null',
+        () {
       expect(
         UserRole.fromString('UNKNOWN_ROLE'),
         equals(UserRole.customer),
       );
       expect(
         UserRole.fromString(''),
+        equals(UserRole.customer),
+      );
+      expect(
+        UserRole.fromString(null),
         equals(UserRole.customer),
       );
     });
