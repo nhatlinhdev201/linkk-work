@@ -45,13 +45,23 @@ class _LinkkButtonState extends State<LinkkButton> {
   }
 
   void _handleTapUp(TapUpDetails details) {
-    if (!_isInteractive) return;
-    setState(() => _isPressed = false);
+    if (_isPressed) {
+      setState(() => _isPressed = false);
+    }
   }
 
   void _handleTapCancel() {
-    if (!_isInteractive) return;
-    setState(() => _isPressed = false);
+    if (_isPressed) {
+      setState(() => _isPressed = false);
+    }
+  }
+
+  @override
+  void didUpdateWidget(covariant LinkkButton oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!_isInteractive && _isPressed) {
+      setState(() => _isPressed = false);
+    }
   }
 
   @override
@@ -59,8 +69,12 @@ class _LinkkButtonState extends State<LinkkButton> {
     final effectiveBorderRadius =
         widget.borderRadius ?? BorderRadius.circular(12);
 
-    return AnimatedScale(
-      scale: _isInteractive && _isPressed ? 0.96 : 1.0,
+    return Semantics(
+      button: true,
+      enabled: _isInteractive,
+      label: widget.title,
+      child: AnimatedScale(
+        scale: _isInteractive && _isPressed ? 0.96 : 1.0,
       duration: LinkkTheme.fastDuration,
       curve: LinkkTheme.defaultCurve,
       child: AnimatedOpacity(
@@ -130,6 +144,7 @@ class _LinkkButtonState extends State<LinkkButton> {
             ),
           ),
         ),
+      ),
       ),
     );
   }

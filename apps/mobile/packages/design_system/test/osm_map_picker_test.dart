@@ -109,5 +109,61 @@ void main() {
 
       expect(find.byKey(const Key('custom_star_pin')), findsOneWidget);
     });
+
+    testWidgets('updates center when initialCenter changes via didUpdateWidget',
+        (tester) async {
+      final mapController = MapController();
+      LatLng center = const LatLng(10.7769, 106.7009);
+      StateSetter? setState;
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: SizedBox(
+              width: 400,
+              height: 600,
+              child: StatefulBuilder(
+                builder: (context, setter) {
+                  setState = setter;
+                  return OsmMapPicker(
+                    mapController: mapController,
+                    initialCenter: center,
+                  );
+                },
+              ),
+            ),
+          ),
+        ),
+      );
+
+      expect(mapController.camera.center.latitude, closeTo(10.7769, 0.001));
+      expect(mapController.camera.center.longitude, closeTo(106.7009, 0.001));
+
+      setState!(() {
+        center = const LatLng(21.0285, 105.8542);
+      });
+      await tester.pump();
+
+      expect(mapController.camera.center.latitude, closeTo(21.0285, 0.001));
+      expect(mapController.camera.center.longitude, closeTo(105.8542, 0.001));
+    });
+
+    testWidgets('control buttons have tooltips and semantics', (tester) async {
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: Scaffold(
+            body: SizedBox(
+              width: 400,
+              height: 600,
+              child: OsmMapPicker(),
+            ),
+          ),
+        ),
+      );
+
+      expect(find.byTooltip('Phóng to'), findsOneWidget);
+      expect(find.byTooltip('Thu nhỏ'), findsOneWidget);
+      expect(find.byTooltip('Về vị trí ban đầu'), findsOneWidget);
+    });
   });
 }

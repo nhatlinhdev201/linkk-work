@@ -54,7 +54,7 @@ class OsmMapPicker extends StatefulWidget {
 class _OsmMapPickerState extends State<OsmMapPicker> {
   late LatLng _currentCenter;
   bool _isMoving = false;
-  late final MapController _controller;
+  late MapController _controller;
   bool _ownsController = false;
 
   @override
@@ -66,6 +66,27 @@ class _OsmMapPickerState extends State<OsmMapPicker> {
     } else {
       _controller = MapController();
       _ownsController = true;
+    }
+  }
+
+  @override
+  void didUpdateWidget(covariant OsmMapPicker oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.mapController != widget.mapController) {
+      if (_ownsController) {
+        _controller.dispose();
+      }
+      if (widget.mapController != null) {
+        _controller = widget.mapController!;
+        _ownsController = false;
+      } else {
+        _controller = MapController();
+        _ownsController = true;
+      }
+    }
+    if (oldWidget.initialCenter != widget.initialCenter) {
+      _currentCenter = widget.initialCenter;
+      _controller.move(widget.initialCenter, widget.initialZoom);
     }
   }
 
@@ -210,18 +231,21 @@ class _OsmMapPickerState extends State<OsmMapPicker> {
                 _MapControlButton(
                   key: const Key('osm_zoom_in_btn'),
                   icon: Icons.add,
+                  tooltip: 'Phóng to',
                   onTap: _zoomIn,
                 ),
                 const SizedBox(height: 8),
                 _MapControlButton(
                   key: const Key('osm_zoom_out_btn'),
                   icon: Icons.remove,
+                  tooltip: 'Thu nhỏ',
                   onTap: _zoomOut,
                 ),
                 const SizedBox(height: 8),
                 _MapControlButton(
                   key: const Key('osm_recenter_btn'),
                   icon: Icons.my_location,
+                  tooltip: 'Về vị trí ban đầu',
                   onTap: _recenter,
                 ),
               ],
@@ -235,16 +259,18 @@ class _OsmMapPickerState extends State<OsmMapPicker> {
 class _MapControlButton extends StatelessWidget {
   final IconData icon;
   final VoidCallback onTap;
+  final String? tooltip;
 
   const _MapControlButton({
     super.key,
     required this.icon,
     required this.onTap,
+    this.tooltip,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Material(
+    Widget button = Material(
       color: Colors.white,
       elevation: 2,
       shadowColor: Colors.black26,
@@ -263,5 +289,18 @@ class _MapControlButton extends StatelessWidget {
         ),
       ),
     );
+
+    if (tooltip != null) {
+      button = Tooltip(
+        message: tooltip!,
+        child: Semantics(
+          button: true,
+          label: tooltip,
+          child: button,
+        ),
+      );
+    }
+
+    return button;
   }
 }

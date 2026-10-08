@@ -159,5 +159,85 @@ void main() {
       await gesture.up();
       await tester.pumpAndSettle();
     });
+
+    testWidgets(
+        'releases pressed state properly when loading begins while held down',
+        (tester) async {
+      bool isLoading = false;
+      StateSetter? setState;
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: Center(
+              child: StatefulBuilder(
+                builder: (context, setter) {
+                  setState = setter;
+                  return LinkkButton(
+                    title: 'Loading Transition Test',
+                    isLoading: isLoading,
+                    onPressed: () {},
+                  );
+                },
+              ),
+            ),
+          ),
+        ),
+      );
+
+      final animatedScaleFinder = find.descendant(
+        of: find.byType(LinkkButton),
+        matching: find.byType(AnimatedScale),
+      );
+
+      // Start gesture (press down)
+      final gesture =
+          await tester.startGesture(tester.getCenter(find.byType(LinkkButton)));
+      await tester.pump(const Duration(milliseconds: 10));
+
+      var animatedScale = tester.widget<AnimatedScale>(animatedScaleFinder);
+      expect(animatedScale.scale, 0.96);
+
+      // Trigger loading while pressed
+      setState!(() {
+        isLoading = true;
+      });
+      await tester.pump();
+
+      // didUpdateWidget should reset _isPressed
+      animatedScale = tester.widget<AnimatedScale>(animatedScaleFinder);
+      expect(animatedScale.scale, 1.0);
+
+      // Release gesture - shouldn't get stuck
+      await gesture.up();
+      await tester.pump(const Duration(milliseconds: 200));
+
+      animatedScale = tester.widget<AnimatedScale>(animatedScaleFinder);
+      expect(animatedScale.scale, 1.0);
+    });
+
+    testWidgets('exposes button semantics with title label', (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: LinkkButton(
+              title: 'Checkout',
+              onPressed: () {},
+            ),
+          ),
+        ),
+      );
+
+      expect(
+        find.byWidgetPredicate(
+          (w) =>
+              w is Semantics &&
+              w.properties.button == true &&
+              w.properties.enabled == true &&
+              w.properties.label == 'Checkout',
+        ),
+        findsOneWidget,
+      );
+    });
   });
 }

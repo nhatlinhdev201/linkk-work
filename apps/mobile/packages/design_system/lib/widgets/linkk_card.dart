@@ -39,13 +39,23 @@ class _LinkkCardState extends State<LinkkCard> {
   }
 
   void _handleTapUp(TapUpDetails details) {
-    if (widget.onTap == null) return;
-    setState(() => _isPressed = false);
+    if (_isPressed) {
+      setState(() => _isPressed = false);
+    }
   }
 
   void _handleTapCancel() {
-    if (widget.onTap == null) return;
-    setState(() => _isPressed = false);
+    if (_isPressed) {
+      setState(() => _isPressed = false);
+    }
+  }
+
+  @override
+  void didUpdateWidget(covariant LinkkCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.onTap == null && _isPressed) {
+      setState(() => _isPressed = false);
+    }
   }
 
   @override
@@ -57,7 +67,6 @@ class _LinkkCardState extends State<LinkkCard> {
         );
 
     final cardContent = Container(
-      margin: widget.margin,
       decoration: BoxDecoration(
         color: widget.backgroundColor,
         borderRadius: BorderRadius.circular(widget.borderRadius),
@@ -89,22 +98,30 @@ class _LinkkCardState extends State<LinkkCard> {
       ),
     );
 
-    if (widget.onTap == null) {
-      return cardContent;
+    Widget body = cardContent;
+    if (widget.onTap != null) {
+      body = AnimatedScale(
+        scale: _isPressed ? 0.97 : 1.0,
+        duration: LinkkTheme.fastDuration,
+        curve: LinkkTheme.defaultCurve,
+        child: GestureDetector(
+          onTapDown: _handleTapDown,
+          onTapUp: _handleTapUp,
+          onTapCancel: _handleTapCancel,
+          onTap: widget.onTap,
+          behavior: HitTestBehavior.opaque,
+          child: cardContent,
+        ),
+      );
     }
 
-    return AnimatedScale(
-      scale: _isPressed ? 0.97 : 1.0,
-      duration: LinkkTheme.fastDuration,
-      curve: LinkkTheme.defaultCurve,
-      child: GestureDetector(
-        onTapDown: _handleTapDown,
-        onTapUp: _handleTapUp,
-        onTapCancel: _handleTapCancel,
-        onTap: widget.onTap,
-        behavior: HitTestBehavior.opaque,
-        child: cardContent,
-      ),
-    );
+    if (widget.margin != null) {
+      body = Padding(
+        padding: widget.margin!,
+        child: body,
+      );
+    }
+
+    return body;
   }
 }

@@ -44,6 +44,19 @@ class LinkkInput extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
+    final fillColor = isDark
+        ? LinkkTheme.darkSurface
+        : (enabled ? Colors.white : const Color(0xFFF1F5F9));
+    final textColor = theme.colorScheme.onSurface;
+    final borderColor = isDark ? LinkkTheme.darkBorder : LinkkTheme.border;
+    final hintColor = theme.textTheme.bodyMedium?.color?.withValues(alpha: 0.6) ??
+        (isDark ? LinkkTheme.darkTextMuted : LinkkTheme.textMuted);
+    final primaryColor = theme.colorScheme.primary;
+    final errorColor = theme.colorScheme.error;
+
     final inputWidget = TextFormField(
       controller: controller,
       focusNode: focusNode,
@@ -57,17 +70,17 @@ class LinkkInput extends StatelessWidget {
       onTap: onTap,
       textInputAction: textInputAction,
       onFieldSubmitted: onFieldSubmitted,
-      style: const TextStyle(
+      style: TextStyle(
         fontSize: 15,
-        color: LinkkTheme.textPrimary,
+        color: textColor,
         fontWeight: FontWeight.w400,
       ),
       decoration: InputDecoration(
         filled: true,
-        fillColor: enabled ? Colors.white : const Color(0xFFF1F5F9),
+        fillColor: fillColor,
         hintText: hintText,
-        hintStyle: const TextStyle(
-          color: LinkkTheme.textMuted,
+        hintStyle: TextStyle(
+          color: hintColor,
           fontSize: 14,
         ),
         prefixIcon: prefixIcon,
@@ -78,28 +91,28 @@ class LinkkInput extends StatelessWidget {
             const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: LinkkTheme.border),
+          borderSide: BorderSide(color: borderColor),
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: LinkkTheme.border),
+          borderSide: BorderSide(color: borderColor),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: LinkkTheme.primary, width: 2),
+          borderSide: BorderSide(color: primaryColor, width: 2),
         ),
         errorBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: LinkkTheme.error),
+          borderSide: BorderSide(color: errorColor),
         ),
         focusedErrorBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: LinkkTheme.error, width: 2),
+          borderSide: BorderSide(color: errorColor, width: 2),
         ),
         disabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
           borderSide: BorderSide(
-            color: LinkkTheme.border.withValues(alpha: 0.6),
+            color: borderColor.withValues(alpha: 0.6),
           ),
         ),
       ),
@@ -115,10 +128,10 @@ class LinkkInput extends StatelessWidget {
       children: [
         Text(
           label!,
-          style: const TextStyle(
+          style: TextStyle(
             fontSize: 14,
             fontWeight: FontWeight.w600,
-            color: LinkkTheme.textPrimary,
+            color: textColor,
           ),
         ),
         const SizedBox(height: 6),

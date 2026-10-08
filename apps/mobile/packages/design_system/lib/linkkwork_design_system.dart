@@ -9,3 +9,6 @@ export 'widgets/linkk_input.dart';
 
 // Map Components
 export 'map/osm_map_picker.dart';
+
+// Animation Helpers
+export 'package:flutter_animate/flutter_animate.dart';

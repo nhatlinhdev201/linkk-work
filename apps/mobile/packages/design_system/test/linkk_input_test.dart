@@ -105,5 +105,22 @@ void main() {
       final textField = tester.widget<TextField>(find.byType(TextField));
       expect(textField.enabled, isFalse);
     });
+
+    testWidgets('adapts colors in dark theme mode', (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: ThemeData.dark(),
+          home: const Scaffold(
+            body: LinkkInput(
+              label: 'Dark Mode Input',
+              hintText: 'Enter value',
+            ),
+          ),
+        ),
+      );
+
+      final textField = tester.widget<TextField>(find.byType(TextField));
+      expect(textField.decoration?.fillColor, const Color(0xFF1E293B));
+    });
   });
 }

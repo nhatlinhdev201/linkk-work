@@ -126,5 +126,86 @@ void main() {
 
       expect(find.text('Custom Card'), findsOneWidget);
     });
+
+    testWidgets(
+        'resets pressed state when onTap becomes null while held down',
+        (tester) async {
+      VoidCallback? onTap = () {};
+      StateSetter? setState;
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: Center(
+              child: StatefulBuilder(
+                builder: (context, setter) {
+                  setState = setter;
+                  return LinkkCard(
+                    onTap: onTap,
+                    child: const Text('Dynamic Card'),
+                  );
+                },
+              ),
+            ),
+          ),
+        ),
+      );
+
+      final animatedScaleFinder = find.descendant(
+        of: find.byType(LinkkCard),
+        matching: find.byType(AnimatedScale),
+      );
+
+      final gesture =
+          await tester.startGesture(tester.getCenter(find.byType(LinkkCard)));
+      await tester.pump(const Duration(milliseconds: 10));
+
+      expect(tester.widget<AnimatedScale>(animatedScaleFinder).scale, 0.97);
+
+      setState!(() {
+        onTap = null;
+      });
+      await tester.pump();
+
+      await gesture.up();
+      await tester.pumpAndSettle();
+
+      final afterScaleFinder = find.descendant(
+        of: find.byType(LinkkCard),
+        matching: find.byType(AnimatedScale),
+      );
+      expect(afterScaleFinder, findsNothing);
+    });
+
+    testWidgets('places margin outside interactive area', (tester) async {
+      bool tapped = false;
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: Align(
+              alignment: Alignment.topLeft,
+              child: LinkkCard(
+                margin: const EdgeInsets.all(30),
+                onTap: () {
+                  tapped = true;
+                },
+                child: const SizedBox(width: 100, height: 100),
+              ),
+            ),
+          ),
+        ),
+      );
+
+      // Tap inside margin area (e.g. at (10, 10))
+      await tester.tapAt(const Offset(10, 10));
+      await tester.pumpAndSettle();
+      expect(tapped, isFalse);
+
+      // Tap inside card (e.g. at (50, 50))
+      await tester.tapAt(const Offset(50, 50));
+      await tester.pumpAndSettle();
+      expect(tapped, isTrue);
+    });
   });
 }
