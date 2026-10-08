@@ -3,14 +3,22 @@ import 'package:geolocator/geolocator.dart';
 import 'package:linkkwork_core/location/location_service.dart';
 
 class FakeGeolocatorPlatform extends GeolocatorPlatform {
+  bool isLocationServiceEnabledResult = true;
   LocationPermission checkPermissionResult = LocationPermission.whileInUse;
   LocationPermission requestPermissionResult = LocationPermission.whileInUse;
   Position? currentPositionResult;
   Stream<Position>? positionStreamResult;
+  int isLocationServiceEnabledCallCount = 0;
   int checkPermissionCallCount = 0;
   int requestPermissionCallCount = 0;
   int getCurrentPositionCallCount = 0;
   int getPositionStreamCallCount = 0;
+
+  @override
+  Future<bool> isLocationServiceEnabled() async {
+    isLocationServiceEnabledCallCount++;
+    return isLocationServiceEnabledResult;
+  }
 
   @override
   Future<LocationPermission> checkPermission() async {
@@ -50,6 +58,16 @@ void main() {
       service = LocationService();
       fakePlatform = FakeGeolocatorPlatform();
       GeolocatorPlatform.instance = fakePlatform;
+    });
+
+    test('isLocationServiceEnabled delegates to Geolocator platform', () async {
+      fakePlatform.isLocationServiceEnabledResult = true;
+      expect(await service.isLocationServiceEnabled(), isTrue);
+      expect(fakePlatform.isLocationServiceEnabledCallCount, equals(1));
+
+      fakePlatform.isLocationServiceEnabledResult = false;
+      expect(await service.isLocationServiceEnabled(), isFalse);
+      expect(fakePlatform.isLocationServiceEnabledCallCount, equals(2));
     });
 
     test(

@@ -7,6 +7,8 @@ class SocketClientService {
   final io.Socket? _customSocket;
   io.Socket? _socket;
 
+  final StreamController<bool> _connectionController =
+      StreamController<bool>.broadcast();
   final StreamController<Map<String, dynamic>> _jobBroadcastController =
       StreamController<Map<String, dynamic>>.broadcast();
   final StreamController<Map<String, dynamic>> _statusChangeController =
@@ -25,6 +27,9 @@ class SocketClientService {
   /// Returns true if the underlying socket is connected.
   bool get isConnected => _socket?.connected ?? false;
 
+  /// Broadcast stream emitting socket connection state (true on connect, false on disconnect/error).
+  Stream<bool> get isConnectedStream => _connectionController.stream;
+
   /// Broadcast stream for 'job:broadcast' events.
   Stream<Map<String, dynamic>> get jobBroadcastStream =>
       _jobBroadcastController.stream;
@@ -42,6 +47,10 @@ class SocketClientService {
 
   /// Connects to the Socket.io server with authentication and sets up event listeners.
   void connect({required String accessToken}) {
+    if (_socket != null && _customSocket == null) {
+      disconnect();
+    }
+
     if (_customSocket != null) {
       _socket = _customSocket;
     } else {
@@ -65,6 +74,34 @@ class SocketClientService {
   void _registerListeners() {
     final socket = _socket;
     if (socket == null) return;
+
+    socket.off('connect');
+    socket.on('connect', (_) {
+      if (!_connectionController.isClosed) {
+        _connectionController.add(true);
+      }
+    });
+
+    socket.off('disconnect');
+    socket.on('disconnect', (_) {
+      if (!_connectionController.isClosed) {
+        _connectionController.add(false);
+      }
+    });
+
+    socket.off('connect_error');
+    socket.on('connect_error', (_) {
+      if (!_connectionController.isClosed) {
+        _connectionController.add(false);
+      }
+    });
+
+    socket.off('error');
+    socket.on('error', (_) {
+      if (!_connectionController.isClosed) {
+        _connectionController.add(false);
+      }
+    });
 
     socket.off('job:broadcast');
     socket.on('job:broadcast', (dynamic data) {
@@ -115,6 +152,9 @@ class SocketClientService {
 
   /// Disconnects the socket and clears internal references.
   void disconnect() {
+    if (!_connectionController.isClosed) {
+      _connectionController.add(false);
+    }
     _socket?.disconnect();
     _socket?.dispose();
     if (_customSocket == null) {
@@ -125,6 +165,7 @@ class SocketClientService {
   /// Disconnects and safely closes all broadcast streams.
   void dispose() {
     disconnect();
+    _connectionController.close();
     _jobBroadcastController.close();
     _statusChangeController.close();
     _jobClaimedController.close();

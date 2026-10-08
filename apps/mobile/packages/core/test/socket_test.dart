@@ -43,6 +43,7 @@ void main() {
       expect(service.statusChangeStream, isNotNull);
       expect(service.jobClaimedStream, isNotNull);
       expect(service.locationStream, isNotNull);
+      expect(service.isConnectedStream, isNotNull);
     });
 
     test('isConnected reflects socket connection status', () {
@@ -64,6 +65,33 @@ void main() {
         serverUrl: 'http://localhost:3000',
       );
       expect(noSocketService.isConnected, isFalse);
+    });
+
+    test('isConnectedStream emits true on connect, false on disconnect/error',
+        () async {
+      final service = SocketClientService(
+        serverUrl: 'http://localhost:3000',
+        customSocket: mockSocket,
+      );
+
+      service.connect(accessToken: 'mock_token_123');
+
+      final emittedStates = <bool>[];
+      final sub = service.isConnectedStream.listen(emittedStates.add);
+
+      // Trigger connect
+      listeners['connect']?.call(null);
+      // Trigger disconnect
+      listeners['disconnect']?.call(null);
+      // Trigger connect_error
+      listeners['connect_error']?.call('Connection error');
+      // Trigger error
+      listeners['error']?.call('General error');
+
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+
+      expect(emittedStates, equals(<bool>[true, false, false, false]));
+      await sub.cancel();
     });
 
     test('connect registers event listeners and safe map casting delivers data',
@@ -165,16 +193,26 @@ void main() {
       ).called(1);
     });
 
-    test('disconnect closes socket connection and cleans up', () {
+    test(
+        'disconnect closes socket connection and emits false on isConnectedStream',
+        () async {
       final service = SocketClientService(
         serverUrl: 'http://localhost:3000',
         customSocket: mockSocket,
       );
 
+      bool? lastState;
+      final sub = service.isConnectedStream.listen((state) {
+        lastState = state;
+      });
+
       service.disconnect();
 
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+      expect(lastState, isFalse);
       verify(() => mockSocket.disconnect()).called(1);
       verify(() => mockSocket.dispose()).called(1);
+      await sub.cancel();
     });
 
     test('dispose disconnects and closes all broadcast streams', () async {
@@ -183,12 +221,14 @@ void main() {
         customSocket: mockSocket,
       );
 
+      service.connect(accessToken: 'mock_token');
       service.dispose();
 
       verify(() => mockSocket.disconnect()).called(1);
       verify(() => mockSocket.dispose()).called(1);
 
       expect(service.jobBroadcastStream.isBroadcast, isTrue);
+      expect(service.isConnectedStream.isBroadcast, isTrue);
       // Verify adding to stream after dispose does not crash
       expect(
         () => listeners['job:broadcast']?.call(<String, dynamic>{'a': 'b'}),
