@@ -14,15 +14,25 @@ class SelectServiceEvent extends BookingWizardEvent {
   final String serviceId;
   final String serviceName;
   final double basePrice;
+  final String pricingType;
+  final double? baseUnitPrice;
 
   const SelectServiceEvent({
     required this.serviceId,
     required this.serviceName,
     required this.basePrice,
+    this.pricingType = 'HOURLY',
+    this.baseUnitPrice,
   });
 
   @override
-  List<Object?> get props => [serviceId, serviceName, basePrice];
+  List<Object?> get props => [
+        serviceId,
+        serviceName,
+        basePrice,
+        pricingType,
+        baseUnitPrice,
+      ];
 }
 
 /// Event recalculating dynamic price based on units and addons.
@@ -30,15 +40,38 @@ class CalculateDynamicPriceEvent extends BookingWizardEvent {
   final String serviceId;
   final double units;
   final List<String> addonIds;
+  final String? pricingType;
+  final double? baseUnitPrice;
+  final double? addonsPrice;
 
   const CalculateDynamicPriceEvent({
     required this.serviceId,
     required this.units,
     this.addonIds = const [],
+    this.pricingType,
+    this.baseUnitPrice,
+    this.addonsPrice,
   });
 
   @override
-  List<Object?> get props => [serviceId, units, addonIds];
+  List<Object?> get props => [
+        serviceId,
+        units,
+        addonIds,
+        pricingType,
+        baseUnitPrice,
+        addonsPrice,
+      ];
+}
+
+/// Event navigating to a specific step in the wizard (1, 2, 3, or 4).
+class GoToStepEvent extends BookingWizardEvent {
+  final int step;
+
+  const GoToStepEvent({required this.step});
+
+  @override
+  List<Object?> get props => [step];
 }
 
 /// Event setting service delivery address and coordinates.

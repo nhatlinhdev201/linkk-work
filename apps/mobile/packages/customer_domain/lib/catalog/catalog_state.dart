@@ -41,15 +41,19 @@ class CatalogLoadedState extends CatalogState {
         .toList();
   }
 
+  static const Object _sentinel = Object();
+
   CatalogLoadedState copyWith({
     List<Map<String, dynamic>>? categories,
     List<Map<String, dynamic>>? services,
-    String? selectedCategoryId,
+    Object? selectedCategoryId = _sentinel,
   }) {
     return CatalogLoadedState(
       categories: categories ?? this.categories,
       services: services ?? this.services,
-      selectedCategoryId: selectedCategoryId ?? this.selectedCategoryId,
+      selectedCategoryId: identical(selectedCategoryId, _sentinel)
+          ? this.selectedCategoryId
+          : selectedCategoryId as String?,
     );
   }
 

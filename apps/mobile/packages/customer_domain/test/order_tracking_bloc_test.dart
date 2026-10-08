@@ -127,6 +127,21 @@ void main() {
     );
 
     blocTest<OrderTrackingBloc, OrderTrackingState>(
+      'ignores socket statusChangeStream event when bookingId is null',
+      build: () => OrderTrackingBloc(
+        socketService: mockSocket,
+        initialStatus: BookingStatus.assigned,
+        bookingId: testBookingId,
+      ),
+      act: (_) {
+        statusController.add(<String, dynamic>{
+          'status': 'COMPLETED',
+        });
+      },
+      expect: () => <OrderTrackingState>[],
+    );
+
+    blocTest<OrderTrackingBloc, OrderTrackingState>(
       'listens to socket locationStream and updates tasker coordinates when booking matches',
       build: () => OrderTrackingBloc(
         socketService: mockSocket,
@@ -160,6 +175,22 @@ void main() {
       act: (_) {
         locationController.add(<String, dynamic>{
           'bookingId': 'bk-different-777',
+          'latitude': 21.0285,
+          'longitude': 105.8542,
+        });
+      },
+      expect: () => <OrderTrackingState>[],
+    );
+
+    blocTest<OrderTrackingBloc, OrderTrackingState>(
+      'ignores socket locationStream event when bookingId is null',
+      build: () => OrderTrackingBloc(
+        socketService: mockSocket,
+        initialStatus: BookingStatus.arriving,
+        bookingId: testBookingId,
+      ),
+      act: (_) {
+        locationController.add(<String, dynamic>{
           'latitude': 21.0285,
           'longitude': 105.8542,
         });

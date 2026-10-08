@@ -132,6 +132,19 @@ void main() {
       expect(loadedStateWithoutFilter.filteredServices.length, equals(2));
     });
 
+    test('CatalogLoadedState copyWith allows clearing selectedCategoryId with null', () {
+      final state = CatalogLoadedState(
+        categories: sampleCategories,
+        services: sampleServices,
+        selectedCategoryId: 'cat-1',
+      );
+      final cleared = state.copyWith(selectedCategoryId: null);
+      expect(cleared.selectedCategoryId, isNull);
+
+      final unchanged = state.copyWith();
+      expect(unchanged.selectedCategoryId, equals('cat-1'));
+    });
+
     blocTest<CatalogBloc, CatalogState>(
       'SelectCategoryEvent loads categories and services when initial state',
       build: () {

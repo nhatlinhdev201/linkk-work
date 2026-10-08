@@ -19,6 +19,7 @@ class BookingWizardBloc extends Bloc<BookingWizardEvent, BookingWizardState> {
     on<SetBookingAddressEvent>(_onSetBookingAddress);
     on<SetBookingScheduleAndPaymentEvent>(_onSetBookingScheduleAndPayment);
     on<SubmitBookingEvent>(_onSubmitBooking);
+    on<GoToStepEvent>(_onGoToStep);
     on<ResetBookingWizardEvent>(_onResetBookingWizard);
   }
 
@@ -29,6 +30,8 @@ class BookingWizardBloc extends Bloc<BookingWizardEvent, BookingWizardState> {
     emit(state.copyWith(
       serviceId: event.serviceId,
       serviceName: event.serviceName,
+      baseUnitPrice: event.baseUnitPrice ?? event.basePrice,
+      pricingType: event.pricingType,
       estimatedTotal: event.basePrice,
       step: 1,
       error: null,
@@ -44,14 +47,21 @@ class BookingWizardBloc extends Bloc<BookingWizardEvent, BookingWizardState> {
       error: null,
     ));
 
+    final pType = event.pricingType ?? state.pricingType;
+    final bPrice = event.baseUnitPrice ??
+        (state.baseUnitPrice > 0 ? state.baseUnitPrice : state.estimatedTotal);
+    final payload = <String, dynamic>{
+      'pricingType': pType,
+      'baseUnitPrice': bPrice > 0 ? bPrice : 80000.0,
+      if (pType == 'HOURLY') 'durationHours': event.units,
+      if (pType != 'HOURLY') 'unitCount': event.units.toInt(),
+      if (event.addonsPrice != null) 'addonsPrice': event.addonsPrice,
+    };
+
     try {
       final response = await dioClient.dio.post<dynamic>(
         ApiEndpoints.calculatePrice,
-        data: <String, dynamic>{
-          'serviceId': event.serviceId,
-          'durationHours': event.units,
-          'addonIds': event.addonIds,
-        },
+        data: payload,
       );
 
       double finalPrice = 0.0;
@@ -75,13 +85,15 @@ class BookingWizardBloc extends Bloc<BookingWizardEvent, BookingWizardState> {
         serviceId: event.serviceId,
         units: event.units,
         addonIds: event.addonIds,
+        pricingType: pType,
+        baseUnitPrice: bPrice > 0 ? bPrice : state.baseUnitPrice,
         estimatedTotal: finalPrice,
         isCalculatingPrice: false,
       ));
-    } catch (_) {
+    } catch (e) {
       emit(state.copyWith(
         isCalculatingPrice: false,
-        error: 'Không thể tính giá dịch vụ',
+        error: _extractErrorMessage(e, 'Không thể tính giá dịch vụ'),
       ));
     }
   }
@@ -131,10 +143,15 @@ class BookingWizardBloc extends Bloc<BookingWizardEvent, BookingWizardState> {
       'serviceId': state.serviceId,
       'customerName': event.customerName,
       'customerPhone': event.customerPhone,
-      'address': state.address,
+      'addressText': state.address ?? '', // MANDATORY for CreateBookingDto
+      'address': state.address ?? '',
       'paymentMethod': state.paymentMethod.value,
       'scheduledAt': scheduledIso,
+      'note': event.notes ?? state.notes, // CreateBookingDto uses 'note'
       'notes': event.notes ?? state.notes,
+      if (state.addonIds.isNotEmpty) 'addonIds': state.addonIds,
+      if (state.pricingType == 'HOURLY') 'durationHours': state.units,
+      if (state.pricingType != 'HOURLY') 'unitCount': state.units.toInt(),
       if (state.lat != null) 'latitude': state.lat,
       if (state.lng != null) 'longitude': state.lng,
     };
@@ -164,27 +181,19 @@ class BookingWizardBloc extends Bloc<BookingWizardEvent, BookingWizardState> {
         step: 4,
       ));
     } catch (e) {
-      var errorMsg = 'Không thể đặt lịch dịch vụ';
-      if (e is DioException) {
-        final dynamic errData = e.response?.data;
-        if (errData is Map && errData['message'] != null) {
-          final dynamic msg = errData['message'];
-          if (msg is List) {
-            errorMsg = msg.map((dynamic m) => m.toString()).join(', ');
-          } else {
-            errorMsg = msg.toString();
-          }
-        } else if (e.message != null && e.message!.isNotEmpty) {
-          errorMsg = e.message!;
-        }
-      } else {
-        errorMsg = e.toString();
-      }
-
       emit(state.copyWith(
         isSubmitting: false,
-        error: errorMsg,
+        error: _extractErrorMessage(e, 'Không thể đặt lịch dịch vụ'),
       ));
+    }
+  }
+
+  void _onGoToStep(
+    GoToStepEvent event,
+    Emitter<BookingWizardState> emit,
+  ) {
+    if (event.step >= 1 && event.step <= 4) {
+      emit(state.copyWith(step: event.step));
     }
   }
 
@@ -193,5 +202,22 @@ class BookingWizardBloc extends Bloc<BookingWizardEvent, BookingWizardState> {
     Emitter<BookingWizardState> emit,
   ) async {
     emit(const BookingWizardState());
+  }
+
+  String _extractErrorMessage(Object error, [String fallback = 'Đã có lỗi xảy ra']) {
+    if (error is DioException) {
+      final dynamic errData = error.response?.data;
+      if (errData is Map && errData['message'] != null) {
+        final dynamic msg = errData['message'];
+        if (msg is List) {
+          return msg.map((dynamic m) => m.toString()).join(', ');
+        }
+        return msg.toString();
+      }
+      if (error.message != null && error.message!.isNotEmpty) {
+        return error.message!;
+      }
+    }
+    return fallback;
   }
 }

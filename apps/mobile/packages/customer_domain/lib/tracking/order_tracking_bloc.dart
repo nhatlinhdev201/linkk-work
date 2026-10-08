@@ -26,7 +26,7 @@ class OrderTrackingBloc extends Bloc<OrderTrackingEvent, OrderTrackingState> {
     _statusSub = socketService.statusChangeStream.listen((data) {
       if (!isClosed) {
         final incomingId = (data['bookingId'] ?? data['id'])?.toString();
-        if (incomingId == null || incomingId == bookingId) {
+        if (incomingId == bookingId) {
           final rawStatus = data['status']?.toString();
           if (rawStatus != null) {
             add(StatusUpdatedEvent(
@@ -40,7 +40,7 @@ class OrderTrackingBloc extends Bloc<OrderTrackingEvent, OrderTrackingState> {
     _locationSub = socketService.locationStream.listen((data) {
       if (!isClosed) {
         final incomingId = (data['bookingId'] ?? data['id'])?.toString();
-        if (incomingId == null || incomingId == bookingId) {
+        if (incomingId == bookingId) {
           final dynamic rawLat = data['latitude'] ?? data['lat'];
           final dynamic rawLng = data['longitude'] ?? data['lng'];
           final lat = rawLat is num

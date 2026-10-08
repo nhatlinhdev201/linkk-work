@@ -50,6 +50,8 @@ void main() {
           step: 1,
           serviceId: 'srv-clean-hourly',
           serviceName: 'Dọn dẹp nhà theo giờ',
+          baseUnitPrice: 160000.0,
+          pricingType: 'HOURLY',
           estimatedTotal: 160000.0,
         ),
       ],
@@ -79,6 +81,8 @@ void main() {
         step: 1,
         serviceId: 'srv-clean-hourly',
         serviceName: 'Dọn dẹp nhà theo giờ',
+        baseUnitPrice: 160000.0,
+        pricingType: 'HOURLY',
         estimatedTotal: 160000.0,
       ),
       act: (bloc) => bloc.add(const CalculateDynamicPriceEvent(
@@ -91,6 +95,8 @@ void main() {
           step: 1,
           serviceId: 'srv-clean-hourly',
           serviceName: 'Dọn dẹp nhà theo giờ',
+          baseUnitPrice: 160000.0,
+          pricingType: 'HOURLY',
           estimatedTotal: 160000.0,
           isCalculatingPrice: true,
         ),
@@ -100,6 +106,8 @@ void main() {
           serviceName: 'Dọn dẹp nhà theo giờ',
           units: 2.0,
           addonIds: ['addon-vacuum'],
+          baseUnitPrice: 160000.0,
+          pricingType: 'HOURLY',
           estimatedTotal: 320000.0,
           isCalculatingPrice: false,
         ),
@@ -109,9 +117,63 @@ void main() {
           () => mockDio.post<dynamic>(
             ApiEndpoints.calculatePrice,
             data: <String, dynamic>{
-              'serviceId': 'srv-clean-hourly',
+              'pricingType': 'HOURLY',
+              'baseUnitPrice': 160000.0,
               'durationHours': 2.0,
-              'addonIds': ['addon-vacuum'],
+            },
+          ),
+        ).called(1);
+      },
+    );
+
+    blocTest<BookingWizardBloc, BookingWizardState>(
+      'CalculateDynamicPriceEvent with PER_UNIT pricing constructs unitCount and addonsPrice payload',
+      build: () {
+        when(
+          () => mockDio.post<dynamic>(
+            ApiEndpoints.calculatePrice,
+            data: any(named: 'data'),
+          ),
+        ).thenAnswer(
+          (_) async => Response<dynamic>(
+            requestOptions: RequestOptions(path: ApiEndpoints.calculatePrice),
+            statusCode: 200,
+            data: <String, dynamic>{
+              'finalPrice': 250000.0,
+            },
+          ),
+        );
+        return BookingWizardBloc(dioClient: mockDioClient);
+      },
+      act: (bloc) => bloc.add(const CalculateDynamicPriceEvent(
+        serviceId: 'srv-aircon',
+        units: 2.0,
+        pricingType: 'PER_UNIT',
+        baseUnitPrice: 100000.0,
+        addonsPrice: 50000.0,
+      )),
+      expect: () => [
+        const BookingWizardState(
+          isCalculatingPrice: true,
+        ),
+        const BookingWizardState(
+          serviceId: 'srv-aircon',
+          units: 2.0,
+          pricingType: 'PER_UNIT',
+          baseUnitPrice: 100000.0,
+          estimatedTotal: 250000.0,
+          isCalculatingPrice: false,
+        ),
+      ],
+      verify: (_) {
+        verify(
+          () => mockDio.post<dynamic>(
+            ApiEndpoints.calculatePrice,
+            data: <String, dynamic>{
+              'pricingType': 'PER_UNIT',
+              'baseUnitPrice': 100000.0,
+              'unitCount': 2,
+              'addonsPrice': 50000.0,
             },
           ),
         ).called(1);
@@ -272,10 +334,13 @@ void main() {
               'serviceId': 'srv-clean-hourly',
               'customerName': 'Trần Thị Mai',
               'customerPhone': '0912345678',
+              'addressText': '72 Lê Thánh Tôn, Bến Nghé, Quận 1',
               'address': '72 Lê Thánh Tôn, Bến Nghé, Quận 1',
               'paymentMethod': 'CASH',
               'scheduledAt': fixedSchedule.toIso8601String(),
+              'note': 'Căn hộ tầng 12',
               'notes': 'Căn hộ tầng 12',
+              'durationHours': 1.0,
               'latitude': 10.7781,
               'longitude': 106.7023,
             },
@@ -369,6 +434,31 @@ void main() {
           () => mockDio.post<dynamic>(any(), data: any(named: 'data')),
         );
       },
+    );
+
+    blocTest<BookingWizardBloc, BookingWizardState>(
+      'GoToStepEvent transitions between steps within valid range 1 to 4',
+      build: () => BookingWizardBloc(dioClient: mockDioClient),
+      seed: () => const BookingWizardState(step: 1),
+      act: (bloc) => bloc
+        ..add(const GoToStepEvent(step: 2))
+        ..add(const GoToStepEvent(step: 3))
+        ..add(const GoToStepEvent(step: 4)),
+      expect: () => [
+        const BookingWizardState(step: 2),
+        const BookingWizardState(step: 3),
+        const BookingWizardState(step: 4),
+      ],
+    );
+
+    blocTest<BookingWizardBloc, BookingWizardState>(
+      'GoToStepEvent ignores steps outside 1 to 4',
+      build: () => BookingWizardBloc(dioClient: mockDioClient),
+      seed: () => const BookingWizardState(step: 2),
+      act: (bloc) => bloc
+        ..add(const GoToStepEvent(step: 0))
+        ..add(const GoToStepEvent(step: 5)),
+      expect: () => <BookingWizardState>[],
     );
 
     blocTest<BookingWizardBloc, BookingWizardState>(

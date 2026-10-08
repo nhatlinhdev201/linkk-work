@@ -17,6 +17,8 @@ class BookingWizardState extends Equatable {
   final double units;
   final List<String> addonIds;
   final double estimatedTotal;
+  final String pricingType;
+  final double baseUnitPrice;
 
   final String? address;
   final double? lat;
@@ -40,6 +42,8 @@ class BookingWizardState extends Equatable {
     this.units = 1.0,
     this.addonIds = const [],
     this.estimatedTotal = 0.0,
+    this.pricingType = 'HOURLY',
+    this.baseUnitPrice = 0.0,
     this.address,
     this.lat,
     this.lng,
@@ -60,6 +64,8 @@ class BookingWizardState extends Equatable {
     double? units,
     List<String>? addonIds,
     double? estimatedTotal,
+    String? pricingType,
+    double? baseUnitPrice,
     String? address,
     double? lat,
     double? lng,
@@ -79,6 +85,8 @@ class BookingWizardState extends Equatable {
       units: units ?? this.units,
       addonIds: addonIds ?? this.addonIds,
       estimatedTotal: estimatedTotal ?? this.estimatedTotal,
+      pricingType: pricingType ?? this.pricingType,
+      baseUnitPrice: baseUnitPrice ?? this.baseUnitPrice,
       address: address ?? this.address,
       lat: lat ?? this.lat,
       lng: lng ?? this.lng,
@@ -101,6 +109,8 @@ class BookingWizardState extends Equatable {
         units,
         addonIds,
         estimatedTotal,
+        pricingType,
+        baseUnitPrice,
         address,
         lat,
         lng,
