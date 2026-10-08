@@ -24,6 +24,7 @@ import {
   Compass,
   AlertTriangle,
   Briefcase,
+  Smartphone,
 } from 'lucide-react';
 
 type ActorTab = 'ALL' | 'OVERVIEW' | 'SUPER_ADMIN' | 'TENANT_ADMIN' | 'TASKER' | 'CUSTOMER' | 'SYSTEM_ENGINE';
@@ -825,13 +826,167 @@ export const SystemDocsPage: React.FC = () => {
         </div>
       )}
 
-      {/* SECTION 8: QUICK API ENDPOINTS CHEAT SHEET */}
+      {/* SECTION 8: MOBILE APP SUITE ARCHITECTURE */}
+      {(activeTab === 'ALL' || activeTab === 'OVERVIEW' || activeTab === 'TASKER' || activeTab === 'CUSTOMER') &&
+        (matchesSearch('mobile') ||
+          matchesSearch('flutter') ||
+          matchesSearch('melos') ||
+          matchesSearch('ứng dụng') ||
+          matchesSearch('di động') ||
+          matchesSearch('tasker') ||
+          matchesSearch('customer') ||
+          matchesSearch('radar') ||
+          matchesSearch('gps') ||
+          matchesSearch('cas')) && (
+          <div className="space-y-5">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Smartphone className="w-5 h-5 text-emerald-600" />
+                <h2 className="text-lg font-bold text-slate-900 tracking-tight">
+                  8. Kiến Trúc Bộ Ứng Dụng Di Động (Mobile App Suite: Customer &amp; Tasker)
+                </h2>
+              </div>
+              <Badge variant="success" size="sm">Flutter 3.24+ • Melos Monorepo</Badge>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+              {/* Pillar 1: Monorepo Melos */}
+              <Card className="border-slate-200 shadow-2xs hover:border-emerald-200 transition-colors">
+                <CardContent className="p-5 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="w-8 h-8 rounded-lg bg-emerald-100 text-emerald-700 font-bold flex items-center justify-center text-xs">
+                      01
+                    </span>
+                    <Badge variant="neutral" size="sm">4 Packages</Badge>
+                  </div>
+                  <h3 className="font-bold text-slate-900 text-sm">Monorepo Melos &amp; 4 Packages</h3>
+                  <p className="text-xs text-slate-600 leading-relaxed">
+                    Kiến trúc phân tầng module hóa chuẩn doanh nghiệp gồm:
+                  </p>
+                  <ul className="text-xs text-slate-600 space-y-1.5 list-disc list-inside">
+                    <li><strong className="text-slate-800">core</strong>: DioClient, Refresh Token Guard, GPS Location, Socket.io client &amp; SecureStorage.</li>
+                    <li><strong className="text-slate-800">design_system</strong>: LinkkUI design tokens, LinkkButton, LinkkCard, LinkkBadge, LinkkInput &amp; OsmMapPicker.</li>
+                    <li><strong className="text-slate-800">customer_domain</strong>: CatalogBloc, BookingWizardBloc 4 bước, OrderTrackingBloc.</li>
+                    <li><strong className="text-slate-800">tasker_domain</strong>: JobRadarBloc, TaskerStatusBloc, WorkOrderBloc, TaskerWalletBloc.</li>
+                  </ul>
+                </CardContent>
+              </Card>
+
+              {/* Pillar 2: Zero Code Leakage */}
+              <Card className="border-slate-200 shadow-2xs hover:border-emerald-200 transition-colors">
+                <CardContent className="p-5 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="w-8 h-8 rounded-lg bg-blue-100 text-blue-700 font-bold flex items-center justify-center text-xs">
+                      02
+                    </span>
+                    <Badge variant="info" size="sm">Domain Isolation</Badge>
+                  </div>
+                  <h3 className="font-bold text-slate-900 text-sm">Zero Code Leakage Isolation</h3>
+                  <p className="text-xs text-slate-600 leading-relaxed">
+                    Bảo vệ ranh giới ứng dụng tuyệt đối theo mô hình DDD:
+                  </p>
+                  <ul className="text-xs text-slate-600 space-y-1.5 list-disc list-inside">
+                    <li><code className="text-[11px] bg-slate-100 px-1 py-0.5 rounded text-rose-700">customer_app</code> <strong className="text-slate-800">cấm nhập</strong> bất kỳ thư viện nào từ <code className="text-[11px] bg-slate-100 px-1 py-0.5 rounded">tasker_domain</code>.</li>
+                    <li><code className="text-[11px] bg-slate-100 px-1 py-0.5 rounded text-rose-700">tasker_app</code> <strong className="text-slate-800">cấm nhập</strong> bất kỳ thư viện nào từ <code className="text-[11px] bg-slate-100 px-1 py-0.5 rounded">customer_domain</code>.</li>
+                    <li>Ngăn chặn rò rỉ mã nguồn nghiệp vụ giữa hai vai trò và giảm kích thước tệp APK/IPA khi build production.</li>
+                  </ul>
+                </CardContent>
+              </Card>
+
+              {/* Pillar 3: Realtime Socket.io & Radar CAS */}
+              <Card className="border-slate-200 shadow-2xs hover:border-emerald-200 transition-colors">
+                <CardContent className="p-5 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="w-8 h-8 rounded-lg bg-amber-100 text-amber-700 font-bold flex items-center justify-center text-xs">
+                      03
+                    </span>
+                    <Badge variant="warning" size="sm">&lt;50ms Latency</Badge>
+                  </div>
+                  <h3 className="font-bold text-slate-900 text-sm">Radar Claim CAS &amp; Socket.io</h3>
+                  <p className="text-xs text-slate-600 leading-relaxed">
+                    Điều phối đơn việc tức thì với độ trễ cực thấp:
+                  </p>
+                  <ul className="text-xs text-slate-600 space-y-1.5 list-disc list-inside">
+                    <li>WebSocket 2 chiều phát sóng đơn tức thời (<code className="text-[11px] bg-slate-100 px-1 py-0.5 rounded text-amber-800">job:broadcast</code>) trong bán kính quét việc 10km.</li>
+                    <li>Thợ nhận đếm ngược 30 giây kèm âm thanh radar alert chime và progress lùi mượt mà.</li>
+                    <li><strong className="text-slate-800">Atomic CAS</strong> (Compare-And-Swap): Khóa nguyên tử tranh chấp nhận đơn, chỉ 1 thợ nhận thành công, các thợ còn lại nhận phản hồi 409 Conflict lập tức đóng cảnh báo.</li>
+                  </ul>
+                </CardContent>
+              </Card>
+
+              {/* Pillar 4: Anti-Fraud GPS */}
+              <Card className="border-slate-200 shadow-2xs hover:border-emerald-200 transition-colors">
+                <CardContent className="p-5 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="w-8 h-8 rounded-lg bg-rose-100 text-rose-700 font-bold flex items-center justify-center text-xs">
+                      04
+                    </span>
+                    <Badge variant="danger" size="sm">Mock GPS Defense</Badge>
+                  </div>
+                  <h3 className="font-bold text-slate-900 text-sm">Anti-Fraud Hardware GPS Defense</h3>
+                  <p className="text-xs text-slate-600 leading-relaxed">
+                    Chống gian lận chấm công hiện trường khắt khe:
+                  </p>
+                  <ul className="text-xs text-slate-600 space-y-1.5 list-disc list-inside">
+                    <li>Bắt buộc cảm biến phần cứng GPS và kiểm tra cờ vị trí giả lập (<code className="text-[11px] bg-slate-100 px-1 py-0.5 rounded text-rose-800">isMockLocation</code>) trên thiết bị.</li>
+                    <li>Chặn mọi ứng dụng Fake GPS / Mock Location trước khi cho phép thợ bấm Check-in chuyển đơn sang <code className="text-[11px] bg-slate-100 px-1 py-0.5 rounded text-emerald-800">IN_PROGRESS</code>.</li>
+                    <li>Đảm bảo thợ phải hiện diện thực tế tại công trình của khách hàng mới tính giờ làm việc.</li>
+                  </ul>
+                </CardContent>
+              </Card>
+
+              {/* Pillar 5: Double-Entry Ledger COD */}
+              <Card className="border-slate-200 shadow-2xs hover:border-emerald-200 transition-colors">
+                <CardContent className="p-5 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="w-8 h-8 rounded-lg bg-indigo-100 text-indigo-700 font-bold flex items-center justify-center text-xs">
+                      05
+                    </span>
+                    <Badge variant="info" size="sm">Kế toán kép COD</Badge>
+                  </div>
+                  <h3 className="font-bold text-slate-900 text-sm">Universal Ledger Settlement</h3>
+                  <p className="text-xs text-slate-600 leading-relaxed">
+                    Hoàn tất thu tiền mặt COD đối soát tự động:
+                  </p>
+                  <ul className="text-xs text-slate-600 space-y-1.5 list-disc list-inside">
+                    <li><strong className="text-slate-800">Bút toán 1</strong>: <code className="text-[11px] bg-slate-100 px-1 py-0.5 rounded text-emerald-800">CASH_COLLECTED</code> (+100% giá trị dịch vụ, dòng tiền IN, CASH) ghi nhận tiền mặt thợ đã cầm.</li>
+                    <li><strong className="text-slate-800">Bút toán 2</strong>: <code className="text-[11px] bg-slate-100 px-1 py-0.5 rounded text-rose-800">COMMISSION_FEE</code> (-15% hoa hồng sàn, dòng tiền OUT, WALLET) tự động trừ ví ký quỹ của thợ.</li>
+                    <li>Kiểm soát số dư ký quỹ tối thiểu (500.000đ); thợ không đủ tiền cọc sẽ bị khóa ca trực tuyến.</li>
+                  </ul>
+                </CardContent>
+              </Card>
+
+              {/* Pillar 6: Fluid Motion Standards */}
+              <Card className="border-slate-200 shadow-2xs hover:border-emerald-200 transition-colors">
+                <CardContent className="p-5 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="w-8 h-8 rounded-lg bg-purple-100 text-purple-700 font-bold flex items-center justify-center text-xs">
+                      06
+                    </span>
+                    <Badge variant="brand" size="sm">60-120 FPS Fluidity</Badge>
+                  </div>
+                  <h3 className="font-bold text-slate-900 text-sm">Fluid Motion &amp; Tactile Feedback</h3>
+                  <p className="text-xs text-slate-600 leading-relaxed">
+                    Chuẩn mực trải nghiệm người dùng theo GEMINI.md:
+                  </p>
+                  <ul className="text-xs text-slate-600 space-y-1.5 list-disc list-inside">
+                    <li>Tích hợp <code className="text-[11px] bg-slate-100 px-1 py-0.5 rounded text-purple-800">flutter_animate</code> cho hiệu ứng danh sách so le (Staggered fade-slide, delay 50ms) và sóng radar pulse vô tận.</li>
+                    <li>Phản hồi xúc giác Tactile Tap: <code className="text-[11px] bg-slate-100 px-1 py-0.5 rounded">scale: 0.96 - 0.97</code> kèm rung vật lý <code className="text-[11px] bg-slate-100 px-1 py-0.5 rounded">HapticFeedback.selectionClick()</code>.</li>
+                    <li><strong className="text-slate-800">Zero Layout Shift</strong>: Sử dụng <code className="text-[11px] bg-slate-100 px-1 py-0.5 rounded">AnimatedSwitcher</code> và spring curves (<code className="text-[11px] bg-slate-100 px-1 py-0.5 rounded">Curves.easeOutCubic</code>) chuyển đổi êm ái giữa các bước.</li>
+                  </ul>
+                </CardContent>
+              </Card>
+            </div>
+          </div>
+        )}
+
+      {/* SECTION 9: QUICK API ENDPOINTS CHEAT SHEET */}
       <div className="space-y-4 pt-2">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Terminal className="w-5 h-5 text-slate-700" />
             <h2 className="text-base font-bold text-slate-900 tracking-tight">
-              8. Danh Mục API Endpoints Chuẩn Hóa ({filteredEndpoints.length})
+              9. Danh Mục API Endpoints Chuẩn Hóa ({filteredEndpoints.length})
             </h2>
           </div>
           <span className="text-xs text-slate-400">Bấm để sao chép đường dẫn API</span>
