@@ -1,0 +1,14 @@
+name: linkkwork_mobile
+packages:
+  - packages/*
+  - apps/*
+
+scripts:
+  analyze:
+    exec: flutter analyze .
+    description: Run flutter analyze across all packages.
+  test:
+    exec: flutter test
+    packageFilters:
+      dirExists: test
+    description: Run tests in all packages.

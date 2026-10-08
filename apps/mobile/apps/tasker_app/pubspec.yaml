@@ -1,0 +1,22 @@
+name: linkkwork_tasker_app
+description: LinkkWork Tasker Mobile Application
+version: 1.0.0
+publish_to: none
+environment:
+  sdk: ">=3.5.0 <4.0.0"
+  flutter: ">=3.24.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  linkkwork_core:
+    path: ../../packages/core
+  linkkwork_design_system:
+    path: ../../packages/design_system
+  linkkwork_tasker_domain:
+    path: ../../packages/tasker_domain
+  flutter_bloc: ^8.1.6
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter

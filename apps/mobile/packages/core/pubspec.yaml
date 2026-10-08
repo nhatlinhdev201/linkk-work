@@ -1,0 +1,23 @@
+name: linkkwork_core
+description: Core infrastructure, network, models and security for LinkkWork
+version: 1.0.0
+publish_to: none
+environment:
+  sdk: ">=3.5.0 <4.0.0"
+  flutter: ">=3.24.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  dio: ^5.7.0
+  socket_io_client: ^3.0.2
+  flutter_secure_storage: ^9.2.2
+  audioplayers: ^6.0.0
+  geolocator: ^12.0.0
+  equatable: ^2.0.5
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  test: ^1.25.8
+  mocktail: ^1.0.4

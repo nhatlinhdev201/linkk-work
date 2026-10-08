@@ -1,0 +1,9 @@
+name: linkkwork_mobile
+environment:
+  sdk: ">=3.5.0 <4.0.0"
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  test: ^1.25.8
+  melos: ^6.3.3

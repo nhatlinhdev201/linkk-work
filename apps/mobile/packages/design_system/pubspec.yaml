@@ -1,0 +1,22 @@
+name: linkkwork_design_system
+description: LinkkUI Design System, Theme and Map Picker
+version: 1.0.0
+publish_to: none
+environment:
+  sdk: ">=3.5.0 <4.0.0"
+  flutter: ">=3.24.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  linkkwork_core:
+    path: ../core
+  flutter_map: ^7.0.2
+  latlong2: ^0.9.1
+  google_fonts: ^6.2.1
+  flutter_animate: ^4.5.2
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  mocktail: ^1.0.4

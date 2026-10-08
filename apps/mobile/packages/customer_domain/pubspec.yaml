@@ -1,0 +1,23 @@
+name: linkkwork_customer_domain
+description: Customer domain features, catalog and booking wizard
+version: 1.0.0
+publish_to: none
+environment:
+  sdk: ">=3.5.0 <4.0.0"
+  flutter: ">=3.24.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  linkkwork_core:
+    path: ../core
+  linkkwork_design_system:
+    path: ../design_system
+  flutter_bloc: ^8.1.6
+  equatable: ^2.0.5
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  bloc_test: ^9.1.7
+  mocktail: ^1.0.4

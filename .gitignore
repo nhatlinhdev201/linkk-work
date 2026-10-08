@@ -17,6 +17,7 @@ out/
 .flutter-plugins
 .flutter-plugins-dependencies
 .packages
+pubspec_overrides.yaml
 *.apk
 *.aab
 *.ipa
@@ -30,6 +31,7 @@ out/
 .DS_Store
 .idea/
 .vscode/
+*.iml
 *.suo
 *.ntvs*
 *.njsproj
