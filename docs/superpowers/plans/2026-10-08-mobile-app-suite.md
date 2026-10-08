@@ -159,6 +159,7 @@ dependencies:
   flutter_map: ^7.0.2
   latlong2: ^0.9.1
   google_fonts: ^6.2.1
+  flutter_animate: ^4.5.2
 
 dev_dependencies:
   flutter_test:
@@ -748,9 +749,10 @@ class LinkkTheme {
 Tạo `apps/mobile/packages/design_system/lib/widgets/linkk_button.dart`:
 ```dart
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../theme/linkk_theme.dart';
 
-class LinkkButton extends StatelessWidget {
+class LinkkButton extends StatefulWidget {
   final String title;
   final VoidCallback? onPressed;
   final bool isLoading;
@@ -765,25 +767,51 @@ class LinkkButton extends StatelessWidget {
   });
 
   @override
+  State<LinkkButton> createState() => _LinkkButtonState();
+}
+
+class _LinkkButtonState extends State<LinkkButton> {
+  bool _isPressed = false;
+
+  @override
   Widget build(BuildContext context) {
-    return ElevatedButton(
-      style: ElevatedButton.styleFrom(
-        backgroundColor: backgroundColor,
-        foregroundColor: Colors.white,
-        padding: const EdgeInsets.symmetric(vertical: 16),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      ),
-      onPressed: isLoading ? null : onPressed,
-      child: isLoading
-          ? const SizedBox(
-              height: 20,
-              width: 20,
-              child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-            )
-          : Text(
-              title,
-              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+    return GestureDetector(
+      onTapDown: (_) {
+        if (!widget.isLoading && widget.onPressed != null) {
+          setState(() => _isPressed = true);
+          HapticFeedback.selectionClick();
+        }
+      },
+      onTapUp: (_) => setState(() => _isPressed = false),
+      onTapCancel: () => setState(() => _isPressed = false),
+      child: AnimatedScale(
+        scale: _isPressed ? 0.96 : 1.0,
+        duration: const Duration(milliseconds: 150),
+        curve: Curves.easeOutCubic,
+        child: SizedBox(
+          width: double.infinity,
+          child: ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: widget.backgroundColor,
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(vertical: 16),
+              elevation: 0,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
             ),
+            onPressed: widget.isLoading ? null : widget.onPressed,
+            child: widget.isLoading
+                ? const SizedBox(
+                    height: 20,
+                    width: 20,
+                    child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                  )
+                : Text(
+                    widget.title,
+                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                  ),
+          ),
+        ),
+      ),
     );
   }
 }

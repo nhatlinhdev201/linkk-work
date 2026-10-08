@@ -142,6 +142,20 @@ apps/mobile/
   * Endpoint: `https://nominatim.openstreetmap.org/search?q={query}&format=json&countrycodes=vn`
 * **Tính năng ghim vị trí:** Khách hàng kéo bản đồ để ghim chính xác cửa nhà/tòa nhà, hiển thị địa chỉ chi tiết theo tọa độ Lat/Lng.
 
+### 4.3. Động Cơ Hoạt Ảnh & Chuyển Động Mượt Mà (Fluid Animation & Motion Engine)
+Tiêu chí **mượt mà, uyển chuyển (60-120fps)** là tiêu chuẩn bắt buộc số 1 trên toàn bộ các màn hình và widgets:
+* **Thư viện chuyển động:** Tích hợp **`flutter_animate: ^4.5.2`** cho toàn bộ micro-interactions, fade-in, scale và shimmer.
+* **Tương tác xúc giác đàn hồi (Tactile Tap Feedback):**
+  * Mọi `LinkkButton` và `LinkkCard` khi chạm (tap down) tự động thu nhỏ nhẹ (`Transform.scale(scale: 0.97)`) kèm phản hồi rung Haptic (`HapticFeedback.selectionClick()`), khi nhả tay bung êm ái về `1.0` với đường cong `Curves.easeOutCubic`.
+* **Danh sách xuất hiện so le (Staggered List Animation):**
+  * Khi mở danh mục dịch vụ hoặc lịch sử đơn hàng, từng item lướt nhẹ từ dưới lên với hiệu ứng `FadeEffect(duration: 300.ms)` + `SlideEffect(begin: Offset(0, 0.08), end: Offset.zero)` và độ trễ so le `.delay((index * 40).ms)`.
+* **Radar Pulse Animation đa tầng:**
+  * Vòng tròn sóng radar tỏa ra liên tục 3 lớp sóng xung kích (`RippleAnimation` mượt mà 60fps) khi thợ ở chế độ bật nhận việc.
+* **Hero Transitions:**
+  * Chuyển cảnh mượt mà giữa Thumbnail Dịch vụ ở màn hình Home sang Banner Chi tiết dịch vụ không bị giật khựng.
+* **Booking Wizard Step Transitions:**
+  * Sử dụng `AnimatedSwitcher` với `SharedAxisTransition` / `FadeThroughTransition` khi người dùng chuyển giữa các bước 1 ➔ 2 ➔ 3 ➔ 4.
+
 ---
 
 ## 5. PHÂN HỆ KHÁCH HÀNG (`packages/customer_domain` & `apps/customer_app`)

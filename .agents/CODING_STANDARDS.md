@@ -12,11 +12,13 @@ Tài liệu quy định toàn bộ tiêu chuẩn viết mã, phong cách kiến 
    - Sử dụng Discriminated Unions cho các trạng thái máy hữu hạn (State Machine) thay vì chuỗi string tự do.
    - Các API response, mock data, props component phải được typed tường minh.
 
-2. **UI Component Consistency & Animation:**
-   - **Bắt buộc tái sử dụng** bộ thư viện thành phần dùng chung (`src/components/common/`):
-     - `Button`, `Input`, `Select`, `Badge`, `Card`, `Modal`, `Switch`, `Table`, `StatCard`, `EmptyState`, `Tabs`, `Pagination`, `Skeleton`.
-   - **Không viết style HTML trần trụi:** Không tạo các nút bấm hoặc ô nhập liệu dạng `<button className="...">` hay `<input className="...">` rời rạc trên từng trang.
-   - **Animation & Micro-interactions:** Ưu tiên hiệu ứng mượt mà (`transition-all duration-200`, `ease-in-out`), hover scales, modal backdrop blur, toast slide-in, tab indicator chuyển động êm ái.
+2. **UI Component Consistency & Fluid Animation (Hoạt ảnh mượt mà, uyển chuyển):**
+   - **Bắt buộc tái sử dụng** bộ thư viện thành phần dùng chung (`src/components/common/` trên Web và `packages/design_system` trên Mobile).
+   - **Tiêu chí mượt mà là số 1 (Fluid Motion):**
+     - Mọi màn hình (Screen/Page), Modal, BottomSheet, Card, Button bắt buộc phải có hiệu ứng hoạt ảnh mượt mà uyển chuyển.
+     - **Web Admin:** `transition-all duration-200 ease-in-out`, hover scale, backdrop blur `backdrop-blur-sm`, toast slide-in, tab indicator chuyển động êm ái.
+     - **Mobile Flutter:** Tích hợp `flutter_animate` cho staggered lists (danh sách trượt mềm mại so le), ripple pulse animation cho radar quét đơn, tactile tap scale (`scale: 0.97`) khi bấm nút, Hero transition khi mở chi tiết, và `AnimatedSwitcher` cho các bước Booking Wizard.
+     - Sử dụng đường cong chuyển động vật lý mềm mại (`Curves.easeOutCubic`, `Curves.fastOutSlowIn`), tuyệt đối tránh chuyển động giật khựng thô ráp.
 
 3. **Skeleton Loading Rule (Bắt buộc trên 100% Trang):**
    - **Không dùng Spinner đơn điệu:** Tuyệt đối không dùng 1 vòng quay tròn ở giữa trang làm người dùng hụt hẫng.
