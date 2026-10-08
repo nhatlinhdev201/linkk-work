@@ -1,5 +1,6 @@
 import 'package:dio/dio.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:linkkwork_core/location/location_service.dart';
 import 'package:linkkwork_core/models/enums.dart';
 import 'package:linkkwork_core/network/dio_client.dart';
@@ -41,9 +42,17 @@ class WorkOrderBloc extends Bloc<WorkOrderEvent, WorkOrderState> {
         booking: booking,
       ));
     } on DioException catch (e) {
-      emit(WorkOrderErrorState(error: _extractErrorMessage(e)));
+      _emitError(
+        emit,
+        error: _extractErrorMessage(e),
+        fallbackBookingId: event.bookingId,
+      );
     } catch (e) {
-      emit(WorkOrderErrorState(error: e.toString()));
+      _emitError(
+        emit,
+        error: _extractErrorMessage(e),
+        fallbackBookingId: event.bookingId,
+      );
     }
   }
 
@@ -51,6 +60,11 @@ class WorkOrderBloc extends Bloc<WorkOrderEvent, WorkOrderState> {
     StartTravelingEvent event,
     Emitter<WorkOrderState> emit,
   ) async {
+    if (state is WorkOrderActiveState) {
+      final active = state as WorkOrderActiveState;
+      if (active.isUpdating) return;
+      emit(active.copyWith(isUpdating: true));
+    }
     try {
       final res = await dioClient.dio.patch<dynamic>(
         '/bookings/${event.bookingId}/status',
@@ -69,9 +83,17 @@ class WorkOrderBloc extends Bloc<WorkOrderEvent, WorkOrderState> {
         booking: booking,
       ));
     } on DioException catch (e) {
-      emit(WorkOrderErrorState(error: _extractErrorMessage(e)));
+      _emitError(
+        emit,
+        error: _extractErrorMessage(e),
+        fallbackBookingId: event.bookingId,
+      );
     } catch (e) {
-      emit(WorkOrderErrorState(error: e.toString()));
+      _emitError(
+        emit,
+        error: _extractErrorMessage(e),
+        fallbackBookingId: event.bookingId,
+      );
     }
   }
 
@@ -79,15 +101,22 @@ class WorkOrderBloc extends Bloc<WorkOrderEvent, WorkOrderState> {
     CheckInArrivalEvent event,
     Emitter<WorkOrderState> emit,
   ) async {
+    if (state is WorkOrderActiveState) {
+      final active = state as WorkOrderActiveState;
+      if (active.isUpdating) return;
+      emit(active.copyWith(isUpdating: true));
+    }
     try {
       final pos = await locationService.getCurrentPosition();
 
       // Anti-Fraud check: detect spoofed/mock GPS
       if (locationService.isMockLocation(pos)) {
-        emit(const WorkOrderErrorState(
+        _emitError(
+          emit,
           error:
               'Phát hiện vị trí giả lập (Mock GPS). Vui lòng tắt ứng dụng giả lập GPS để tiếp tục!',
-        ));
+          fallbackBookingId: event.bookingId,
+        );
         return;
       }
 
@@ -111,9 +140,17 @@ class WorkOrderBloc extends Bloc<WorkOrderEvent, WorkOrderState> {
         booking: booking,
       ));
     } on DioException catch (e) {
-      emit(WorkOrderErrorState(error: _extractErrorMessage(e)));
+      _emitError(
+        emit,
+        error: _extractErrorMessage(e),
+        fallbackBookingId: event.bookingId,
+      );
     } catch (e) {
-      emit(WorkOrderErrorState(error: e.toString()));
+      _emitError(
+        emit,
+        error: _extractErrorMessage(e),
+        fallbackBookingId: event.bookingId,
+      );
     }
   }
 
@@ -121,6 +158,11 @@ class WorkOrderBloc extends Bloc<WorkOrderEvent, WorkOrderState> {
     SubmitCompletionProofEvent event,
     Emitter<WorkOrderState> emit,
   ) async {
+    if (state is WorkOrderActiveState) {
+      final active = state as WorkOrderActiveState;
+      if (active.isUpdating) return;
+      emit(active.copyWith(isUpdating: true));
+    }
     try {
       final res = await dioClient.dio.patch<dynamic>(
         '/bookings/${event.bookingId}/status',
@@ -140,9 +182,17 @@ class WorkOrderBloc extends Bloc<WorkOrderEvent, WorkOrderState> {
         booking: booking,
       ));
     } on DioException catch (e) {
-      emit(WorkOrderErrorState(error: _extractErrorMessage(e)));
+      _emitError(
+        emit,
+        error: _extractErrorMessage(e),
+        fallbackBookingId: event.bookingId,
+      );
     } catch (e) {
-      emit(WorkOrderErrorState(error: e.toString()));
+      _emitError(
+        emit,
+        error: _extractErrorMessage(e),
+        fallbackBookingId: event.bookingId,
+      );
     }
   }
 
@@ -150,23 +200,73 @@ class WorkOrderBloc extends Bloc<WorkOrderEvent, WorkOrderState> {
     ConfirmCashPaymentEvent event,
     Emitter<WorkOrderState> emit,
   ) async {
+    if (state is WorkOrderCompletedState ||
+        (state is WorkOrderActiveState &&
+            (state as WorkOrderActiveState).isUpdating)) {
+      return;
+    }
+    if (state is WorkOrderActiveState) {
+      emit((state as WorkOrderActiveState).copyWith(isUpdating: true));
+    }
     try {
-      await dioClient.dio.post<dynamic>(
+      final res = await dioClient.dio.post<dynamic>(
         '/bookings/${event.bookingId}/record-cash-payment',
         data: <String, dynamic>{
           'amount': event.amount,
           'deductCommission': true,
         },
       );
+      final settlementData = res.data is Map<String, dynamic>
+          ? res.data as Map<String, dynamic>
+          : (res.data is Map
+              ? Map<String, dynamic>.from(res.data as Map)
+              : <String, dynamic>{});
       emit(WorkOrderCompletedState(
         bookingId: event.bookingId,
         amountCollected: event.amount,
+        settlementData: settlementData,
       ));
     } on DioException catch (e) {
-      emit(WorkOrderErrorState(error: _extractErrorMessage(e)));
+      _emitError(
+        emit,
+        error: _extractErrorMessage(e),
+        fallbackBookingId: event.bookingId,
+      );
     } catch (e) {
-      emit(WorkOrderErrorState(error: e.toString()));
+      _emitError(
+        emit,
+        error: _extractErrorMessage(e),
+        fallbackBookingId: event.bookingId,
+      );
     }
+  }
+
+  void _emitError(
+    Emitter<WorkOrderState> emit, {
+    required String error,
+    String? fallbackBookingId,
+  }) {
+    final current = state;
+    String? bookingId = fallbackBookingId;
+    Map<String, dynamic>? booking;
+    BookingStatus? previousStatus;
+
+    if (current is WorkOrderActiveState) {
+      bookingId = current.bookingId;
+      booking = current.booking;
+      previousStatus = current.status;
+    } else if (current is WorkOrderErrorState) {
+      bookingId = current.bookingId ?? fallbackBookingId;
+      booking = current.booking;
+      previousStatus = current.previousStatus;
+    }
+
+    emit(WorkOrderErrorState(
+      error: error,
+      bookingId: bookingId,
+      booking: booking,
+      previousStatus: previousStatus,
+    ));
   }
 
   Map<String, dynamic> _parseBooking(dynamic data, String bookingId) {
@@ -204,7 +304,13 @@ class WorkOrderBloc extends Bloc<WorkOrderEvent, WorkOrderState> {
     return base;
   }
 
-  String _extractErrorMessage(dynamic e) {
+  String _extractErrorMessage(Object e) {
+    if (e is LocationServiceDisabledException) {
+      return 'Vui lòng bật định vị GPS để điểm danh hiện trường';
+    }
+    if (e is PermissionDeniedException) {
+      return 'Ứng dụng chưa được cấp quyền vị trí';
+    }
     if (e is DioException) {
       final data = e.response?.data;
       if (data is Map) {
@@ -217,7 +323,21 @@ class WorkOrderBloc extends Bloc<WorkOrderEvent, WorkOrderState> {
       if (e.message != null && e.message!.isNotEmpty) {
         return e.message!;
       }
+      return 'Lỗi kết nối máy chủ';
     }
-    return e.toString();
+    final str = e.toString();
+    final lower = str.toLowerCase();
+    if (lower.contains('location') && lower.contains('disabled') ||
+        lower.contains('dịch vụ định vị gps bị tắt') ||
+        lower.contains('gps bị tắt') ||
+        lower.contains('định vị gps')) {
+      return 'Vui lòng bật định vị GPS để điểm danh hiện trường';
+    }
+    if (lower.contains('permission') && lower.contains('denied') ||
+        lower.contains('quyền vị trí') ||
+        lower.contains('chưa được cấp quyền')) {
+      return 'Ứng dụng chưa được cấp quyền vị trí';
+    }
+    return str;
   }
 }

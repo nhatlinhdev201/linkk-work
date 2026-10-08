@@ -31,10 +31,16 @@ class TaskerWalletBloc extends Bloc<TaskerWalletEvent, TaskerWalletState> {
   }
 
   Future<void> _fetchWalletData(Emitter<TaskerWalletState> emit) async {
-    emit(const TaskerWalletLoadingState());
+    if (state is! TaskerWalletLoadedState) {
+      emit(const TaskerWalletLoadingState());
+    }
     try {
-      final summaryRes = await dioClient.dio.get<dynamic>('/finance/summary');
-      final txRes = await dioClient.dio.get<dynamic>('/finance/transactions');
+      final results = await Future.wait([
+        dioClient.dio.get<dynamic>('/finance/summary'),
+        dioClient.dio.get<dynamic>('/finance/transactions'),
+      ]);
+      final summaryRes = results[0];
+      final txRes = results[1];
 
       final depositBalance = _parseDeposit(summaryRes.data);
       final transactions = _parseTransactions(txRes.data);
@@ -52,7 +58,10 @@ class TaskerWalletBloc extends Bloc<TaskerWalletEvent, TaskerWalletState> {
 
   double _parseDeposit(dynamic data) {
     if (data is Map) {
-      final Map<dynamic, dynamic> map = data;
+      Map<dynamic, dynamic> map = data;
+      if (map['data'] is Map) {
+        map = map['data'] as Map<dynamic, dynamic>;
+      }
       final raw = map['depositBalance'] ??
           map['balance'] ??
           map['totalDepositHeld'] ??
@@ -92,17 +101,19 @@ class TaskerWalletBloc extends Bloc<TaskerWalletEvent, TaskerWalletState> {
         .toList();
   }
 
-  String _extractErrorMessage(DioException e) {
-    final data = e.response?.data;
-    if (data is Map) {
-      final msg = data['message'] ?? data['error'];
-      if (msg is List) {
-        return msg.join(', ');
+  String _extractErrorMessage(Object e) {
+    if (e is DioException) {
+      final data = e.response?.data;
+      if (data is Map) {
+        final msg = data['message'] ?? data['error'];
+        if (msg is List) {
+          return msg.join(', ');
+        }
+        if (msg != null) return msg.toString();
       }
-      if (msg != null) return msg.toString();
-    }
-    if (e.message != null && e.message!.isNotEmpty) {
-      return e.message!;
+      if (e.message != null && e.message!.isNotEmpty) {
+        return e.message!;
+      }
     }
     return 'Lỗi kết nối máy chủ';
   }

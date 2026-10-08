@@ -142,6 +142,12 @@ void main() {
       expect: () => [
         WorkOrderActiveState(
           bookingId: 'booking-456',
+          status: BookingStatus.assigned,
+          booking: sampleBooking,
+          isUpdating: true,
+        ),
+        WorkOrderActiveState(
+          bookingId: 'booking-456',
           status: BookingStatus.arriving,
           booking: <String, dynamic>{
             'id': 'booking-456',
@@ -149,6 +155,7 @@ void main() {
             'status': 'ARRIVING',
             'totalAmount': 250000.0,
           },
+          isUpdating: false,
         ),
       ],
       verify: (_) {
@@ -188,9 +195,24 @@ void main() {
         checkInPhotoUrl: 'https://cdn.example.com/arrival.jpg',
       )),
       expect: () => [
+        const WorkOrderActiveState(
+          bookingId: 'booking-456',
+          status: BookingStatus.arriving,
+          booking: <String, dynamic>{
+            'id': 'booking-456',
+            'status': 'ARRIVING',
+          },
+          isUpdating: true,
+        ),
         const WorkOrderErrorState(
           error:
               'Phát hiện vị trí giả lập (Mock GPS). Vui lòng tắt ứng dụng giả lập GPS để tiếp tục!',
+          bookingId: 'booking-456',
+          booking: <String, dynamic>{
+            'id': 'booking-456',
+            'status': 'ARRIVING',
+          },
+          previousStatus: BookingStatus.arriving,
         ),
       ],
       verify: (_) {
@@ -254,11 +276,21 @@ void main() {
       expect: () => [
         const WorkOrderActiveState(
           bookingId: 'booking-456',
+          status: BookingStatus.arriving,
+          booking: <String, dynamic>{
+            'id': 'booking-456',
+            'status': 'ARRIVING',
+          },
+          isUpdating: true,
+        ),
+        const WorkOrderActiveState(
+          bookingId: 'booking-456',
           status: BookingStatus.inProgress,
           booking: <String, dynamic>{
             'id': 'booking-456',
             'status': 'IN_PROGRESS',
           },
+          isUpdating: false,
         ),
       ],
       verify: (_) {
@@ -327,11 +359,21 @@ void main() {
       expect: () => [
         const WorkOrderActiveState(
           bookingId: 'booking-456',
+          status: BookingStatus.inProgress,
+          booking: <String, dynamic>{
+            'id': 'booking-456',
+            'status': 'IN_PROGRESS',
+          },
+          isUpdating: true,
+        ),
+        const WorkOrderActiveState(
+          bookingId: 'booking-456',
           status: BookingStatus.pendingAcceptance,
           booking: <String, dynamic>{
             'id': 'booking-456',
             'status': 'PENDING_ACCEPTANCE',
           },
+          isUpdating: false,
         ),
       ],
       verify: (_) {
@@ -378,14 +420,29 @@ void main() {
           locationService: mockLocationService,
         );
       },
+      seed: () => WorkOrderActiveState(
+        bookingId: 'booking-456',
+        status: BookingStatus.pendingAcceptance,
+        booking: sampleBooking,
+      ),
       act: (bloc) => bloc.add(const ConfirmCashPaymentEvent(
         bookingId: 'booking-456',
         amount: 250000.0,
       )),
       expect: () => [
+        WorkOrderActiveState(
+          bookingId: 'booking-456',
+          status: BookingStatus.pendingAcceptance,
+          booking: sampleBooking,
+          isUpdating: true,
+        ),
         const WorkOrderCompletedState(
           bookingId: 'booking-456',
           amountCollected: 250000.0,
+          settlementData: <String, dynamic>{
+            'id': 'booking-456',
+            'status': 'COMPLETED',
+          },
         ),
       ],
       verify: (_) {
@@ -398,6 +455,58 @@ void main() {
             },
           ),
         ).called(1);
+      },
+    );
+
+    blocTest<WorkOrderBloc, WorkOrderState>(
+      'ConfirmCashPaymentEvent double-tap is ignored when already updating',
+      build: () => WorkOrderBloc(
+        dioClient: mockDioClient,
+        locationService: mockLocationService,
+      ),
+      seed: () => WorkOrderActiveState(
+        bookingId: 'booking-456',
+        status: BookingStatus.pendingAcceptance,
+        booking: sampleBooking,
+        isUpdating: true,
+      ),
+      act: (bloc) => bloc.add(const ConfirmCashPaymentEvent(
+        bookingId: 'booking-456',
+        amount: 250000.0,
+      )),
+      expect: () => <WorkOrderState>[],
+      verify: (_) {
+        verifyNever(
+          () => mockDio.post<dynamic>(
+            any(),
+            data: any(named: 'data'),
+          ),
+        );
+      },
+    );
+
+    blocTest<WorkOrderBloc, WorkOrderState>(
+      'ConfirmCashPaymentEvent double-tap is ignored when already in WorkOrderCompletedState',
+      build: () => WorkOrderBloc(
+        dioClient: mockDioClient,
+        locationService: mockLocationService,
+      ),
+      seed: () => const WorkOrderCompletedState(
+        bookingId: 'booking-456',
+        amountCollected: 250000.0,
+      ),
+      act: (bloc) => bloc.add(const ConfirmCashPaymentEvent(
+        bookingId: 'booking-456',
+        amount: 250000.0,
+      )),
+      expect: () => <WorkOrderState>[],
+      verify: (_) {
+        verifyNever(
+          () => mockDio.post<dynamic>(
+            any(),
+            data: any(named: 'data'),
+          ),
+        );
       },
     );
 
@@ -424,7 +533,10 @@ void main() {
       act: (bloc) => bloc.add(const LoadWorkOrderEvent(bookingId: 'bk-err')),
       expect: () => [
         const WorkOrderLoadingState(),
-        const WorkOrderErrorState(error: 'Đơn hàng không tồn tại'),
+        const WorkOrderErrorState(
+          error: 'Đơn hàng không tồn tại',
+          bookingId: 'bk-err',
+        ),
       ],
     );
 
@@ -438,18 +550,136 @@ void main() {
           locationService: mockLocationService,
         );
       },
+      seed: () => const WorkOrderActiveState(
+        bookingId: 'booking-456',
+        status: BookingStatus.arriving,
+        booking: <String, dynamic>{
+          'id': 'booking-456',
+          'status': 'ARRIVING',
+        },
+      ),
       act: (bloc) => bloc.add(const CheckInArrivalEvent(
         bookingId: 'booking-456',
         checkInPhotoUrl: 'https://cdn.example.com/arrival.jpg',
       )),
       expect: () => [
+        const WorkOrderActiveState(
+          bookingId: 'booking-456',
+          status: BookingStatus.arriving,
+          booking: <String, dynamic>{
+            'id': 'booking-456',
+            'status': 'ARRIVING',
+          },
+          isUpdating: true,
+        ),
         const WorkOrderErrorState(
-            error: 'Exception: Dịch vụ định vị GPS bị tắt'),
+          error: 'Vui lòng bật định vị GPS để điểm danh hiện trường',
+          bookingId: 'booking-456',
+          booking: <String, dynamic>{
+            'id': 'booking-456',
+            'status': 'ARRIVING',
+          },
+          previousStatus: BookingStatus.arriving,
+        ),
       ],
     );
 
     blocTest<WorkOrderBloc, WorkOrderState>(
-      'ConfirmCashPaymentEvent handles DioException cleanly',
+      'CheckInArrivalEvent maps PermissionDeniedException to Vietnamese error message',
+      build: () {
+        when(() => mockLocationService.getCurrentPosition())
+            .thenThrow(PermissionDeniedException('Location permission denied'));
+        return WorkOrderBloc(
+          dioClient: mockDioClient,
+          locationService: mockLocationService,
+        );
+      },
+      seed: () => const WorkOrderActiveState(
+        bookingId: 'booking-456',
+        status: BookingStatus.arriving,
+        booking: <String, dynamic>{
+          'id': 'booking-456',
+          'status': 'ARRIVING',
+        },
+      ),
+      act: (bloc) => bloc.add(const CheckInArrivalEvent(
+        bookingId: 'booking-456',
+        checkInPhotoUrl: 'https://cdn.example.com/arrival.jpg',
+      )),
+      expect: () => [
+        const WorkOrderActiveState(
+          bookingId: 'booking-456',
+          status: BookingStatus.arriving,
+          booking: <String, dynamic>{
+            'id': 'booking-456',
+            'status': 'ARRIVING',
+          },
+          isUpdating: true,
+        ),
+        const WorkOrderErrorState(
+          error: 'Ứng dụng chưa được cấp quyền vị trí',
+          bookingId: 'booking-456',
+          booking: <String, dynamic>{
+            'id': 'booking-456',
+            'status': 'ARRIVING',
+          },
+          previousStatus: BookingStatus.arriving,
+        ),
+      ],
+    );
+
+    blocTest<WorkOrderBloc, WorkOrderState>(
+      'StartTravelingEvent Dio failure preserves existing bookingId, booking, and status in WorkOrderErrorState',
+      build: () {
+        when(
+          () => mockDio.patch<dynamic>(
+            '/bookings/booking-456/status',
+            data: any(named: 'data'),
+          ),
+        ).thenThrow(
+          DioException(
+            requestOptions:
+                RequestOptions(path: '/bookings/booking-456/status'),
+            response: Response<dynamic>(
+              requestOptions:
+                  RequestOptions(path: '/bookings/booking-456/status'),
+              statusCode: 500,
+              data: <String, dynamic>{
+                'message': 'Lỗi kết nối trạm điều phối',
+              },
+            ),
+          ),
+        );
+        return WorkOrderBloc(
+          dioClient: mockDioClient,
+          locationService: mockLocationService,
+        );
+      },
+      seed: () => WorkOrderActiveState(
+        bookingId: 'booking-456',
+        status: BookingStatus.assigned,
+        booking: sampleBooking,
+      ),
+      act: (bloc) =>
+          bloc.add(const StartTravelingEvent(bookingId: 'booking-456')),
+      expect: () => [
+        WorkOrderActiveState(
+          bookingId: 'booking-456',
+          status: BookingStatus.assigned,
+          booking: sampleBooking,
+          isUpdating: true,
+        ),
+        WorkOrderErrorState(
+          error: 'Lỗi kết nối trạm điều phối',
+          bookingId: 'booking-456',
+          booking: sampleBooking,
+          previousStatus: BookingStatus.assigned,
+        ),
+      ],
+    );
+
+    blocTest<WorkOrderBloc, WorkOrderState>(
+      'ConfirmCashPaymentEvent handles DioException cleanly preserving context',
       build: () {
         when(
           () => mockDio.post<dynamic>(
@@ -467,7 +697,7 @@ void main() {
               ),
               statusCode: 400,
               data: <String, dynamic>{
-                'message': 'Số dư ký quỹ không đủ trích hoa hồng'
+                'message': 'Số dư ký quỹ không đủ trích hoa hồng',
               },
             ),
           ),
@@ -477,13 +707,27 @@ void main() {
           locationService: mockLocationService,
         );
       },
+      seed: () => WorkOrderActiveState(
+        bookingId: 'booking-456',
+        status: BookingStatus.pendingAcceptance,
+        booking: sampleBooking,
+      ),
       act: (bloc) => bloc.add(const ConfirmCashPaymentEvent(
         bookingId: 'booking-456',
         amount: 250000.0,
       )),
       expect: () => [
-        const WorkOrderErrorState(
+        WorkOrderActiveState(
+          bookingId: 'booking-456',
+          status: BookingStatus.pendingAcceptance,
+          booking: sampleBooking,
+          isUpdating: true,
+        ),
+        WorkOrderErrorState(
           error: 'Số dư ký quỹ không đủ trích hoa hồng',
+          bookingId: 'booking-456',
+          booking: sampleBooking,
+          previousStatus: BookingStatus.pendingAcceptance,
         ),
       ],
     );
