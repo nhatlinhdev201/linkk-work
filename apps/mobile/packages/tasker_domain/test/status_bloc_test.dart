@@ -222,6 +222,90 @@ void main() {
       expect: () => [
         const TaskerStatusError(
           message: 'Hồ sơ KYC chưa được phê duyệt',
+          currentDeposit: 800000.0,
+        ),
+      ],
+    );
+
+    blocTest<TaskerStatusBloc, TaskerStatusState>(
+      'toggle online unseeded fails with network error when deposit check fails',
+      build: () {
+        when(() => mockDio.get<dynamic>('/finance/summary')).thenThrow(
+          DioException(
+            requestOptions: RequestOptions(path: '/finance/summary'),
+            response: Response<dynamic>(
+              requestOptions: RequestOptions(path: '/finance/summary'),
+              statusCode: 503,
+              data: <String, dynamic>{
+                'message': 'Không thể kết nối máy chủ tài chính',
+              },
+            ),
+          ),
+        );
+        return TaskerStatusBloc(dioClient: mockDioClient);
+      },
+      act: (bloc) => bloc.add(const ToggleTaskerStatusEvent(goOnline: true)),
+      expect: () => [
+        const TaskerStatusError(
+          message:
+              'Không thể xác thực số dư ký quỹ: Không thể kết nối máy chủ tài chính',
+        ),
+      ],
+      verify: (_) {
+        verify(() => mockDio.get<dynamic>('/finance/summary')).called(1);
+        verifyNever(
+          () => mockDio.patch<dynamic>(
+            any(),
+            data: any(named: 'data'),
+          ),
+        );
+      },
+    );
+
+    blocTest<TaskerStatusBloc, TaskerStatusState>(
+      'toggle online unseeded joins List error messages from finance summary',
+      build: () {
+        when(() => mockDio.get<dynamic>('/finance/summary')).thenThrow(
+          DioException(
+            requestOptions: RequestOptions(path: '/finance/summary'),
+            response: Response<dynamic>(
+              requestOptions: RequestOptions(path: '/finance/summary'),
+              statusCode: 400,
+              data: <String, dynamic>{
+                'message': ['Lỗi xác thực', 'Token không hợp lệ'],
+              },
+            ),
+          ),
+        );
+        return TaskerStatusBloc(dioClient: mockDioClient);
+      },
+      act: (bloc) => bloc.add(const ToggleTaskerStatusEvent(goOnline: true)),
+      expect: () => [
+        const TaskerStatusError(
+          message:
+              'Không thể xác thực số dư ký quỹ: Lỗi xác thực, Token không hợp lệ',
+        ),
+      ],
+    );
+
+    blocTest<TaskerStatusBloc, TaskerStatusState>(
+      'toggle online dynamically interpolates custom minDepositRequired in error message',
+      build: () => TaskerStatusBloc(
+        dioClient: mockDioClient,
+        minDepositRequired: 1000000.0,
+      ),
+      seed: () => const TaskerStatusLoaded(
+        isOnline: false,
+        depositBalance: 800000.0,
+        minDeposit: 1000000.0,
+      ),
+      act: (bloc) => bloc.add(const ToggleTaskerStatusEvent(goOnline: true)),
+      expect: () => [
+        const TaskerStatusError(
+          message:
+              'Số dư ví ký quỹ không đủ điều kiện nhận việc (tối thiểu 1.000.000đ). Vui lòng nạp thêm cọc.',
+          isInsufficientDeposit: true,
+          currentDeposit: 800000.0,
         ),
       ],
     );

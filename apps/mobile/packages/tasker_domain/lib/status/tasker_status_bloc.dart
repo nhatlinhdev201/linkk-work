@@ -54,8 +54,18 @@ class TaskerStatusBloc extends Bloc<TaskerStatusEvent, TaskerStatusState> {
       try {
         final res = await dioClient.dio.get<dynamic>('/finance/summary');
         balance = _parseDeposit(res.data);
-      } catch (_) {
-        balance = 0.0;
+      } on DioException catch (e) {
+        final errorMsg =
+            _extractErrorMessage(e) ?? 'Không thể kết nối máy chủ tài chính';
+        emit(TaskerStatusError(
+          message: 'Không thể xác thực số dư ký quỹ: $errorMsg',
+        ));
+        return;
+      } catch (e) {
+        emit(TaskerStatusError(
+          message: 'Không thể xác thực số dư ký quỹ: ${e.toString()}',
+        ));
+        return;
       }
     }
 
@@ -63,7 +73,7 @@ class TaskerStatusBloc extends Bloc<TaskerStatusEvent, TaskerStatusState> {
       if (balance < minDepositRequired) {
         emit(TaskerStatusError(
           message:
-              'Số dư ví ký quỹ không đủ điều kiện nhận việc (tối thiểu 500.000đ). Vui lòng nạp thêm cọc.',
+              'Số dư ví ký quỹ không đủ điều kiện nhận việc (tối thiểu ${_formatCurrency(minDepositRequired)}). Vui lòng nạp thêm cọc.',
           isInsufficientDeposit: true,
           currentDeposit: balance,
         ));
@@ -84,10 +94,25 @@ class TaskerStatusBloc extends Bloc<TaskerStatusEvent, TaskerStatusState> {
     } on DioException catch (e) {
       final errorMsg =
           _extractErrorMessage(e) ?? 'Không thể cập nhật trạng thái';
-      emit(TaskerStatusError(message: errorMsg));
+      emit(TaskerStatusError(
+        message: errorMsg,
+        currentDeposit: balance,
+      ));
     } catch (e) {
-      emit(TaskerStatusError(message: e.toString()));
+      emit(TaskerStatusError(
+        message: e.toString(),
+        currentDeposit: balance,
+      ));
     }
+  }
+
+  String _formatCurrency(double amount) {
+    final s = amount.toInt().toString();
+    final formatted = s.replaceAllMapped(
+      RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'),
+      (m) => '${m[1]}.',
+    );
+    return '$formattedđ';
   }
 
   double _parseDeposit(dynamic data) {
@@ -117,6 +142,9 @@ class TaskerStatusBloc extends Bloc<TaskerStatusEvent, TaskerStatusState> {
     final data = e.response?.data;
     if (data is Map) {
       final msg = data['message'];
+      if (msg is List) {
+        return msg.join(', ');
+      }
       if (msg != null) return msg.toString();
     }
     return e.message;

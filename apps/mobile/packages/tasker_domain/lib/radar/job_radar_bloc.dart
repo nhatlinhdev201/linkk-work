@@ -25,13 +25,17 @@ class JobRadarBloc extends Bloc<JobRadarEvent, JobRadarState> {
     required this.audioService,
   }) : super(const JobRadarIdleState()) {
     _broadcastSub = socketService.jobBroadcastStream.listen((data) {
-      add(NewJobBroadcastReceivedEvent(bookingData: data));
+      if (!isClosed) {
+        add(NewJobBroadcastReceivedEvent(bookingData: data));
+      }
     });
 
     _claimedSub = socketService.jobClaimedStream.listen((data) {
-      final bookingId = (data['bookingId'] ?? data['id'])?.toString();
-      if (bookingId != null && bookingId.isNotEmpty) {
-        add(JobClaimedByAnotherEvent(bookingId: bookingId));
+      if (!isClosed) {
+        final bookingId = (data['bookingId'] ?? data['id'])?.toString();
+        if (bookingId != null && bookingId.isNotEmpty) {
+          add(JobClaimedByAnotherEvent(bookingId: bookingId));
+        }
       }
     });
 
@@ -46,6 +50,10 @@ class JobRadarBloc extends Bloc<JobRadarEvent, JobRadarState> {
     NewJobBroadcastReceivedEvent event,
     Emitter<JobRadarState> emit,
   ) async {
+    if (state is JobClaimingState || state is JobClaimSuccessState) {
+      return;
+    }
+
     _countdownTimer?.cancel();
     _countdownTimer = null;
 
@@ -57,6 +65,10 @@ class JobRadarBloc extends Bloc<JobRadarEvent, JobRadarState> {
 
     var remaining = 30;
     _countdownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (isClosed) {
+        timer.cancel();
+        return;
+      }
       remaining--;
       if (remaining <= 0) {
         timer.cancel();
@@ -96,7 +108,7 @@ class JobRadarBloc extends Bloc<JobRadarEvent, JobRadarState> {
       final currentBookingId =
           (alertState.bookingData['bookingId'] ?? alertState.bookingData['id'])
               ?.toString();
-      if (currentBookingId == null || currentBookingId == event.bookingId) {
+      if (currentBookingId != null && currentBookingId == event.bookingId) {
         _countdownTimer?.cancel();
         _countdownTimer = null;
         await audioService.stopAlert();
@@ -119,6 +131,8 @@ class JobRadarBloc extends Bloc<JobRadarEvent, JobRadarState> {
     ClaimJobEvent event,
     Emitter<JobRadarState> emit,
   ) async {
+    if (state is! JobRadarAlertState) return;
+
     _countdownTimer?.cancel();
     _countdownTimer = null;
     await audioService.stopAlert();
@@ -151,7 +165,12 @@ class JobRadarBloc extends Bloc<JobRadarEvent, JobRadarState> {
         var errorMessage = 'Lỗi nhận đơn';
         final errData = e.response?.data;
         if (errData is Map && errData['message'] != null) {
-          errorMessage = errData['message'].toString();
+          final msg = errData['message'];
+          if (msg is List) {
+            errorMessage = msg.join(', ');
+          } else {
+            errorMessage = msg.toString();
+          }
         } else if (e.message != null && e.message!.isNotEmpty) {
           errorMessage = e.message!;
         }
