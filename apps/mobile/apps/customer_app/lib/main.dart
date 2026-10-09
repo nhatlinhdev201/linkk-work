@@ -106,7 +106,8 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
       priceFormatted: '80.000đ/giờ',
       rating: '4.9 ★ (1.2k+ đặt)',
       tag: 'Phổ biến nhất',
-      description: 'Quét dọn, lau sàn, rửa chén bát, gấp quần áo chuyên nghiệp.',
+      description:
+          'Quét dọn, lau sàn, rửa chén bát, gấp quần áo chuyên nghiệp.',
       icon: Icons.cleaning_services_rounded,
     ),
     CustomerServiceItem(
@@ -118,7 +119,8 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
       priceFormatted: '150.000đ/bộ',
       rating: '4.8 ★ (850+ đặt)',
       tag: 'Khuyên dùng',
-      description: 'Xịt rửa dàn nóng, dàn lạnh, kiểm tra gas, diệt khuẩn tia UV.',
+      description:
+          'Xịt rửa dàn nóng, dàn lạnh, kiểm tra gas, diệt khuẩn tia UV.',
       icon: Icons.ac_unit_rounded,
     ),
     CustomerServiceItem(
@@ -130,7 +132,8 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
       priceFormatted: '120.000đ/lần',
       rating: '4.9 ★ (640+ đặt)',
       tag: 'Cứu hộ 24/7',
-      description: 'Dò tìm rò rỉ điện âm tường, thay CB chống giật, kiểm tra an toàn.',
+      description:
+          'Dò tìm rò rỉ điện âm tường, thay CB chống giật, kiểm tra an toàn.',
       icon: Icons.bolt_rounded,
     ),
     CustomerServiceItem(
@@ -142,7 +145,8 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
       priceFormatted: '200.000đ/lần',
       rating: '4.7 ★ (430+ đặt)',
       tag: 'Bảo hành 30 ngày',
-      description: 'Xử lý tắc nghẽn bằng máy lò xo chuyên dụng không đục phá tường.',
+      description:
+          'Xử lý tắc nghẽn bằng máy lò xo chuyên dụng không đục phá tường.',
       icon: Icons.plumbing_rounded,
     ),
     CustomerServiceItem(
@@ -169,9 +173,7 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
     if (_selectedCategory == 'Tất cả') {
       return _services;
     }
-    return _services
-        .where((s) => s.category == _selectedCategory)
-        .toList();
+    return _services.where((s) => s.category == _selectedCategory).toList();
   }
 
   void _openAddressPicker() {
@@ -180,7 +182,8 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
       context: context,
       builder: (ctx) {
         return AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
           title: const Row(
             children: [
               Icon(Icons.location_on_rounded, color: LinkkTheme.primary),
@@ -269,7 +272,8 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
           // 2. Main Scrollable Content
           Expanded(
             child: ListView(
-              padding: const EdgeInsets.only(left: 16, right: 16, top: 12, bottom: 96),
+              padding: const EdgeInsets.only(
+                  left: 16, right: 16, top: 12, bottom: 96),
               children: [
                 // Promotion Banner
                 _buildPromoBanner(),
@@ -397,7 +401,8 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
                 ),
               ),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                 decoration: BoxDecoration(
                   color: LinkkTheme.background,
                   borderRadius: BorderRadius.circular(8),
@@ -438,7 +443,8 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
               color: LinkkTheme.primary.withValues(alpha: 0.2),
               shape: BoxShape.circle,
             ),
-            child: const Icon(Icons.flash_on_rounded, color: LinkkTheme.primary, size: 24),
+            child: const Icon(Icons.flash_on_rounded,
+                color: LinkkTheme.primary, size: 24),
           ),
           const SizedBox(width: 12),
           const Expanded(
@@ -490,7 +496,8 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
               child: AnimatedContainer(
                 duration: LinkkTheme.fastDuration,
                 curve: Curves.easeOutCubic,
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                 decoration: BoxDecoration(
                   color: isSelected ? LinkkTheme.primary : Colors.white,
                   borderRadius: BorderRadius.circular(999),
@@ -523,8 +530,15 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
           if (widget.enableAnimations) {
             chip = chip
                 .animate()
-                .fadeIn(duration: 250.ms, delay: (index * 40).ms, curve: Curves.easeOutCubic)
-                .slideX(begin: 0.08, end: 0, duration: 250.ms, curve: Curves.easeOutCubic);
+                .fadeIn(
+                    duration: 250.ms,
+                    delay: (index * 40).ms,
+                    curve: Curves.easeOutCubic)
+                .slideX(
+                    begin: 0.08,
+                    end: 0,
+                    duration: 250.ms,
+                    curve: Curves.easeOutCubic);
           }
 
           return chip;
@@ -601,7 +615,8 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
               children: [
                 Row(
                   children: [
-                    const Icon(Icons.star_rounded, color: Color(0xFFF59E0B), size: 18),
+                    const Icon(Icons.star_rounded,
+                        color: Color(0xFFF59E0B), size: 18),
                     const SizedBox(width: 4),
                     Text(
                       item.rating,
@@ -640,8 +655,15 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
       if (widget.enableAnimations) {
         card = card
             .animate()
-            .fadeIn(duration: 300.ms, delay: (index * 50).ms, curve: Curves.easeOutCubic)
-            .slideY(begin: 0.08, end: 0, duration: 300.ms, curve: Curves.easeOutCubic);
+            .fadeIn(
+                duration: 300.ms,
+                delay: (index * 50).ms,
+                curve: Curves.easeOutCubic)
+            .slideY(
+                begin: 0.08,
+                end: 0,
+                duration: 300.ms,
+                curve: Curves.easeOutCubic);
       }
 
       return card;
@@ -864,7 +886,8 @@ class _BookingWizardSheetState extends State<BookingWizardSheet> {
                     key: const Key('wizard_back_btn'),
                     onPressed: _prevStep,
                     style: OutlinedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 16, vertical: 12),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(12),
                       ),
@@ -929,7 +952,8 @@ class _BookingWizardSheetState extends State<BookingWizardSheet> {
   }
 
   Widget _buildStep1() {
-    final unitLabel = widget.service.pricingType == 'HOURLY' ? 'giờ' : 'bộ / lần';
+    final unitLabel =
+        widget.service.pricingType == 'HOURLY' ? 'giờ' : 'bộ / lần';
 
     return Column(
       key: const ValueKey<int>(1),
@@ -948,11 +972,13 @@ class _BookingWizardSheetState extends State<BookingWizardSheet> {
                   children: [
                     Text(
                       widget.service.title,
-                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                      style: const TextStyle(
+                          fontWeight: FontWeight.bold, fontSize: 15),
                     ),
                     Text(
                       widget.service.category,
-                      style: const TextStyle(fontSize: 12, color: LinkkTheme.textMuted),
+                      style: const TextStyle(
+                          fontSize: 12, color: LinkkTheme.textMuted),
                     ),
                   ],
                 ),
@@ -981,14 +1007,17 @@ class _BookingWizardSheetState extends State<BookingWizardSheet> {
             children: [
               Text(
                 'Khối lượng ($unitLabel):',
-                style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+                style:
+                    const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
               ),
               Row(
                 children: [
                   IconButton(
                     key: const Key('wizard_decrease_units_btn'),
                     icon: const Icon(Icons.remove_circle_outline),
-                    color: _units > 1.0 ? LinkkTheme.primary : LinkkTheme.textMuted,
+                    color: _units > 1.0
+                        ? LinkkTheme.primary
+                        : LinkkTheme.textMuted,
                     onPressed: _units > 1.0
                         ? () {
                             HapticFeedback.selectionClick();
@@ -998,7 +1027,8 @@ class _BookingWizardSheetState extends State<BookingWizardSheet> {
                   ),
                   Text(
                     '${_units.toInt()} $unitLabel',
-                    style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+                    style: const TextStyle(
+                        fontSize: 15, fontWeight: FontWeight.bold),
                   ),
                   IconButton(
                     key: const Key('wizard_increase_units_btn'),
@@ -1022,14 +1052,16 @@ class _BookingWizardSheetState extends State<BookingWizardSheet> {
           decoration: BoxDecoration(
             color: LinkkTheme.primary.withValues(alpha: 0.08),
             borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: LinkkTheme.primary.withValues(alpha: 0.24)),
+            border:
+                Border.all(color: LinkkTheme.primary.withValues(alpha: 0.24)),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const Row(
                 children: [
-                  Icon(Icons.calculate_rounded, color: LinkkTheme.primary, size: 20),
+                  Icon(Icons.calculate_rounded,
+                      color: LinkkTheme.primary, size: 20),
                   SizedBox(width: 8),
                   Text(
                     'Dự toán giá động thời gian thực',
@@ -1045,7 +1077,8 @@ class _BookingWizardSheetState extends State<BookingWizardSheet> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  const Text('Đơn giá niêm yết:', style: TextStyle(color: LinkkTheme.textMuted)),
+                  const Text('Đơn giá niêm yết:',
+                      style: TextStyle(color: LinkkTheme.textMuted)),
                   Text(_formatVnd(widget.service.basePrice),
                       style: const TextStyle(fontWeight: FontWeight.w600)),
                 ],
@@ -1056,7 +1089,8 @@ class _BookingWizardSheetState extends State<BookingWizardSheet> {
                 children: [
                   Text('Hệ số số lượng (${_units.toInt()} $unitLabel):',
                       style: const TextStyle(color: LinkkTheme.textMuted)),
-                  Text('${_units.toInt()}x', style: const TextStyle(fontWeight: FontWeight.w600)),
+                  Text('${_units.toInt()}x',
+                      style: const TextStyle(fontWeight: FontWeight.w600)),
                 ],
               ),
               const Divider(height: 18, color: LinkkTheme.border),
@@ -1165,7 +1199,8 @@ class _BookingWizardSheetState extends State<BookingWizardSheet> {
                     Text('Giao việc ngay (Ưu tiên)',
                         style: TextStyle(fontWeight: FontWeight.bold)),
                     Text('Thợ đối tác có mặt sau 15-30 phút',
-                        style: TextStyle(fontSize: 12, color: LinkkTheme.textMuted)),
+                        style: TextStyle(
+                            fontSize: 12, color: LinkkTheme.textMuted)),
                   ],
                 ),
               ),
@@ -1222,7 +1257,9 @@ class _BookingWizardSheetState extends State<BookingWizardSheet> {
       child: Container(
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
-          color: isSelected ? LinkkTheme.primary.withValues(alpha: 0.08) : Colors.white,
+          color: isSelected
+              ? LinkkTheme.primary.withValues(alpha: 0.08)
+              : Colors.white,
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
             color: isSelected ? LinkkTheme.primary : LinkkTheme.border,
@@ -1231,7 +1268,8 @@ class _BookingWizardSheetState extends State<BookingWizardSheet> {
         ),
         child: Row(
           children: [
-            Icon(icon, color: isSelected ? LinkkTheme.primary : LinkkTheme.textMuted),
+            Icon(icon,
+                color: isSelected ? LinkkTheme.primary : LinkkTheme.textMuted),
             const SizedBox(width: 12),
             Expanded(
               child: Column(
@@ -1241,15 +1279,20 @@ class _BookingWizardSheetState extends State<BookingWizardSheet> {
                     title,
                     style: TextStyle(
                       fontWeight: FontWeight.bold,
-                      color: isSelected ? LinkkTheme.primary : LinkkTheme.textPrimary,
+                      color: isSelected
+                          ? LinkkTheme.primary
+                          : LinkkTheme.textPrimary,
                     ),
                   ),
-                  Text(desc, style: const TextStyle(fontSize: 12, color: LinkkTheme.textMuted)),
+                  Text(desc,
+                      style: const TextStyle(
+                          fontSize: 12, color: LinkkTheme.textMuted)),
                 ],
               ),
             ),
             if (isSelected)
-              const Icon(Icons.check_circle_rounded, color: LinkkTheme.primary, size: 20),
+              const Icon(Icons.check_circle_rounded,
+                  color: LinkkTheme.primary, size: 20),
           ],
         ),
       ),
@@ -1314,10 +1357,13 @@ class _BookingWizardSheetState extends State<BookingWizardSheet> {
               _buildSummaryRow('Địa chỉ:', _address),
               _buildSummaryRow(
                 'Thanh toán:',
-                _paymentMethod == PaymentMethod.cash ? 'Tiền mặt (COD)' : 'Ví LinkkPay',
+                _paymentMethod == PaymentMethod.cash
+                    ? 'Tiền mặt (COD)'
+                    : 'Ví LinkkPay',
               ),
               const Divider(height: 16, color: LinkkTheme.border),
-              _buildSummaryRow('Tổng tiền:', _formatVnd(_estimatedTotal), isHighlight: true),
+              _buildSummaryRow('Tổng tiền:', _formatVnd(_estimatedTotal),
+                  isHighlight: true),
             ],
           ),
         ),
@@ -1325,13 +1371,16 @@ class _BookingWizardSheetState extends State<BookingWizardSheet> {
     );
   }
 
-  Widget _buildSummaryRow(String label, String value, {bool isHighlight = false}) {
+  Widget _buildSummaryRow(String label, String value,
+      {bool isHighlight = false}) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(label, style: const TextStyle(color: LinkkTheme.textMuted, fontSize: 13)),
+          Text(label,
+              style:
+                  const TextStyle(color: LinkkTheme.textMuted, fontSize: 13)),
           Flexible(
             child: Text(
               value,
@@ -1339,7 +1388,8 @@ class _BookingWizardSheetState extends State<BookingWizardSheet> {
               style: TextStyle(
                 fontWeight: isHighlight ? FontWeight.bold : FontWeight.w600,
                 fontSize: isHighlight ? 16 : 13,
-                color: isHighlight ? LinkkTheme.primary : LinkkTheme.textPrimary,
+                color:
+                    isHighlight ? LinkkTheme.primary : LinkkTheme.textPrimary,
               ),
             ),
           ),

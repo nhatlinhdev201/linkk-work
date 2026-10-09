@@ -32,17 +32,20 @@ void main() {
       expect(find.text('Nguyễn Văn An'), findsOneWidget);
       expect(find.byKey(const Key('tasker_status_badge')), findsOneWidget);
       expect(find.text('ONLINE'), findsOneWidget);
-      expect(find.byKey(const Key('tasker_availability_switch')), findsOneWidget);
+      expect(
+          find.byKey(const Key('tasker_availability_switch')), findsOneWidget);
 
       // Verify Center Radar Screen
       expect(find.byKey(const Key('tasker_radar_container')), findsOneWidget);
-      expect(find.text('Đang quét việc trong bán kính 10km...'), findsOneWidget);
+      expect(
+          find.text('Đang quét việc trong bán kính 10km...'), findsOneWidget);
 
       // Verify Incoming Job Alert Card with 30s countdown and claim CTA
       expect(find.byKey(const Key('tasker_incoming_job_card')), findsOneWidget);
       expect(find.text('ĐƠN VIỆC MỚI BẮN RADAR'), findsOneWidget);
       expect(find.text('30 s'), findsOneWidget);
-      expect(find.text('Vệ sinh 2 bộ máy lạnh treo tường Inverter'), findsOneWidget);
+      expect(find.text('Vệ sinh 2 bộ máy lạnh treo tường Inverter'),
+          findsOneWidget);
       expect(find.byKey(const Key('tasker_claim_job_btn')), findsOneWidget);
       expect(find.text('NHẬN VIỆC NGAY - ATOMIC CAS'), findsOneWidget);
     });
@@ -67,7 +70,8 @@ void main() {
 
       // Initially ONLINE
       expect(find.text('ONLINE'), findsOneWidget);
-      expect(find.text('Đang quét việc trong bán kính 10km...'), findsOneWidget);
+      expect(
+          find.text('Đang quét việc trong bán kính 10km...'), findsOneWidget);
 
       // Toggle switch to OFFLINE
       await tester.tap(find.byKey(const Key('tasker_availability_switch')));
@@ -81,7 +85,8 @@ void main() {
       await tester.pump();
 
       expect(find.text('ONLINE'), findsOneWidget);
-      expect(find.text('Đang quét việc trong bán kính 10km...'), findsOneWidget);
+      expect(
+          find.text('Đang quét việc trong bán kính 10km...'), findsOneWidget);
     });
 
     testWidgets(
@@ -122,7 +127,8 @@ void main() {
       await tester.pump();
 
       expect(find.text('Bước 2 / 4'), findsOneWidget);
-      expect(find.text('Bước 2: Check-in hiện trường & Phòng chống gian lận'), findsOneWidget);
+      expect(find.text('Bước 2: Check-in hiện trường & Phòng chống gian lận'),
+          findsOneWidget);
       expect(find.textContaining('Mock GPS'), findsOneWidget);
 
       // Step 2 -> Step 3: Nghiệm thu
@@ -137,7 +143,8 @@ void main() {
       await tester.pump();
 
       expect(find.text('Bước 4 / 4'), findsOneWidget);
-      expect(find.text('Bước 4: Thu tiền mặt COD & Sổ cái kế toán kép'), findsOneWidget);
+      expect(find.text('Bước 4: Thu tiền mặt COD & Sổ cái kế toán kép'),
+          findsOneWidget);
       expect(find.textContaining('Bút toán 1: +300.000đ'), findsOneWidget);
       expect(find.textContaining('Bút toán 2: -45.000đ'), findsOneWidget);
 
@@ -147,7 +154,8 @@ void main() {
 
       // Work order track closed, back to radar
       expect(find.byKey(const Key('tasker_work_order_track')), findsNothing);
-      expect(find.text('Đang quét việc trong bán kính 10km...'), findsOneWidget);
+      expect(
+          find.text('Đang quét việc trong bán kính 10km...'), findsOneWidget);
     });
   });
 }

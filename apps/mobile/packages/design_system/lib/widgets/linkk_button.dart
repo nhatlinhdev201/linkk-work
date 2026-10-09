@@ -75,76 +75,76 @@ class _LinkkButtonState extends State<LinkkButton> {
       label: widget.title,
       child: AnimatedScale(
         scale: _isInteractive && _isPressed ? 0.96 : 1.0,
-      duration: LinkkTheme.fastDuration,
-      curve: LinkkTheme.defaultCurve,
-      child: AnimatedOpacity(
-        opacity: widget.onPressed == null ? 0.5 : 1.0,
         duration: LinkkTheme.fastDuration,
-        child: GestureDetector(
-          onTapDown: _handleTapDown,
-          onTapUp: _handleTapUp,
-          onTapCancel: _handleTapCancel,
-          onTap: _isInteractive ? widget.onPressed : null,
-          behavior: HitTestBehavior.opaque,
-          child: Container(
-            width: widget.width,
-            height: widget.height,
-            padding: widget.padding ??
-                const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-            decoration: BoxDecoration(
-              color: widget.backgroundColor,
-              borderRadius: effectiveBorderRadius,
-              boxShadow: _isInteractive && !_isPressed
-                  ? [
-                      BoxShadow(
-                        color: widget.backgroundColor.withValues(alpha: 0.24),
-                        blurRadius: 8,
-                        offset: const Offset(0, 3),
-                      ),
-                    ]
-                  : null,
-            ),
-            child: Center(
-              child: Stack(
-                alignment: Alignment.center,
-                children: [
-                  Opacity(
-                    opacity: widget.isLoading ? 0.0 : 1.0,
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        if (widget.icon != null) ...[
-                          widget.icon!,
-                          const SizedBox(width: 8),
-                        ],
-                        Text(
-                          widget.title,
-                          style: TextStyle(
-                            color: widget.textColor,
-                            fontSize: 16,
-                            fontWeight: FontWeight.w600,
-                          ),
+        curve: LinkkTheme.defaultCurve,
+        child: AnimatedOpacity(
+          opacity: widget.onPressed == null ? 0.5 : 1.0,
+          duration: LinkkTheme.fastDuration,
+          child: GestureDetector(
+            onTapDown: _handleTapDown,
+            onTapUp: _handleTapUp,
+            onTapCancel: _handleTapCancel,
+            onTap: _isInteractive ? widget.onPressed : null,
+            behavior: HitTestBehavior.opaque,
+            child: Container(
+              width: widget.width,
+              height: widget.height,
+              padding: widget.padding ??
+                  const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+              decoration: BoxDecoration(
+                color: widget.backgroundColor,
+                borderRadius: effectiveBorderRadius,
+                boxShadow: _isInteractive && !_isPressed
+                    ? [
+                        BoxShadow(
+                          color: widget.backgroundColor.withValues(alpha: 0.24),
+                          blurRadius: 8,
+                          offset: const Offset(0, 3),
                         ),
-                      ],
-                    ),
-                  ),
-                  if (widget.isLoading)
-                    SizedBox(
-                      width: 20,
-                      height: 20,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2.5,
-                        valueColor:
-                            AlwaysStoppedAnimation<Color>(widget.textColor),
+                      ]
+                    : null,
+              ),
+              child: Center(
+                child: Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    Opacity(
+                      opacity: widget.isLoading ? 0.0 : 1.0,
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          if (widget.icon != null) ...[
+                            widget.icon!,
+                            const SizedBox(width: 8),
+                          ],
+                          Text(
+                            widget.title,
+                            style: TextStyle(
+                              color: widget.textColor,
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
-                ],
+                    if (widget.isLoading)
+                      SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2.5,
+                          valueColor:
+                              AlwaysStoppedAnimation<Color>(widget.textColor),
+                        ),
+                      ),
+                  ],
+                ),
               ),
             ),
           ),
         ),
-      ),
       ),
     );
   }

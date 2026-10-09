@@ -132,7 +132,9 @@ void main() {
       expect(loadedStateWithoutFilter.filteredServices.length, equals(2));
     });
 
-    test('CatalogLoadedState copyWith allows clearing selectedCategoryId with null', () {
+    test(
+        'CatalogLoadedState copyWith allows clearing selectedCategoryId with null',
+        () {
       final state = CatalogLoadedState(
         categories: sampleCategories,
         services: sampleServices,

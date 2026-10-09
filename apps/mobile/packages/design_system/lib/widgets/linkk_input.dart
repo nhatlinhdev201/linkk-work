@@ -52,8 +52,9 @@ class LinkkInput extends StatelessWidget {
         : (enabled ? Colors.white : const Color(0xFFF1F5F9));
     final textColor = theme.colorScheme.onSurface;
     final borderColor = isDark ? LinkkTheme.darkBorder : LinkkTheme.border;
-    final hintColor = theme.textTheme.bodyMedium?.color?.withValues(alpha: 0.6) ??
-        (isDark ? LinkkTheme.darkTextMuted : LinkkTheme.textMuted);
+    final hintColor =
+        theme.textTheme.bodyMedium?.color?.withValues(alpha: 0.6) ??
+            (isDark ? LinkkTheme.darkTextMuted : LinkkTheme.textMuted);
     final primaryColor = theme.colorScheme.primary;
     final errorColor = theme.colorScheme.error;
 

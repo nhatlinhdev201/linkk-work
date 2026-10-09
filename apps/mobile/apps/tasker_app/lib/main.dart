@@ -353,11 +353,13 @@ class _TaskerHomeScreenState extends State<TaskerHomeScreen> {
                     const SizedBox(height: 2),
                     Row(
                       children: [
-                        const Icon(Icons.star_rounded, color: Color(0xFFF59E0B), size: 16),
+                        const Icon(Icons.star_rounded,
+                            color: Color(0xFFF59E0B), size: 16),
                         const SizedBox(width: 3),
                         const Text(
                           '4.95 ★ • 320 ca xong',
-                          style: TextStyle(fontSize: 12, color: LinkkTheme.textMuted),
+                          style: TextStyle(
+                              fontSize: 12, color: LinkkTheme.textMuted),
                         ),
                         const SizedBox(width: 8),
                         LinkkBadge(
@@ -383,20 +385,28 @@ class _TaskerHomeScreenState extends State<TaskerHomeScreen> {
                   LinkkBadge(
                     key: const Key('tasker_status_badge'),
                     text: _isOnline ? 'ONLINE' : 'OFFLINE',
-                    color: _isOnline ? LinkkTheme.primary : LinkkTheme.textMuted,
+                    color:
+                        _isOnline ? LinkkTheme.primary : LinkkTheme.textMuted,
                     icon: Icon(
-                      _isOnline ? Icons.sensors_rounded : Icons.power_settings_new_rounded,
+                      _isOnline
+                          ? Icons.sensors_rounded
+                          : Icons.power_settings_new_rounded,
                       size: 14,
-                      color: _isOnline ? LinkkTheme.primary : LinkkTheme.textMuted,
+                      color:
+                          _isOnline ? LinkkTheme.primary : LinkkTheme.textMuted,
                     ),
                   ),
                   const SizedBox(width: 10),
                   Text(
-                    _isOnline ? 'Đang sẵn sàng nhận việc' : 'Đang tạm dừng nhận việc',
+                    _isOnline
+                        ? 'Đang sẵn sàng nhận việc'
+                        : 'Đang tạm dừng nhận việc',
                     style: TextStyle(
                       fontSize: 13,
                       fontWeight: FontWeight.w600,
-                      color: _isOnline ? LinkkTheme.textPrimary : LinkkTheme.textMuted,
+                      color: _isOnline
+                          ? LinkkTheme.textPrimary
+                          : LinkkTheme.textMuted,
                     ),
                   ),
                 ],
@@ -464,7 +474,9 @@ class _TaskerHomeScreenState extends State<TaskerHomeScreen> {
                   width: 52,
                   height: 52,
                   decoration: BoxDecoration(
-                    color: _isOnline ? LinkkTheme.primary : const Color(0xFF475569),
+                    color: _isOnline
+                        ? LinkkTheme.primary
+                        : const Color(0xFF475569),
                     shape: BoxShape.circle,
                     boxShadow: [
                       BoxShadow(
@@ -496,7 +508,8 @@ class _TaskerHomeScreenState extends State<TaskerHomeScreen> {
             style: TextStyle(
               fontSize: 16,
               fontWeight: FontWeight.bold,
-              color: _isOnline ? const Color(0xFF34D399) : const Color(0xFF94A3B8),
+              color:
+                  _isOnline ? const Color(0xFF34D399) : const Color(0xFF94A3B8),
             ),
           ),
           const SizedBox(height: 6),
@@ -581,14 +594,16 @@ class _TaskerHomeScreenState extends State<TaskerHomeScreen> {
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
             decoration: BoxDecoration(
               color: const Color(0xFFFFFBEB),
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(18)),
+              borderRadius:
+                  const BorderRadius.vertical(top: Radius.circular(18)),
             ),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 const Row(
                   children: [
-                    Icon(Icons.bolt_rounded, color: Color(0xFFD97706), size: 20),
+                    Icon(Icons.bolt_rounded,
+                        color: Color(0xFFD97706), size: 20),
                     SizedBox(width: 6),
                     Text(
                       'ĐƠN VIỆC MỚI BẮN RADAR',
@@ -633,9 +648,11 @@ class _TaskerHomeScreenState extends State<TaskerHomeScreen> {
                   ),
                 ),
                 const SizedBox(height: 8),
-                _buildJobDetailRow(Icons.person_outline_rounded, 'Khách hàng:', _jobCustomer),
+                _buildJobDetailRow(
+                    Icons.person_outline_rounded, 'Khách hàng:', _jobCustomer),
                 const SizedBox(height: 4),
-                _buildJobDetailRow(Icons.location_on_outlined, 'Địa chỉ:', '$_jobAddress ($_jobDistanceKm km)'),
+                _buildJobDetailRow(Icons.location_on_outlined, 'Địa chỉ:',
+                    '$_jobAddress ($_jobDistanceKm km)'),
                 const SizedBox(height: 4),
                 _buildJobDetailRow(
                   Icons.payments_outlined,
@@ -655,7 +672,8 @@ class _TaskerHomeScreenState extends State<TaskerHomeScreen> {
                 LinkkButton(
                   key: const Key('tasker_claim_job_btn'),
                   title: 'NHẬN VIỆC NGAY - ATOMIC CAS',
-                  icon: const Icon(Icons.flash_on_rounded, color: Colors.white, size: 20),
+                  icon: const Icon(Icons.flash_on_rounded,
+                      color: Colors.white, size: 20),
                   onPressed: _handleClaimJob,
                 ),
                 const SizedBox(height: 8),
@@ -664,7 +682,8 @@ class _TaskerHomeScreenState extends State<TaskerHomeScreen> {
                     onPressed: _dismissJobAlert,
                     child: const Text(
                       'Bỏ qua đơn này',
-                      style: TextStyle(color: LinkkTheme.textMuted, fontSize: 13),
+                      style:
+                          TextStyle(color: LinkkTheme.textMuted, fontSize: 13),
                     ),
                   ),
                 ),
@@ -676,11 +695,14 @@ class _TaskerHomeScreenState extends State<TaskerHomeScreen> {
     );
   }
 
-  Widget _buildJobDetailRow(IconData icon, String label, String value, {bool highlight = false}) {
+  Widget _buildJobDetailRow(IconData icon, String label, String value,
+      {bool highlight = false}) {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Icon(icon, size: 16, color: highlight ? LinkkTheme.primary : LinkkTheme.textMuted),
+        Icon(icon,
+            size: 16,
+            color: highlight ? LinkkTheme.primary : LinkkTheme.textMuted),
         const SizedBox(width: 6),
         Text(
           label,
@@ -777,13 +799,16 @@ class _TaskerHomeScreenState extends State<TaskerHomeScreen> {
                             ),
                             child: Center(
                               child: isDone
-                                  ? const Icon(Icons.check, size: 16, color: Colors.white)
+                                  ? const Icon(Icons.check,
+                                      size: 16, color: Colors.white)
                                   : Text(
                                       '$stepNum',
                                       style: TextStyle(
                                         fontSize: 13,
                                         fontWeight: FontWeight.bold,
-                                        color: isCurrent ? Colors.white : LinkkTheme.textMuted,
+                                        color: isCurrent
+                                            ? Colors.white
+                                            : LinkkTheme.textMuted,
                                       ),
                                     ),
                             ),
@@ -793,8 +818,11 @@ class _TaskerHomeScreenState extends State<TaskerHomeScreen> {
                             stepTitles[index],
                             style: TextStyle(
                               fontSize: 11,
-                              fontWeight: isCurrent ? FontWeight.bold : FontWeight.w500,
-                              color: isCurrent ? LinkkTheme.primary : LinkkTheme.textMuted,
+                              fontWeight:
+                                  isCurrent ? FontWeight.bold : FontWeight.w500,
+                              color: isCurrent
+                                  ? LinkkTheme.primary
+                                  : LinkkTheme.textMuted,
                             ),
                           ),
                         ],
@@ -864,7 +892,8 @@ class _TaskerHomeScreenState extends State<TaskerHomeScreen> {
               SizedBox(height: 4),
               Text(
                 '✓ Hardware GPS: Hợp lệ\n✓ Anti-Fraud: Không phát hiện Mock GPS\nĐơn chuyển sang IN_PROGRESS. Bắt đầu thực hiện công việc.',
-                style: TextStyle(fontSize: 13, color: LinkkTheme.primary, height: 1.4),
+                style: TextStyle(
+                    fontSize: 13, color: LinkkTheme.primary, height: 1.4),
               ),
             ],
           ),
@@ -891,7 +920,8 @@ class _TaskerHomeScreenState extends State<TaskerHomeScreen> {
           decoration: BoxDecoration(
             color: const Color(0xFFF0FDF4),
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: LinkkTheme.primary.withValues(alpha: 0.3)),
+            border:
+                Border.all(color: LinkkTheme.primary.withValues(alpha: 0.3)),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -903,7 +933,8 @@ class _TaskerHomeScreenState extends State<TaskerHomeScreen> {
               const SizedBox(height: 6),
               Text(
                 '• Bút toán 1: +${_formatVnd(_jobGrossAmount)} (Tiền mặt COD khách trả)\n• Bút toán 2: -${_formatVnd(commission)} (Phí hoa hồng sàn 15% trích ví ký quỹ)',
-                style: const TextStyle(fontSize: 13, color: LinkkTheme.primary, height: 1.4),
+                style: const TextStyle(
+                    fontSize: 13, color: LinkkTheme.primary, height: 1.4),
               ),
             ],
           ),

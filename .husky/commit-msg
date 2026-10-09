@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+set -e
+
+COMMIT_MSG_FILE="$1"
+COMMIT_MSG=$(head -n 1 "$COMMIT_MSG_FILE")
+
+# Allow merge commits
+if [[ "$COMMIT_MSG" =~ ^Merge ]]; then
+  exit 0
+fi
+
+# Conventional commit regex
+PATTERN="^(feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert)(\([a-zA-Z0-9_\.-]+\))?: .{1,100}$"
+
+if ! echo "$COMMIT_MSG" | grep -qE "$PATTERN"; then
+  echo "❌ [Husky] Invalid commit message format: \"$COMMIT_MSG\""
+  echo ""
+  echo "💡 Commits must follow Conventional Commits standard:"
+  echo "   <type>(<scope>): <subject>"
+  echo ""
+  echo "   Allowed types: feat, fix, docs, style, refactor, perf, test, build, ci, chore, revert"
+  echo "   Examples:"
+  echo "     feat(mobile): add radar claim pulse animation"
+  echo "     fix(core): resolve Dio concurrent token refresh race condition"
+  echo "     test(tasker): add mock GPS check-in unit tests"
+  echo ""
+  exit 1
+fi

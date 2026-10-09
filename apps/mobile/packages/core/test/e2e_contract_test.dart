@@ -76,7 +76,8 @@ void main() {
       }
     });
 
-    test('POST /catalog/calculate-price responds with finalPrice contract', () async {
+    test('POST /catalog/calculate-price responds with finalPrice contract',
+        () async {
       final payload = <String, dynamic>{
         'pricingType': 'HOURLY',
         'baseUnitPrice': 80000,
@@ -137,12 +138,14 @@ void main() {
         };
 
         expect(mockResponseData, isA<Map<String, dynamic>>());
-        final dynamic fallbackPrice = mockResponseData['finalPrice'] ?? mockResponseData['finalTotal'];
+        final dynamic fallbackPrice =
+            mockResponseData['finalPrice'] ?? mockResponseData['finalTotal'];
         expect(fallbackPrice, equals(160000.0));
       }
     });
 
-    test('POST /catalog/calculate-price handles per-unit and surge multiplier', () async {
+    test('POST /catalog/calculate-price handles per-unit and surge multiplier',
+        () async {
       final payload = <String, dynamic>{
         'pricingType': 'PER_UNIT',
         'baseUnitPrice': 150000,

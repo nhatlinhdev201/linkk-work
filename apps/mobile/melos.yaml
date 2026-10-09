@@ -6,12 +6,61 @@ packages:
 scripts:
   analyze:
     exec: flutter analyze .
-    description: Run flutter analyze across all packages.
+    description: Run strict static analysis across all packages.
+
+  lint:
+    run: melos run analyze
+    description: Alias for strict static analysis and lint checks.
+
+  typecheck:
+    run: melos run analyze
+    description: Enforce strict Dart types (strict-casts, strict-inference, strict-raw-types).
+
+  format:
+    exec: dart format .
+    description: Automatically format Dart code across all packages.
+
+  format:check:
+    exec: dart format --output=none --set-exit-if-changed .
+    description: Validate formatting across all packages without modifying files.
+
   test:
     exec: flutter test
     packageFilters:
       dirExists: test
-    description: Run tests in all packages.
-  format:check:
-    exec: dart format --output=none --set-exit-if-changed .
-    description: Check formatting across all packages.
+    description: Run all unit and widget tests across all packages.
+
+  clean:
+    exec: flutter clean
+    description: Clean build artifacts across all packages.
+
+  build:customer:apk:
+    exec: flutter build apk --debug
+    packageFilters:
+      scope: linkkwork_customer_app
+    description: Build debug APK for Customer App.
+
+  build:customer:bundle:
+    exec: flutter build appbundle --debug
+    packageFilters:
+      scope: linkkwork_customer_app
+    description: Build debug App Bundle for Customer App.
+
+  build:tasker:apk:
+    exec: flutter build apk --debug
+    packageFilters:
+      scope: linkkwork_tasker_app
+    description: Build debug APK for Tasker App.
+
+  build:tasker:bundle:
+    exec: flutter build appbundle --debug
+    packageFilters:
+      scope: linkkwork_tasker_app
+    description: Build debug App Bundle for Tasker App.
+
+  check:all:
+    run: |
+      melos run format:check && \
+      melos run analyze && \
+      melos run test
+    description: Run full quality gate (formatting, strict typing, tests).

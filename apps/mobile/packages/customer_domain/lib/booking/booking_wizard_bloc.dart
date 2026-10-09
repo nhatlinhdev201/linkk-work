@@ -204,7 +204,8 @@ class BookingWizardBloc extends Bloc<BookingWizardEvent, BookingWizardState> {
     emit(const BookingWizardState());
   }
 
-  String _extractErrorMessage(Object error, [String fallback = 'Đã có lỗi xảy ra']) {
+  String _extractErrorMessage(Object error,
+      [String fallback = 'Đã có lỗi xảy ra']) {
     if (error is DioException) {
       final dynamic errData = error.response?.data;
       if (errData is Map && errData['message'] != null) {

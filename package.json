@@ -1,0 +1,21 @@
+{
+  "name": "linkkwork-monorepo",
+  "version": "1.0.0",
+  "private": true,
+  "description": "LinkkWork Enterprise Monorepo - Web Admin, Backend API and Mobile App Suite",
+  "scripts": {
+    "prepare": "husky",
+    "mobile:check": "bash apps/mobile/scripts/check.sh",
+    "mobile:lint": "cd apps/mobile && export PATH=\"$HOME/development/flutter/bin:$HOME/.pub-cache/bin:$PATH\" && melos run lint --no-select",
+    "mobile:typecheck": "cd apps/mobile && export PATH=\"$HOME/development/flutter/bin:$HOME/.pub-cache/bin:$PATH\" && melos run typecheck --no-select",
+    "mobile:format": "cd apps/mobile && export PATH=\"$HOME/development/flutter/bin:$HOME/.pub-cache/bin:$PATH\" && melos run format --no-select",
+    "mobile:format:check": "cd apps/mobile && export PATH=\"$HOME/development/flutter/bin:$HOME/.pub-cache/bin:$PATH\" && melos run format:check --no-select",
+    "mobile:test": "cd apps/mobile && export PATH=\"$HOME/development/flutter/bin:$HOME/.pub-cache/bin:$PATH\" && melos run test --no-select",
+    "mobile:build:customer": "bash apps/mobile/scripts/build.sh customer apk --debug",
+    "mobile:build:tasker": "bash apps/mobile/scripts/build.sh tasker apk --debug",
+    "test:all": "npm --prefix apps/api test && npm --prefix apps/admin test && npm run mobile:test"
+  },
+  "devDependencies": {
+    "husky": "^9.1.7"
+  }
+}

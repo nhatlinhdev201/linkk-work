@@ -1,0 +1,35 @@
+#!/usr/bin/env bash
+set -e
+
+echo "🔍 [Husky] Running pre-commit validation..."
+
+# Check if any staged files are in apps/mobile
+STAGED_MOBILE_FILES=$(git diff --cached --name-only --diff-filter=ACMR | grep -E "^apps/mobile/" || true)
+
+if [ -n "$STAGED_MOBILE_FILES" ]; then
+  echo "📱 [Husky] Mobile files changed. Running mobile quality gate..."
+  export PATH="$HOME/development/flutter/bin:$HOME/.pub-cache/bin:$PATH"
+
+  # Format check
+  echo "   - Checking Dart formatting..."
+  (cd apps/mobile && melos run format:check --no-select)
+
+  # Strict Static Analysis & Type Check
+  echo "   - Running strict static analysis (0 analyzer issues enforced)..."
+  (cd apps/mobile && melos run analyze --no-select)
+
+  # Zero Code Leakage
+  echo "   - Verifying Zero Code Leakage..."
+  if grep -rn "linkkwork_tasker_domain" apps/mobile/apps/customer_app | grep -v "\.dart_tool" | grep -v "pubspec.lock" > /dev/null; then
+    echo "❌ [Husky] VIOLATION: Customer App contains imports from tasker_domain!"
+    exit 1
+  fi
+  if grep -rn "linkkwork_customer_domain" apps/mobile/apps/tasker_app | grep -v "\.dart_tool" | grep -v "pubspec.lock" > /dev/null; then
+    echo "❌ [Husky] VIOLATION: Tasker App contains imports from customer_domain!"
+    exit 1
+  fi
+
+  echo "✅ [Husky] Mobile validation passed!"
+fi
+
+echo "✨ [Husky] Pre-commit hook completed successfully."

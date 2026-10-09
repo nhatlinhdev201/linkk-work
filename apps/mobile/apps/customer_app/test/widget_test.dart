@@ -28,7 +28,8 @@ void main() {
       // Verify Location Banner
       expect(find.byKey(const Key('location_picker_banner')), findsOneWidget);
       expect(find.text('ĐỊA CHỈ NHẬN VIỆC'), findsOneWidget);
-      expect(find.text('Tòa Landmark 81, P. 22, Bình Thạnh, TP.HCM'), findsOneWidget);
+      expect(find.text('Tòa Landmark 81, P. 22, Bình Thạnh, TP.HCM'),
+          findsOneWidget);
 
       // Verify Category Chips
       expect(find.text('Tất cả'), findsOneWidget);
@@ -98,7 +99,8 @@ void main() {
       expect(find.text('Bước 1 / 4'), findsOneWidget);
       expect(find.text('Khối lượng & Tính giá'), findsOneWidget);
       expect(find.text('Dự toán giá động thời gian thực'), findsOneWidget);
-      expect(find.byKey(const Key('wizard_increase_units_btn')), findsOneWidget);
+      expect(
+          find.byKey(const Key('wizard_increase_units_btn')), findsOneWidget);
 
       // Increase units: default 2 -> 3
       await tester.tap(find.byKey(const Key('wizard_increase_units_btn')));
@@ -126,7 +128,8 @@ void main() {
 
       // Step 1: Khối lượng & Tính giá
       expect(find.text('Bước 1 / 4'), findsOneWidget);
-      final primaryActionBtn = find.byKey(const Key('wizard_primary_action_btn'));
+      final primaryActionBtn =
+          find.byKey(const Key('wizard_primary_action_btn'));
 
       // Move to Step 2
       await tester.tap(primaryActionBtn);

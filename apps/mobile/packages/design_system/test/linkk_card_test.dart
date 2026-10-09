@@ -127,8 +127,7 @@ void main() {
       expect(find.text('Custom Card'), findsOneWidget);
     });
 
-    testWidgets(
-        'resets pressed state when onTap becomes null while held down',
+    testWidgets('resets pressed state when onTap becomes null while held down',
         (tester) async {
       VoidCallback? onTap = () {};
       StateSetter? setState;
